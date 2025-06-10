@@ -1,0 +1,94 @@
+<div class="chat-container">
+  <div class="chat-sidebar">
+    <div class="model-selector">
+      <h3>模型设置</h3>
+      
+      <div class="form-group">
+        <label for="llm">LLM 提供商</label>
+        <select id="llm" [ngModel]="selectedLlm()" (ngModelChange)="updateLlm($event)">
+          <option value="ollama">Ollama</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label for="model">模型</label>
+        <select id="model" [ngModel]="selectedModel()" (ngModelChange)="updateModel($event)">
+          <option *ngIf="selectedLlm() === 'ollama'" value="deepseek-r1:8b">Deepseek R1</option>
+          <option *ngIf="selectedLlm() === 'ollama'" value="llama3">Llama 3</option>
+          <option *ngIf="selectedLlm() === 'openai'" value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+          <option *ngIf="selectedLlm() === 'openai'" value="gpt-4o">GPT-4o</option>
+        </select>
+      </div>
+      
+      <div class="form-group rag-toggle">
+        <label for="useRag">使用知识库</label>
+        <div class="toggle-switch">
+          <input type="checkbox" id="useRag" [ngModel]="useRag()" (ngModelChange)="toggleRag($event)">
+          <label for="useRag" class="toggle-label"></label>
+        </div>
+      </div>
+      
+      <div class="form-group" *ngIf="useRag()">
+        <label for="ragTag">知识库</label>
+        <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateRagTag($event)">
+          <option *ngFor="let tag of ragTags()" [value]="tag">{{ tag }}</option>
+        </select>
+      </div>
+      
+      <button class="clear-button" (click)="clearChat()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18"></path>
+          <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+          <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+        </svg>
+        清空聊天
+      </button>
+    </div>
+  </div>
+  
+  <div class="chat-main">
+    <div class="messages-container" #messagesContainer>
+      <div *ngFor="let message of messages(); trackBy: trackById" 
+           [ngClass]="{'message': true, 'user-message': message.type === 'user', 'ai-message': message.type === 'ai', 'error': message.error}">
+        <div class="message-avatar">
+          <div *ngIf="message.type === 'user'" class="user-avatar">用户</div>
+          <div *ngIf="message.type === 'ai'" class="ai-avatar">AI</div>
+        </div>
+        <div class="message-content">
+          <div class="message-header">
+            <span class="message-sender">{{ message.type === 'user' ? '用户' : 'AI 助手' }}</span>
+            <span class="message-time">{{ message.timestamp | date:'HH:mm' }}</span>
+          </div>
+          <div class="message-body">
+            <div *ngIf="message.isThinking" class="thinking-indicator">
+              <span>思考中...</span>
+            </div>
+            <markdown *ngIf="!message.isThinking || message.content" [data]="message.content" [inline]="false"></markdown>
+            <div *ngIf="message.isStreaming" class="typing-indicator">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="message-input-container">
+      <textarea 
+        [ngModel]="newMessage()" 
+        (ngModelChange)="updateNewMessage($event)"
+        placeholder="输入你的问题..." 
+        (keydown)="handleEnterKey($event)"
+        [disabled]="isLoading()"
+      ></textarea>
+      <button (click)="sendMessage()" [disabled]="isLoading() || !newMessage().trim()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>

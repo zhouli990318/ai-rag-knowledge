@@ -1,0 +1,20 @@
+<div class="app-container">
+  <header class="app-header">
+    <div class="logo-container">
+      <div class="logo">AI</div>
+      <h1>Spring AI RAG</h1>
+    </div>
+    <nav class="app-nav">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">AI 聊天</a>
+      <a routerLink="/rag" routerLinkActive="active">知识库管理</a>
+    </nav>
+  </header>
+  
+  <main class="app-content">
+    <router-outlet></router-outlet>
+  </main>
+  
+  <footer class="app-footer">
+    <p>© 2024 Spring AI RAG 知识库问答系统</p>
+  </footer>
+</div>
