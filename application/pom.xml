@@ -46,7 +46,7 @@
 
         <dependency>
             <groupId>com.silver</groupId>
-            <artifactId>domain</artifactId>
+            <artifactId>infrastructure</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
     </dependencies>

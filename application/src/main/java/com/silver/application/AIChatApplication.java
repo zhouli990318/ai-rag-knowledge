@@ -1,5 +1,10 @@
 package com.silver.application;
 
+import com.silver.domain.ChatMessage;
+import java.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.silver.infrastructure.repository.ChatMessageRepository;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
@@ -31,6 +36,9 @@ public class AIChatApplication {
 
     private final PgVectorStore pgVectorStore;
 
+    @Autowired
+    private ChatMessageRepository chatMessageRepository;
+
     public AIChatApplication(OllamaChatModel ollamaChatClient, OpenAiChatModel openAIChatClient, PgVectorStore pgVectorStore) {
         this.ollamaChatClient = ChatClient.builder(ollamaChatClient).build();
         this.openAIChatClient = ChatClient.builder(openAIChatClient).build();
@@ -45,7 +53,17 @@ public class AIChatApplication {
                     {documents}
                 """;
 
+    public void saveChatMessage(String userId, String message) {
+        ChatMessage chatMessage = new ChatMessage();
+        chatMessage.setUserId(userId);
+        chatMessage.setMessage(message);
+        chatMessage.setTimestamp(LocalDateTime.now().toString());
+        chatMessageRepository.save(chatMessage);
+    }
 
+    public List<ChatMessage> getChatHistory(String userId) {
+        return chatMessageRepository.findByUserIdOrderByTimestampDesc(userId);
+    }
 
     public ChatResponse generate(String llm, String model, String message) {
         if ("ollama".equals(llm)) {

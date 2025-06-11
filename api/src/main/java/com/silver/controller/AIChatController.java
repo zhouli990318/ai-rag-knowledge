@@ -2,6 +2,9 @@ package com.silver.controller;
 
 
 import com.silver.application.AIChatApplication;
+import com.silver.domain.ChatMessage;
+import org.springframework.http.ResponseEntity;
+import java.util.List;
 import jakarta.annotation.Resource;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.http.MediaType;
@@ -36,6 +39,18 @@ public class AIChatController {
                                                 @RequestParam("ragTag") String ragTag,
                                                 @RequestParam("message") String message) {
         return aiChatApplication.generateStreamRag(llm, model, ragTag, message);
+    }
+
+    @PostMapping("/save_chat")
+    public ResponseEntity<String> saveChat(@RequestParam("userId") String userId,
+                                           @RequestParam("message") String message) {
+        aiChatApplication.saveChatMessage(userId, message);
+        return ResponseEntity.ok("Chat message saved successfully");
+    }
+
+    @GetMapping("/chat_history")
+    public List<ChatMessage> getChatHistory(@RequestParam("userId") String userId) {
+        return aiChatApplication.getChatHistory(userId);
     }
 
 }
