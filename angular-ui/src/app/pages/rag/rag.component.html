@@ -1,223 +1,213 @@
-<div class="rag-container">
-  <mat-tab-group [(selectedIndex)]="selectedSessionId" (selectedTabChange)="selectSession($event.index)">
-    <mat-tab *ngFor="let session of sessions()" [label]="'会话 ' + session.id">
-      <div class="chat-area">
-        <div *ngFor="let message of session.messages" class="message">
-          <div [class.user-message]="message.isUser" [class.ai-message]="!message.isUser">
-            {{ message.content }}
-          </div>
+<div class="rag-content">
+    <div class="rag-section">
+        <div class="section-header">
+            <h2>上传文件到知识库</h2>
+            <p>上传PDF、Word、TXT等文档到指定知识库，系统将自动提取内容并向量化存储。</p>
         </div>
-      </div>
-    </mat-tab>
-  </mat-tab-group>
 
-  <button (click)="addSession()">新建会话</button>
-</div> <!-- 正确闭合 rag-container -->
+        <div class="upload-form">
+            <div class="form-group">
+                <label for="ragTag">选择知识库</label>
+                <div class="tag-selector">
+                    <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateSelectedRagTag($event)">
+                        <option *ngFor="let tag of ragTags()" [value]="tag">{{ tag }}</option>
+                    </select>
 
-<div class="input-area">
-  <input type="text" [(ngModel)]="newMessage" (keyup.enter)="sendMessage()" placeholder="输入消息">
-  <button (click)="sendMessage()">发送</button>
+                    <div class="new-tag-input">
+                        <input type="text" [ngModel]="newRagTag()" (ngModelChange)="updateNewRagTag($event)"
+                               placeholder="新建知识库...">
+                        <button (click)="addRagTag()" [disabled]="!newRagTag().trim()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                 stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="fileUpload">选择文件</label>
+                <div class="file-upload-container">
+                    <input
+                            type="file"
+                            id="fileUpload"
+                            multiple
+                            (change)="onFileSelected($event)"
+                            [disabled]="isUploading()"
+                    >
+                    <div class="file-upload-info">
+                        <span *ngIf="files().length === 0">未选择文件</span>
+                        <span *ngIf="files().length === 1">已选择 1 个文件</span>
+                        <span *ngIf="files().length > 1">已选择 {{ files().length }} 个文件</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="selected-files" *ngIf="files().length > 0">
+                <div class="file-item" *ngFor="let file of files()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    <span class="file-name">{{ file.name }}</span>
+                    <span class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</span>
+                </div>
+            </div>
+
+            <div class="upload-progress" *ngIf="isUploading()">
+                <div class="progress-bar">
+                    <div class="progress-fill" [style.width.%]="uploadProgress()"></div>
+                </div>
+                <span class="progress-text">{{ uploadProgress() }}%</span>
+            </div>
+
+            <div class="upload-status">
+                <div class="success-message" *ngIf="uploadSuccess()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    文件上传成功！
+                </div>
+
+                <div class="error-message" *ngIf="uploadError()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    {{ uploadError() }}
+                </div>
+            </div>
+
+            <button
+                    class="upload-button"
+                    (click)="uploadFiles()"
+                    [disabled]="isUploading() || files().length === 0 || !selectedRagTag()"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                上传文件
+            </button>
+        </div>
+    </div>
+
+    <div class="rag-section">
+        <div class="section-header">
+            <h2>分析 Git 仓库</h2>
+            <p>分析 Git 仓库代码，自动提取内容并向量化存储，便于后续问答。</p>
+        </div>
+
+        <div class="git-form">
+            <div class="form-group">
+                <label for="gitRepoUrl">Git 仓库 URL</label>
+                <input
+                        type="text"
+                        id="gitRepoUrl"
+                        [ngModel]="gitRepoUrl()"
+                        (ngModelChange)="updateGitRepoUrl($event)"
+                        placeholder="https://github.com/username/repo.git"
+                        [disabled]="isAnalyzing()"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="gitUserName">用户名</label>
+                <input
+                        type="text"
+                        id="gitUserName"
+                        [ngModel]="gitUserName()"
+                        (ngModelChange)="updateGitUserName($event)"
+                        placeholder="Git 用户名"
+                        [disabled]="isAnalyzing()"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="gitToken">访问令牌 (可选)</label>
+                <input
+                        type="password"
+                        id="gitToken"
+                        [ngModel]="gitToken()"
+                        (ngModelChange)="updateGitToken($event)"
+                        placeholder="私有仓库需要提供访问令牌"
+                        [disabled]="isAnalyzing()"
+                >
+            </div>
+
+            <div class="git-status">
+                <div class="success-message" *ngIf="analyzeSuccess()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    Git 仓库分析成功！
+                </div>
+
+                <div class="error-message" *ngIf="analyzeError()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    {{ analyzeError() }}
+                </div>
+            </div>
+
+            <button
+                    class="analyze-button"
+                    (click)="analyzeGitRepo()"
+                    [disabled]="isAnalyzing() || !gitRepoUrl() || !gitUserName()"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                {{ isAnalyzing() ? '分析中...' : '开始分析' }}
+            </button>
+        </div>
+    </div>
 </div>
 
-  <div class="rag-content">
-    <div class="rag-section">
-      <div class="section-header">
-        <h2>上传文件到知识库</h2>
-        <p>上传PDF、Word、TXT等文档到指定知识库，系统将自动提取内容并向量化存储。</p>
-      </div>
-      
-      <div class="upload-form">
-        <div class="form-group">
-          <label for="ragTag">选择知识库</label>
-          <div class="tag-selector">
-            <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateSelectedRagTag($event)">
-              <option *ngFor="let tag of ragTags()" [value]="tag">{{ tag }}</option>
-            </select>
-            
-            <div class="new-tag-input">
-              <input type="text" [ngModel]="newRagTag()" (ngModelChange)="updateNewRagTag($event)" placeholder="新建知识库...">
-              <button (click)="addRagTag()" [disabled]="!newRagTag().trim()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div class="form-group">
-          <label for="fileUpload">选择文件</label>
-          <div class="file-upload-container">
-            <input 
-              type="file" 
-              id="fileUpload" 
-              multiple 
-              (change)="onFileSelected($event)"
-              [disabled]="isUploading()"
-            >
-            <div class="file-upload-info">
-              <span *ngIf="files().length === 0">未选择文件</span>
-              <span *ngIf="files().length === 1">已选择 1 个文件</span>
-              <span *ngIf="files().length > 1">已选择 {{ files().length }} 个文件</span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="selected-files" *ngIf="files().length > 0">
-          <div class="file-item" *ngFor="let file of files()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-            <span class="file-name">{{ file.name }}</span>
-            <span class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</span>
-          </div>
-        </div>
-        
-        <div class="upload-progress" *ngIf="isUploading()">
-          <div class="progress-bar">
-            <div class="progress-fill" [style.width.%]="uploadProgress()"></div>
-          </div>
-          <span class="progress-text">{{ uploadProgress() }}%</span>
-        </div>
-        
-        <div class="upload-status">
-          <div class="success-message" *ngIf="uploadSuccess()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            文件上传成功！
-          </div>
-          
-          <div class="error-message" *ngIf="uploadError()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            {{ uploadError() }}
-          </div>
-        </div>
-        
-        <button 
-          class="upload-button" 
-          (click)="uploadFiles()" 
-          [disabled]="isUploading() || files().length === 0 || !selectedRagTag()"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          上传文件
-        </button>
-      </div>
-    </div>
-    
-    <div class="rag-section">
-      <div class="section-header">
-        <h2>分析 Git 仓库</h2>
-        <p>分析 Git 仓库代码，自动提取内容并向量化存储，便于后续问答。</p>
-      </div>
-      
-      <div class="git-form">
-        <div class="form-group">
-          <label for="gitRepoUrl">Git 仓库 URL</label>
-          <input 
-            type="text" 
-            id="gitRepoUrl" 
-            [ngModel]="gitRepoUrl()" 
-            (ngModelChange)="updateGitRepoUrl($event)" 
-            placeholder="https://github.com/username/repo.git"
-            [disabled]="isAnalyzing()"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label for="gitUserName">用户名</label>
-          <input 
-            type="text" 
-            id="gitUserName" 
-            [ngModel]="gitUserName()" 
-            (ngModelChange)="updateGitUserName($event)" 
-            placeholder="Git 用户名"
-            [disabled]="isAnalyzing()"
-          >
-        </div>
-        
-        <div class="form-group">
-          <label for="gitToken">访问令牌 (可选)</label>
-          <input 
-            type="password" 
-            id="gitToken" 
-            [ngModel]="gitToken()" 
-            (ngModelChange)="updateGitToken($event)" 
-            placeholder="私有仓库需要提供访问令牌"
-            [disabled]="isAnalyzing()"
-          >
-        </div>
-        
-        <div class="git-status">
-          <div class="success-message" *ngIf="analyzeSuccess()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            Git 仓库分析成功！
-          </div>
-          
-          <div class="error-message" *ngIf="analyzeError()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            {{ analyzeError() }}
-          </div>
-        </div>
-        
-        <button 
-          class="analyze-button" 
-          (click)="analyzeGitRepo()" 
-          [disabled]="isAnalyzing() || !gitRepoUrl() || !gitUserName()"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-          {{ isAnalyzing() ? '分析中...' : '开始分析' }}
-        </button>
-      </div>
-    </div>
-  </div>
-  
-  <div class="rag-tags-list">
+<div class="rag-tags-list">
     <h2>已有知识库</h2>
-    
+
     <div class="tags-container">
-      <div class="tag-item" *ngFor="let tag of ragTags()">
-        <div class="tag-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-            <line x1="7" y1="7" x2="7.01" y2="7"></line>
-          </svg>
+        <div class="tag-item" *ngFor="let tag of ragTags()">
+            <div class="tag-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+            </div>
+            <span class="tag-name">{{ tag }}</span>
         </div>
-        <span class="tag-name">{{ tag }}</span>
-      </div>
-      
-      <div class="empty-state" *ngIf="ragTags().length === 0">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="16"></line>
-          <line x1="8" y1="12" x2="16" y2="12"></line>
-        </svg>
-        <p>暂无知识库，请创建新的知识库</p>
-      </div>
+
+        <div class="empty-state" *ngIf="ragTags().length === 0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            <p>暂无知识库，请创建新的知识库</p>
+        </div>
     </div>
-  </div>
 </div>

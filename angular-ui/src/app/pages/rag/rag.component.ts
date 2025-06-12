@@ -42,88 +42,11 @@ export class RagComponent implements OnInit {
   isAnalyzing = signal<boolean>(false);
   analyzeSuccess = signal<boolean>(false);
   analyzeError = signal<string>('');
-  
-  // 聊天相关属性
-  newMessage = '';
-  
-  // 多会话管理
-  sessions = signal<Session[]>([
-    { 
-      id: Date.now().toString(), 
-      name: '新会话', 
-      messages: [] 
-    }
-  ]);
-  selectedSessionId = signal<string>(this.sessions()[0].id);
-
-  @ViewChild('tabGroup') tabGroup!: MatTabGroup;
 
   constructor(private ragService: RagService) {}
 
   ngOnInit(): void {
     this.loadRagTags();
-  }
-
-  // 添加新会话
-  addSession(): void {
-    const newSession: Session = {
-      id: Date.now().toString(),
-      name: `会话 ${this.sessions().length + 1}`,
-      messages: []
-    };
-    this.sessions.update(sessions => [...sessions, newSession]);
-    this.selectedSessionId.set(newSession.id);
-  }
-
-  // 删除会话
-  removeSession(sessionId: string): void {
-    this.sessions.update(sessions => 
-      sessions.filter(session => session.id !== sessionId)
-    );
-    if (this.selectedSessionId() === sessionId && this.sessions().length > 0) {
-      this.selectedSessionId.set(this.sessions()[0].id);
-    }
-  }
-
-  // 切换会话
-  selectSession(id: string) {
-    this.selectedSessionId.set(id);
-  }
-
-  // 切换标签页时更新选中的会话ID
-  onTabChanged(event: any): void {
-    const selectedSession = this.sessions()[event.index];
-    if (selectedSession) {
-      this.selectedSessionId.set(selectedSession.id);
-    }
-  }
-
-  // 发送消息
-  sendMessage() {
-    if (this.newMessage.trim()) {
-      const currentSession = this.sessions().find(
-        (session) => session.id === this.selectedSessionId()
-      );
-      
-      if (currentSession) {
-        // 添加用户消息
-        currentSession.messages.push({
-          content: this.newMessage,
-          isUser: true
-        });
-        
-        // 清空输入框
-        this.newMessage = '';
-        
-        // 模拟 AI 回复
-        setTimeout(() => {
-          currentSession.messages.push({
-            content: '这是 AI 的回复内容。',
-            isUser: false
-          });
-        }, 500);
-      }
-    }
   }
 
   loadRagTags(): void {
