@@ -10,13 +10,15 @@
                 <label for="ragTag">选择知识库</label>
                 <div class="tag-selector">
                     <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateSelectedRagTag($event)">
-                        <option *ngFor="let tag of ragTags()" [value]="tag">{{ tag }}</option>
+                        @for (tag of ragTags(); track tag) {
+                            <option [value]="tag">{{ tag }}</option>
+                        }
                     </select>
 
                     <div class="new-tag-input">
                         <input type="text" [ngModel]="newRagTag()" (ngModelChange)="updateNewRagTag($event)"
                                placeholder="新建知识库...">
-                        <button (click)="addRagTag()" [disabled]="!newRagTag().trim()">
+                        <button (click)="addRagTag()" [disabled]="!canAddTag()">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
                                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                  stroke-linejoin="round">
@@ -39,60 +41,74 @@
                             [disabled]="isUploading()"
                     >
                     <div class="file-upload-info">
-                        <span *ngIf="files().length === 0">未选择文件</span>
-                        <span *ngIf="files().length === 1">已选择 1 个文件</span>
-                        <span *ngIf="files().length > 1">已选择 {{ files().length }} 个文件</span>
+                        @if (files().length === 0) {
+                            <span>未选择文件</span>
+                        } @else if (files().length === 1) {
+                            <span>已选择 1 个文件</span>
+                        } @else {
+                            <span>已选择 {{ files().length }} 个文件</span>
+                        }
                     </div>
                 </div>
             </div>
 
-            <div class="selected-files" *ngIf="files().length > 0">
-                <div class="file-item" *ngFor="let file of files()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
-                    <span class="file-name">{{ file.name }}</span>
-                    <span class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</span>
+            @if (hasFiles()) {
+                <div class="selected-files">
+                    @for (file of files(); track file.name) {
+                        <div class="file-item">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            <span class="file-name">{{ file.name }}</span>
+                            <span class="file-size">{{ (file.size / 1024).toFixed(1) }} KB</span>
+                        </div>
+                    }
                 </div>
-            </div>
+            }
 
-            <div class="upload-progress" *ngIf="isUploading()">
-                <div class="progress-bar">
-                    <div class="progress-fill" [style.width.%]="uploadProgress()"></div>
+            @if (isUploading()) {
+                <div class="upload-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" [style.width.%]="uploadProgress()"></div>
+                    </div>
+                    <span class="progress-text">{{ uploadProgress() }}%</span>
                 </div>
-                <span class="progress-text">{{ uploadProgress() }}%</span>
-            </div>
+            }
 
             <div class="upload-status">
-                <div class="success-message" *ngIf="uploadSuccess()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                    文件上传成功！
-                </div>
+                @if (uploadSuccess()) {
+                    <div class="success-message">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        文件上传成功！
+                    </div>
+                }
 
-                <div class="error-message" *ngIf="uploadError()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                    {{ uploadError() }}
-                </div>
+                @if (uploadError()) {
+                    <div class="error-message">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        {{ uploadError() }}
+                    </div>
+                }
             </div>
 
             <button
                     class="upload-button"
                     (click)="uploadFiles()"
-                    [disabled]="isUploading() || files().length === 0 || !selectedRagTag()"
+                    [disabled]="!canUpload()"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -149,30 +165,34 @@
             </div>
 
             <div class="git-status">
-                <div class="success-message" *ngIf="analyzeSuccess()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                    </svg>
-                    Git 仓库分析成功！
-                </div>
+                @if (analyzeSuccess()) {
+                    <div class="success-message">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        Git 仓库分析成功！
+                    </div>
+                }
 
-                <div class="error-message" *ngIf="analyzeError()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                    </svg>
-                    {{ analyzeError() }}
-                </div>
+                @if (analyzeError()) {
+                    <div class="error-message">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        {{ analyzeError() }}
+                    </div>
+                }
             </div>
 
             <button
                     class="analyze-button"
                     (click)="analyzeGitRepo()"
-                    [disabled]="isAnalyzing() || !gitRepoUrl() || !gitUserName()"
+                    [disabled]="!canAnalyze()"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -189,25 +209,29 @@
     <h2>已有知识库</h2>
 
     <div class="tags-container">
-        <div class="tag-item" *ngFor="let tag of ragTags()">
-            <div class="tag-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+        @if (hasTags()) {
+            @for (tag of ragTags(); track tag) {
+                <div class="tag-item">
+                    <div class="tag-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                    </div>
+                    <span class="tag-name">{{ tag }}</span>
+                </div>
+            }
+        } @else {
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
                 </svg>
+                <p>暂无知识库，请创建新的知识库</p>
             </div>
-            <span class="tag-name">{{ tag }}</span>
-        </div>
-
-        <div class="empty-state" *ngIf="ragTags().length === 0">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="16"></line>
-                <line x1="8" y1="12" x2="16" y2="12"></line>
-            </svg>
-            <p>暂无知识库，请创建新的知识库</p>
-        </div>
+        }
     </div>
 </div>

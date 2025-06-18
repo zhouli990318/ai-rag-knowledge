@@ -1,9 +1,8 @@
 import { MatTabsModule } from '@angular/material/tabs';
-import { Component, OnInit, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RagService } from '../../services/rag.service';
-import { MatTabGroup } from '@angular/material/tabs';
 
 // 定义 Message 接口
 interface Message {
@@ -26,6 +25,8 @@ interface Session {
   styleUrl: './rag.component.scss'
 })
 export class RagComponent implements OnInit {
+  private ragService = inject(RagService);
+  
   ragTags = signal<string[]>([]);
   selectedRagTag = signal<string>('');
   newRagTag = signal<string>('');
@@ -43,7 +44,12 @@ export class RagComponent implements OnInit {
   analyzeSuccess = signal<boolean>(false);
   analyzeError = signal<string>('');
 
-  constructor(private ragService: RagService) {}
+  // 计算属性
+  canUpload = computed(() => !this.isUploading() && this.files().length > 0 && !!this.selectedRagTag());
+  canAnalyze = computed(() => !this.isAnalyzing() && !!this.gitRepoUrl() && !!this.gitUserName());
+  canAddTag = computed(() => !!this.newRagTag().trim());
+  hasFiles = computed(() => this.files().length > 0);
+  hasTags = computed(() => this.ragTags().length > 0);
 
   ngOnInit(): void {
     this.loadRagTags();
@@ -52,7 +58,7 @@ export class RagComponent implements OnInit {
   loadRagTags(): void {
     this.ragService.getRagTags().subscribe({
       next: (response) => {
-        if (response && response.data) {
+        if (response?.data) {
           this.ragTags.set(response.data);
           if (response.data.length > 0) {
             this.selectedRagTag.set(response.data[0]);
@@ -71,7 +77,7 @@ export class RagComponent implements OnInit {
   }
 
   uploadFiles(): void {
-    if (!this.selectedRagTag() || this.files().length === 0) return;
+    if (!this.canUpload()) return;
     
     this.isUploading.set(true);
     this.uploadProgress.set(0);
@@ -109,9 +115,9 @@ export class RagComponent implements OnInit {
   }
 
   addRagTag(): void {
-    const newTag = this.newRagTag();
-    if (!newTag.trim()) return;
+    if (!this.canAddTag()) return;
     
+    const newTag = this.newRagTag();
     const currentTags = this.ragTags();
     if (!currentTags.includes(newTag)) {
       this.ragTags.update(tags => [...tags, newTag]);
@@ -121,7 +127,7 @@ export class RagComponent implements OnInit {
   }
 
   analyzeGitRepo(): void {
-    if (!this.gitRepoUrl() || !this.gitUserName()) return;
+    if (!this.canAnalyze()) return;
     
     this.isAnalyzing.set(true);
     this.analyzeSuccess.set(false);

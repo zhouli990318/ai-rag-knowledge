@@ -14,10 +14,14 @@
       <div class="form-group">
         <label for="model">模型</label>
         <select id="model" [ngModel]="selectedModel()" (ngModelChange)="updateModel($event)">
-          <option *ngIf="selectedLlm() === 'ollama'" value="deepseek-r1:8b">Deepseek R1</option>
-          <option *ngIf="selectedLlm() === 'ollama'" value="llama3">Llama 3</option>
-          <option *ngIf="selectedLlm() === 'openai'" value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-          <option *ngIf="selectedLlm() === 'openai'" value="gpt-4o">GPT-4o</option>
+          @if (selectedLlm() === 'ollama') {
+            <option value="deepseek-r1:8b">Deepseek R1</option>
+            <option value="llama3">Llama 3</option>
+          }
+          @if (selectedLlm() === 'openai') {
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            <option value="gpt-4o">GPT-4o</option>
+          }
         </select>
       </div>
       
@@ -29,12 +33,16 @@
         </div>
       </div>
       
-      <div class="form-group" *ngIf="useRag()">
-        <label for="ragTag">知识库</label>
-        <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateRagTag($event)">
-          <option *ngFor="let tag of ragTags()" [value]="tag">{{ tag }}</option>
-        </select>
-      </div>
+      @if (useRag()) {
+        <div class="form-group">
+          <label for="ragTag">知识库</label>
+          <select id="ragTag" [ngModel]="selectedRagTag()" (ngModelChange)="updateRagTag($event)">
+            @for (tag of ragTags(); track tag) {
+              <option [value]="tag">{{ tag }}</option>
+            }
+          </select>
+        </div>
+      }
       
       <button class="clear-button" (click)="clearChat()">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -49,30 +57,46 @@
   
   <div class="chat-main">
     <div class="messages-container" #messagesContainer>
-      <div *ngFor="let message of messages(); trackBy: trackById" 
-           [ngClass]="{'message': true, 'user-message': message.type === 'user', 'ai-message': message.type === 'ai', 'error': message.error}">
-        <div class="message-avatar">
-          <div *ngIf="message.type === 'user'" class="user-avatar">用户</div>
-          <div *ngIf="message.type === 'ai'" class="ai-avatar">AI</div>
-        </div>
-        <div class="message-content">
-          <div class="message-header">
-            <span class="message-sender">{{ message.type === 'user' ? '用户' : 'AI 助手' }}</span>
-            <span class="message-time">{{ message.timestamp | date:'HH:mm' }}</span>
+      @for (message of messages(); track message.id) {
+        <div [ngClass]="{
+          'message': true,
+          'user-message': message.type === 'user',
+          'ai-message': message.type === 'ai',
+          'error': message.error
+        }">
+          <div class="message-avatar">
+            @if (message.type === 'user') {
+              <div class="user-avatar">用户</div>
+            }
+            @if (message.type === 'ai') {
+              <div class="ai-avatar">AI</div>
+            }
           </div>
-          <div class="message-body">
-            <div *ngIf="message.isThinking" class="thinking-indicator">
-              <span>思考中...</span>
+          <div class="message-content">
+            <div class="message-header">
+              <span class="message-sender">{{ message.type === 'user' ? '用户' : 'AI 助手' }}</span>
+              <span class="message-time">{{ message.timestamp | date:'HH:mm' }}</span>
             </div>
-            <markdown *ngIf="!message.isThinking || message.content" [data]="message.content" [inline]="false"></markdown>
-            <div *ngIf="message.isStreaming" class="typing-indicator">
-              <span></span>
-              <span></span>
-              <span></span>
+            <div class="message-body">
+              @if (message.isThinking) {
+                <div class="thinking-indicator">
+                  <span>思考中...</span>
+                </div>
+              }
+              @if (!message.isThinking || message.content) {
+                <markdown [data]="message.content" [inline]="false"></markdown>
+              }
+              @if (message.isStreaming) {
+                <div class="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              }
             </div>
           </div>
         </div>
-      </div>
+      }
     </div>
     
     <div class="message-input-container">
@@ -83,7 +107,7 @@
         (keydown)="handleEnterKey($event)"
         [disabled]="isLoading()"
       ></textarea>
-      <button (click)="sendMessage()" [disabled]="isLoading() || !newMessage().trim()">
+      <button (click)="sendMessage()" [disabled]="!canSendMessage()">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"></line>
           <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
