@@ -10,6 +10,7 @@ import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/ai/v1/{llm}/")
+@CrossOrigin(origins = "http://localhost:4200")
 public class AIChatController {
 
     @Resource

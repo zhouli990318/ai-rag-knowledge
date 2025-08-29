@@ -33,14 +33,26 @@ spring:
         options:
           num-batch: 512
           model: nomic-embed-text
+    zhipuai:
+      base-url: https://open.bigmodel.cn/api/paas/
+      api-key: ${ZHIPUAI_API_KEY}
+      embedding:
+        options:
+          model: embedding-3
+          dimensions: 768
     openai:
-      base-url: https://pro-share-aws-api.zcyai.com/
-      api-key: sk-eEyfxptPgbfXd3Z164260740E0494161Bd8**找小傅哥申请
+      base-url: .
+      api-key: .
       embedding:
         options:
           model: text-embedding-ada-002
     rag:
       embed: nomic-embed-text #nomic-embed-text、text-embedding-ada-002
+    mcp:
+      client:
+        stdio:
+          servers-configuration: classpath:/config/mcp-server-config.json
+        request-timeout: 1200s
   servlet:
     multipart:
       enabled: true
@@ -62,8 +74,8 @@ redis:
       keep-alive: true
 logging:
   level:
-    com.silver: debug
-    org.springframework: info
+    com.silver: DEBUG
+    org.springframework: DEBUG
   config: classpath:logback-spring.xml
   file:
     path: /var/logs/spring-ai-rag

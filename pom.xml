@@ -21,6 +21,7 @@
         <module>infrastructure</module>
         <module>shared</module>
         <module>angular-ui</module>
+        <module>mcp-server</module>
     </modules>
 
 
@@ -60,12 +61,14 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-devtools</artifactId>
+                <version>3.4.5</version>
                 <scope>runtime</scope>
                 <optional>true</optional>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-test</artifactId>
+                <version>3.4.5</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>

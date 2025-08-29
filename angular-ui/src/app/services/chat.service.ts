@@ -61,6 +61,7 @@ export class ChatService {
 
       const cleanup = () => {
         clearInterval(bufferInterval);
+        flushBuffer(); // 确保在关闭连接前刷新所有剩余内容
         eventSource.close();
       };
 
@@ -72,6 +73,8 @@ export class ChatService {
           if (data?.code && data.code !== '200') {
             console.error('后端返回错误', data);
             hasError = true;
+            observer.error(new Error(data.code + ': ' + ('未知错误')));
+            cleanup();
             return;
           }
 
@@ -80,7 +83,7 @@ export class ChatService {
             const content = data.result.output.text;
             
             if (content) {
-              if (content === '<think>') {
+              if (content === '\uE000') {
                 observer.next('__THINKING_START__');
                 return;
               } else if (content.trim() === '') {
@@ -96,7 +99,7 @@ export class ChatService {
             }
             
             // 检查是否到达结束标识
-            if (data.result.metadata.finishReason === 'stop') {
+            if (data.result.metadata?.finishReason === 'stop') {
               flushBuffer();
               observer.complete();
               cleanup();
@@ -107,27 +110,50 @@ export class ChatService {
           }
         } catch (error) {
           console.error('解析SSE消息失败', error, event.data);
+          // 即使解析失败，也要继续处理其他消息
         }
       };
       
       // SSE错误处理
+      // SSE错误处理
       eventSource.onerror = (error) => {
         console.error('SSE错误', error);
-        cleanup();
-        flushBuffer(); // 确保刷新剩余的缓冲区内容
         
-        if (!hasError) { // 只有在没有已知错误的情况下才报告错误
-          observer.error(error);
+        // 先刷新缓冲区内容，确保已接收的内容不丢失
+        flushBuffer();
+        
+        // 检查是否已经有内容被接收到
+        const hasReceivedContent = buffer.length > 0;
+        
+        // 检查EventSource的readyState来判断错误类型
+        if (eventSource.readyState === EventSource.CLOSED) {
+          // 连接已关闭，如果有内容则正常完成，否则才报告错误
+          if (hasReceivedContent || hasError) {
+            observer.complete();
+          } else {
+            const detailedError = new Error('连接到服务器时发生错误');
+            (detailedError as any).originalError = error;
+            observer.error(detailedError);
+          }
+        } else if (!hasError && !hasReceivedContent) {
+          // 只有在没有已知错误且没有接收到任何内容时才报告连接错误
+          const detailedError = new Error('连接到服务器时发生错误');
+          (detailedError as any).originalError = error;
+          observer.error(detailedError);
+        } else {
+          // 有内容或已知错误，正常完成
+          observer.complete();
         }
-        observer.complete();
+        
+        cleanup();
       };
       
       // 监听complete事件
       eventSource.addEventListener('complete', () => {
         console.log('收到complete事件');
+        flushBuffer(); // 先刷新缓冲区
+        observer.complete(); // 完成观察者
         cleanup();
-        flushBuffer(); // 确保刷新剩余的缓冲区内容
-        observer.complete();
       });
       
       return cleanup;

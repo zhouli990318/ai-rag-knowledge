@@ -230,6 +230,34 @@ input:checked + .toggle-label:before {
   border: 1px solid #ffcdd2;
 }
 
+.error-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.retry-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.retry-button:hover {
+  background-color: #d32f2f;
+}
+
+.retry-button:active {
+  transform: scale(0.95);
+}
+
 /* 打字指示器 */
 .typing-indicator {
   display: flex;

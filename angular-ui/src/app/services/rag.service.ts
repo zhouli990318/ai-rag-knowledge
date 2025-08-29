@@ -11,7 +11,7 @@ import { UploadResponse } from '../models/api.interface';
 })
 export class RagService {
   private readonly http = inject(HttpClient);
-  private readonly API_BASE = '/ai/v1/rag';
+  private readonly API_BASE = 'http://localhost:8091/ai/v1/rag';
 
   // 获取知识库标签列表
   getRagTags(): Observable<Response<string[]>> {

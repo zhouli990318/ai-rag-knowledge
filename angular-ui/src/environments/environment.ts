@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiBaseUrl: '/ai/v1',
+  apiBaseUrl: 'http://localhost:8091/ai/v1',
   apiEndpoints: {
     rag: {
       base: '/rag',

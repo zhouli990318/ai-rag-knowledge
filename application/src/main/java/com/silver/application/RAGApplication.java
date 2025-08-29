@@ -35,11 +35,11 @@ public class RAGApplication {
 
     private final RedissonClient redissonClient;
 
-    private final VectorStore pgVectorStore;
+    private final PgVectorStore pgVectorStore;
 
     private final TokenTextSplitter tokenTextSplitter;
 
-    public RAGApplication(RedissonClient redissonClient, VectorStore pgVectorStore,
+    public RAGApplication(RedissonClient redissonClient, PgVectorStore pgVectorStore,
                           TokenTextSplitter tokenTextSplitter) {
         this.redissonClient = redissonClient;
         this.pgVectorStore = pgVectorStore;

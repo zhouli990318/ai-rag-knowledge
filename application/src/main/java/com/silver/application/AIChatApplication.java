@@ -1,24 +1,25 @@
 package com.silver.application;
 
+import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.observation.ChatClientObservationConvention;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.SystemPromptTemplate;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
+import org.springframework.ai.zhipuai.ZhiPuAiChatModel;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,9 +32,9 @@ public class AIChatApplication {
 
     private final PgVectorStore pgVectorStore;
 
-    public AIChatApplication(OllamaChatModel ollamaChatClient, OpenAiChatModel openAIChatClient, PgVectorStore pgVectorStore) {
-        this.ollamaChatClient = ChatClient.builder(ollamaChatClient).build();
-        this.openAIChatClient = ChatClient.builder(openAIChatClient).build();
+    public AIChatApplication(OllamaChatModel ollamaChatModel, ZhiPuAiChatModel zhiPuAiChatModel, PgVectorStore pgVectorStore) {
+        this.ollamaChatClient = ChatClient.builder(ollamaChatModel).build();
+        this.openAIChatClient = ChatClient.builder(zhiPuAiChatModel).build();
         this.pgVectorStore = pgVectorStore;
     }
 
@@ -63,7 +64,7 @@ public class AIChatApplication {
     }
 
     public Flux<ChatResponse> generateStreamRag(String llm, String model, String ragTag, String message) {
-        SearchRequest request = SearchRequest.builder().query(message).topK(5)
+        SearchRequest request = SearchRequest.builder().query(message).topK(50)
                 .filterExpression("knowledge == '" + ragTag + "'")
                 .build();
         List<Document> documents = pgVectorStore.similaritySearch(request);
@@ -77,11 +78,11 @@ public class AIChatApplication {
         Message ragMessage = new SystemPromptTemplate(SYSTEM_PROMPT)
                 .createMessage(Map.of("documents", documentCollectors));
 
-        List<Message> messages = Arrays.asList(new UserMessage(message), ragMessage);
+        List<Message> messages = Collections.singletonList(ragMessage);
 
         return Map.of(
-                "ollama", ollamaChatClient.prompt().messages(messages).options(ChatOptions.builder().model(model).build()).stream().chatResponse(),
-                "openai", openAIChatClient.prompt().messages(messages).options(ChatOptions.builder().model(model).build()).stream().chatResponse()
+                "ollama", ollamaChatClient.prompt(Prompt.builder().messages(messages).build()).messages(new UserMessage(message)).options(ChatOptions.builder().model(model).build()).stream().chatResponse(),
+                "openai", openAIChatClient.prompt(Prompt.builder().messages(messages).build()).messages(new UserMessage(message)).options(ChatOptions.builder().model(model).build()).stream().chatResponse()
         ).getOrDefault(llm, Flux.empty());
     }
 }

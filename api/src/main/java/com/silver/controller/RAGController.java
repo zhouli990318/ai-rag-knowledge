@@ -10,6 +10,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/ai/v1/rag/")
+@CrossOrigin(origins = "http://localhost:4200")
 public class RAGController {
 
     @Resource
