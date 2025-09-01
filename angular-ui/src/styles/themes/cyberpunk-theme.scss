@@ -1,0 +1,133 @@
+// Cyberpunk Neon UI 主题配色
+:root {
+  // 主色调 - 深蓝科技感
+  --primary-bg: #0A0E27;
+  --secondary-bg: #1A1F3A;
+  --surface-bg: #252B4A;
+  --card-bg: rgba(37, 43, 74, 0.8);
+
+  // 霓虹色彩
+  --neon-blue: #00D4FF;
+  --neon-purple: #8B5CF6;
+  --neon-cyan: #00FFF0;
+  --neon-pink: #FF0080;
+  --neon-green: #00FF88;
+
+  // 文字颜色
+  --text-primary: #FFFFFF;
+  --text-secondary: #B8BCC8;
+  --text-muted: #6B7280;
+  --text-accent: var(--neon-blue);
+
+  // 边框和分割线
+  --border-primary: rgba(0, 212, 255, 0.3);
+  --border-secondary: rgba(139, 92, 246, 0.2);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+
+  // 阴影效果
+  --shadow-glow: 0 0 20px rgba(0, 212, 255, 0.3);
+  --shadow-glow-purple: 0 0 20px rgba(139, 92, 246, 0.3);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 16px 64px rgba(0, 0, 0, 0.6);
+
+  // 渐变背景
+  --gradient-primary: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+  --gradient-secondary: linear-gradient(135deg, var(--primary-bg), var(--secondary-bg));
+  --gradient-card: linear-gradient(135deg, rgba(37, 43, 74, 0.9), rgba(26, 31, 58, 0.9));
+
+  // 动画时长
+  --transition-fast: 0.2s;
+  --transition-normal: 0.3s;
+  --transition-slow: 0.5s;
+
+  // 圆角
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  // 间距
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+}
+
+// 发光效果混合器
+@mixin neon-glow($color: var(--neon-blue), $intensity: 1) {
+  box-shadow:
+    0 0 #{10px * $intensity} rgba(0, 212, 255, 0.3),
+    0 0 #{20px * $intensity} rgba(0, 212, 255, 0.2),
+    0 0 #{40px * $intensity} rgba(0, 212, 255, 0.1);
+
+  @if $color == var(--neon-purple) {
+    box-shadow:
+      0 0 #{10px * $intensity} rgba(139, 92, 246, 0.3),
+      0 0 #{20px * $intensity} rgba(139, 92, 246, 0.2),
+      0 0 #{40px * $intensity} rgba(139, 92, 246, 0.1);
+  }
+}
+
+// 半透明玻璃效果
+@mixin glass-effect($opacity: 0.1) {
+  background: rgba(255, 255, 255, $opacity);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+// 悬停发光效果
+@mixin hover-glow($color: var(--neon-blue)) {
+  transition: all var(--transition-normal) ease;
+
+  &:hover {
+    @include neon-glow($color, 1.5);
+    transform: translateY(-2px);
+  }
+}
+
+// 脉冲动画
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
+  }
+}
+
+@keyframes pulse-glow-purple {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
+  }
+}
+
+// 数据流动画
+@keyframes data-flow {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+// 扫描线动画
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
