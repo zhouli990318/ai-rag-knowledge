@@ -1,20 +1,89 @@
-<div class="app-container">
-  <header class="app-header">
-    <div class="logo-container">
-      <div class="logo">AI</div>
-      <h1>Spring AI RAG</h1>
+<div class="cyber-app-container">
+
+  <!-- 主内容区域 -->
+  <div class="main-content">
+    <!-- 科技感背景效果 -->
+    <div class="cyber-background">
+      <div class="grid-overlay"></div>
+      <div class="scan-line"></div>
     </div>
-    <nav class="app-nav">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}">AI 聊天</a>
-      <a routerLink="/rag" routerLinkActive="active">知识库管理</a>
-    </nav>
-  </header>
-  
-  <main class="app-content">
-    <router-outlet></router-outlet>
-  </main>
-  
-  <footer class="app-footer">
-    <p>© 2024 Spring AI RAG 知识库问答系统</p>
-  </footer>
+
+    <!-- 顶部导航栏 -->
+    <header class="cyber-header">
+    <div class="cyber-container">
+      <div class="header-content">
+        <!-- Logo区域 -->
+        <div class="logo-section">
+          <div class="cyber-logo">
+            <div class="logo-icon">
+              <span class="logo-text">AI</span>
+              <div class="logo-glow"></div>
+            </div>
+            <div class="logo-info">
+              <h1 class="app-title">Spring AI RAG</h1>
+              <span class="app-subtitle">智能知识库系统</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导航菜单 -->
+        <nav class="cyber-nav">
+          <a 
+            routerLink="/chat" 
+            routerLinkActive="active"
+            class="nav-link">
+            <span class="nav-icon">💬</span>
+            <span class="nav-text">AI 聊天</span>
+            <div class="nav-indicator"></div>
+          </a>
+          <a 
+            routerLink="/rag" 
+            routerLinkActive="active"
+            class="nav-link">
+            <span class="nav-icon">📚</span>
+            <span class="nav-text">知识库管理</span>
+            <div class="nav-indicator"></div>
+          </a>
+        </nav>
+
+        <!-- 工具栏 -->
+        <div class="header-tools">
+          <app-theme-switcher></app-theme-switcher>
+          <button class="cyber-button ghost settings-btn">
+            <span>⚙️</span>
+          </button>
+        </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="cyber-main">
+      <div class="cyber-container">
+        <div class="content-wrapper fade-in-up">
+          <router-outlet></router-outlet>
+        </div>
+      </div>
+    </main>
+
+    <!-- 底部信息 -->
+    <footer class="cyber-footer">
+      <div class="cyber-container">
+        <div class="footer-content">
+          <div class="footer-info">
+            <p class="copyright">© 2024 Spring AI RAG 智能知识库系统</p>
+            <div class="tech-stack">
+              <span class="tech-tag">Angular 20</span>
+              <span class="tech-tag">Spring AI</span>
+              <span class="tech-tag">RAG</span>
+            </div>
+          </div>
+          <div class="footer-status">
+            <div class="status-indicator online"></div>
+            <span class="status-text">系统运行正常</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
 </div>

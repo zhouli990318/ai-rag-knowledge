@@ -1,112 +1,490 @@
-.app-container {
+// 科技感主应用样式
+.cyber-app-container {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-}
-
-.app-header {
-  background-color: var(--background-light);
-  padding: 16px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 1px 4px var(--shadow-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.logo {
-  background: linear-gradient(135deg, var(--primary-color), #5ac8fa);
-  color: white;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 20px;
-}
-
-.app-header h1 {
-  font-size: 20px;
-  margin: 0;
-  font-weight: 600;
-  background: linear-gradient(135deg, var(--primary-color), #5ac8fa);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.app-nav {
-  display: flex;
-  gap: 24px;
-}
-
-.app-nav a {
-  color: var(--text-secondary);
-  font-weight: 500;
-  padding: 8px 0;
   position: relative;
-  transition: color var(--transition-speed);
+  overflow-x: hidden;
 }
 
-.app-nav a:hover {
-  color: var(--text-primary);
-}
-
-.app-nav a.active {
-  color: var(--primary-color);
-}
-
-.app-nav a.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
+// 科技感背景效果
+.cyber-background {
+  position: fixed;
+  top: 0;
   left: 0;
   width: 100%;
-  height: 2px;
-  background-color: var(--primary-color);
-  border-radius: 2px;
-}
+  height: 100%;
+  z-index: -2;
+  pointer-events: none;
 
-.app-content {
-  flex: 1;
-  padding: 24px;
-  max-width: 1200px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.app-footer {
-  background-color: var(--background-light);
-  padding: 16px 24px;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-  border-top: 1px solid var(--border-color);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .app-header {
-    flex-direction: column;
-    gap: 16px;
-    padding: 16px;
+  .grid-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+      linear-gradient(rgba(0, 212, 255, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 212, 255, 0.1) 1px, transparent 1px);
+    background-size: 50px 50px;
+    animation: grid-move 20s linear infinite;
   }
-  
-  .app-nav {
+
+  .scan-line {
+    position: absolute;
+    top: -2px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--gradient-primary);
+    box-shadow: 0 0 10px var(--neon-blue);
+    animation: scan-line 8s linear infinite;
+  }
+}
+
+@keyframes grid-move {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(50px, 50px); }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100vh); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+// 科技感头部导航
+.cyber-header {
+  background: var(--gradient-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-primary);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md) 0;
+    min-height: 70px;
+  }
+}
+
+// Logo区域
+.logo-section {
+  .cyber-logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+
+    .logo-icon {
+      position: relative;
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid var(--neon-blue);
+      border-radius: var(--radius-md);
+      background: var(--gradient-primary);
+      overflow: hidden;
+
+      .logo-text {
+        font-size: 20px;
+        font-weight: 700;
+        color: white;
+        z-index: 2;
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+      }
+
+      .logo-glow {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--gradient-primary);
+        opacity: 0.8;
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: var(--gradient-primary);
+        border-radius: var(--radius-md);
+        z-index: -1;
+        animation: rotate-border 3s linear infinite;
+      }
+    }
+
+    .logo-info {
+      .app-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin: 0;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+      }
+
+      .app-subtitle {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: 500;
+      }
+    }
+  }
+}
+
+@keyframes rotate-border {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+// 导航菜单
+.cyber-nav {
+  display: flex;
+  gap: var(--spacing-xl);
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -20px;
+    width: 2px;
+    height: 60%;
+    background: var(--gradient-primary);
+    transform: translateY(-50%);
+    border-radius: 1px;
+    opacity: 0.6;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+    position: relative;
+    transition: all var(--transition-normal) ease;
+    border: 1px solid transparent;
+    overflow: hidden;
+
+    // 科技感扫描线效果
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 212, 255, 0.2),
+        transparent
+      );
+      transition: left 0.6s ease;
+    }
+
+    // 边框发光效果
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: var(--radius-md);
+      padding: 1px;
+      background: var(--gradient-primary);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+      opacity: 0;
+      transition: opacity var(--transition-normal) ease;
+    }
+
+    .nav-icon {
+      font-size: 18px;
+      filter: grayscale(1);
+      transition: all var(--transition-normal) ease;
+      position: relative;
+      z-index: 2;
+    }
+
+    .nav-text {
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .nav-indicator {
+      position: absolute;
+      bottom: -1px;
+      left: 50%;
+      width: 0;
+      height: 2px;
+      background: var(--gradient-primary);
+      border-radius: 1px;
+      transform: translateX(-50%);
+      transition: width var(--transition-normal) ease;
+      box-shadow: 0 0 10px var(--neon-blue);
+    }
+
+    &:hover {
+      color: var(--neon-blue);
+      border-color: var(--border-primary);
+      background: rgba(0, 212, 255, 0.1);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0, 212, 255, 0.2);
+
+      &::before {
+        left: 100%;
+      }
+
+      &::after {
+        opacity: 1;
+      }
+
+      .nav-icon {
+        filter: grayscale(0);
+        transform: scale(1.1);
+        text-shadow: 0 0 10px currentColor;
+      }
+
+      .nav-indicator {
+        width: 80%;
+      }
+    }
+
+    &.active {
+      color: var(--neon-blue);
+      border-color: var(--neon-blue);
+      background: rgba(0, 212, 255, 0.2);
+      box-shadow: 0 0 15px rgba(0, 212, 255, 0.3);
+
+      &::after {
+        opacity: 1;
+      }
+
+      .nav-icon {
+        filter: grayscale(0);
+        transform: scale(1.1);
+        text-shadow: 0 0 10px currentColor;
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+
+      .nav-indicator {
+        width: 100%;
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+    }
+  }
+}
+
+// 工具栏
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+
+  .settings-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    
+    &:hover {
+      transform: rotate(90deg);
+    }
+  }
+}
+
+// 主内容区域
+.cyber-main {
+  flex: 1;
+  padding: var(--spacing-xl) 0;
+  position: relative;
+
+  .content-wrapper {
+    min-height: calc(100vh - 200px);
+    position: relative;
+  }
+}
+
+// 底部信息
+.cyber-footer {
+  background: var(--gradient-card);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--spacing-lg) 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  .footer-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-info {
+    .copyright {
+      margin: 0 0 var(--spacing-sm) 0;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .tech-stack {
+      display: flex;
+      gap: var(--spacing-sm);
+
+      .tech-tag {
+        padding: 4px 8px;
+        background: rgba(0, 212, 255, 0.1);
+        border: 1px solid var(--border-primary);
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        color: var(--neon-blue);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 500;
+      }
+    }
+  }
+
+  .footer-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      
+      &.online {
+        background: var(--neon-green);
+        box-shadow: 0 0 10px var(--neon-green);
+        animation: pulse-glow 2s ease-in-out infinite;
+      }
+    }
+
+    .status-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 1024px) {
+  .cyber-nav {
+    gap: var(--spacing-lg);
+    
+    .nav-link {
+      padding: var(--spacing-sm) var(--spacing-md);
+      
+      .nav-text {
+        display: none;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .cyber-header {
+    .header-content {
+      flex-direction: column;
+      gap: var(--spacing-md);
+      padding: var(--spacing-md) 0;
+    }
+  }
+
+  .logo-section {
+    .cyber-logo {
+      .logo-info {
+        .app-title {
+          font-size: 20px;
+        }
+      }
+    }
+  }
+
+  .cyber-nav {
     width: 100%;
     justify-content: space-around;
+    gap: var(--spacing-md);
+    
+    .nav-link {
+      flex-direction: column;
+      padding: var(--spacing-sm);
+      
+      .nav-text {
+        display: block;
+        font-size: 12px;
+      }
+    }
   }
-  
-  .app-content {
-    padding: 16px;
+
+  .cyber-footer {
+    .footer-content {
+      flex-direction: column;
+      gap: var(--spacing-md);
+      text-align: center;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .cyber-main {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .logo-section {
+    .cyber-logo {
+      gap: var(--spacing-sm);
+      
+      .logo-icon {
+        width: 40px;
+        height: 40px;
+        
+        .logo-text {
+          font-size: 16px;
+        }
+      }
+      
+      .logo-info {
+        .app-title {
+          font-size: 18px;
+        }
+        
+        .app-subtitle {
+          font-size: 10px;
+        }
+      }
+    }
   }
 }
