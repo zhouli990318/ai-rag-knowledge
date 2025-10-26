@@ -20,7 +20,6 @@
         <module>domain</module>
         <module>infrastructure</module>
         <module>shared</module>
-        <module>angular-ui</module>
         <module>mcp-server</module>
     </modules>
 
