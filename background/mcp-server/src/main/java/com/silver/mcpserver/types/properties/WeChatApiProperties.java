@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 @Data
 public class WeChatApiProperties {
     private String originalId;
-    private String appid;
+    private String appId;
     private String appSecret;
     private String templateId;
     private String toUser;

@@ -2,7 +2,9 @@ package com.silver.mcpserver;
 
 import com.silver.mcpserver.api.ComputerApi;
 import com.silver.mcpserver.domain.service.ArticlePublishService;
+import com.silver.mcpserver.domain.service.NoticeService;
 import com.silver.mcpserver.infrastructure.gateway.ICSDNService;
+import com.silver.mcpserver.infrastructure.gateway.IWeChatService;
 import com.silver.mcpserver.types.properties.CSDNApiProperties;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -18,15 +20,16 @@ import retrofit2.converter.jackson.JacksonConverterFactory;
 @Slf4j
 @SpringBootApplication
 public class McpServerApplication implements CommandLineRunner {
-    @Resource
-    private CSDNApiProperties csdnApiProperties;
+
     public static void main(String[] args) {
         SpringApplication.run(McpServerApplication.class, args);
     }
 
     @Bean
-    public ToolCallbackProvider computerTools(ComputerApi computerApi, ArticlePublishService articlePublishService) {
-        return MethodToolCallbackProvider.builder().toolObjects(computerApi, articlePublishService).build();
+    public ToolCallbackProvider computerTools(ComputerApi computerApi,
+                                              ArticlePublishService articlePublishService,
+                                              NoticeService noticeService) {
+        return MethodToolCallbackProvider.builder().toolObjects(computerApi, articlePublishService, noticeService).build();
     }
 
     @Bean
@@ -36,6 +39,15 @@ public class McpServerApplication implements CommandLineRunner {
                 .addConverterFactory(JacksonConverterFactory.create())
                 .build();
         return retrofit.create(ICSDNService.class);
+    }
+
+    @Bean
+    public IWeChatService weChatService() {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("https://api.weixin.qq.com/")
+                .addConverterFactory(JacksonConverterFactory.create())
+                .build();
+        return retrofit.create(IWeChatService.class);
     }
 
     @Override

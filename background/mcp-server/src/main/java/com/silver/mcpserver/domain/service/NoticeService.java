@@ -7,6 +7,7 @@ import com.silver.mcpserver.domain.model.response.NoticeFunctionResponse;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -15,7 +16,7 @@ import java.io.IOException;
 @Service
 public class NoticeService {
 
-    @Resource
+    @Autowired
     private INoticePort port;
 
     @Tool(description = "微信公众号消息通知")

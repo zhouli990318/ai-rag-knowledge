@@ -12,7 +12,7 @@ spring:
     web-application-type: none
 logging:
   pattern:
-    console:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: ${spring.application.name}.log
 
@@ -29,8 +29,8 @@ csdn:
 
 weChat:
   api:
-    originalId: gh_e067c267e056
-    appId: wx5a228ff69e28a91f
-    appSecret: 0bea03aa1310bac050aae79dd8703928
-    templateId: O8qI6gy75F-bXfPiQugInTMLA0MRzaMff9WSBb16cFk
-    toUser: or0Ab6ivwmypESVp_bYuk92T6SvU
+    originalId:
+    appId:
+    appSecret:
+    templateId:
+    toUser:

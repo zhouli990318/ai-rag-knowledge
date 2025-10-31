@@ -11,6 +11,6 @@ public class NoticeFunctionResponse {
 
     @JsonProperty(required = true, value = "success")
     @JsonPropertyDescription("success")
-    private boolean success;
+    private Boolean success;
 
 }
