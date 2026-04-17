@@ -1,0 +1,147 @@
+package com.silver.ai.mcpgateway.infrastructure.mcp;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.silver.ai.mcpgateway.domain.model.ApiSource;
+import com.silver.ai.mcpgateway.domain.model.ToolMapping;
+import com.silver.ai.mcpgateway.domain.port.ApiSourceRepository;
+import com.silver.ai.mcpgateway.domain.port.ToolMappingRepository;
+import com.silver.ai.mcpgateway.domain.service.ToolInvocationDomainService;
+import com.silver.ai.shared.exception.BusinessException;
+import com.silver.ai.shared.result.ErrorCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.stereotype.Component;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Component
+@RequiredArgsConstructor
+public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
+
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() {
+            };
+
+        private final ApiSourceRepository apiSourceRepository;
+        private final ToolMappingRepository toolMappingRepository;
+        private final ToolInvocationDomainService toolInvocationDomainService;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    public ToolCallback[] getToolCallbacks() {
+        Set<String> usedNames = new java.util.HashSet<>();
+
+        List<ToolCallback> callbacks = apiSourceRepository.findByActive(true).stream()
+            .flatMap(source -> getEnabledToolMappings(source.getId()).stream()
+                .map(mapping -> createCallback(source, mapping, usedNames, true)))
+                .collect(Collectors.toList());
+
+        return callbacks.toArray(ToolCallback[]::new);
+    }
+
+        public ToolCallback[] getToolCallbacksForSource(Long sourceId) {
+        ApiSource source = apiSourceRepository.findById(sourceId)
+            .filter(ApiSource::isActive)
+            .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
+
+        Set<String> usedNames = new java.util.HashSet<>();
+        return getEnabledToolMappings(sourceId).stream()
+            .map(mapping -> createCallback(source, mapping, usedNames, false))
+            .toArray(ToolCallback[]::new);
+        }
+
+        private ToolCallback createCallback(ApiSource source, ToolMapping mapping, Set<String> usedNames,
+                        boolean includeSourcePrefixOnConflict) {
+        String toolName = resolveToolName(source, mapping, usedNames, includeSourcePrefixOnConflict);
+
+        return FunctionToolCallback.<Map<String, Object>, String>builder(
+                        toolName,
+                        (arguments, toolContext) -> invokeTool(mapping.getId(), arguments, toolContext))
+                .description(resolveDescription(source, mapping))
+                .inputSchema(normalizeSchema(mapping.getParameterSchema()))
+                .inputType(MAP_TYPE)
+                .build();
+    }
+
+    private String invokeTool(Long toolId, Map<String, Object> arguments, ToolContext toolContext) {
+        ToolMapping mapping = toolMappingRepository.findById(toolId)
+            .orElseThrow(() -> new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND));
+        ApiSource source = apiSourceRepository.findById(mapping.getApiSourceId())
+            .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        if (arguments != null) {
+            payload.putAll(arguments);
+        }
+        if (toolContext != null && toolContext.getContext() != null && !toolContext.getContext().isEmpty()) {
+            payload.put("_toolContext", toolContext.getContext());
+        }
+
+        try {
+            return toolInvocationDomainService.invoke(source, mapping, objectMapper.writeValueAsString(payload));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("MCP 工具参数序列化失败", ex);
+        }
+    }
+
+    private List<ToolMapping> getEnabledToolMappings(Long sourceId) {
+        return toolMappingRepository.findByApiSourceId(sourceId).stream()
+                .filter(ToolMapping::isEnabled)
+                .toList();
+    }
+
+    private String resolveToolName(ApiSource source, ToolMapping mapping, Set<String> usedNames,
+                                   boolean includeSourcePrefixOnConflict) {
+        String baseName = sanitizeName(mapping.getToolName());
+        if (usedNames.add(baseName)) {
+            return baseName;
+        }
+
+        if (includeSourcePrefixOnConflict) {
+            String sourceScopedName = sanitizeName(source.getName()) + "__" + baseName;
+            if (usedNames.add(sourceScopedName)) {
+                return sourceScopedName;
+            }
+
+            String idScopedName = sourceScopedName + "_" + mapping.getId();
+            usedNames.add(idScopedName);
+            return idScopedName;
+        }
+
+        String idScopedName = baseName + "_" + mapping.getId();
+        usedNames.add(idScopedName);
+        return idScopedName;
+    }
+
+    private String resolveDescription(ApiSource source, ToolMapping mapping) {
+        String description = mapping.getToolDescription();
+        if (description == null || description.isBlank()) {
+            description = "Invoke " + mapping.getToolName();
+        }
+        return "[" + source.getName() + "] " + description;
+    }
+
+    private String normalizeSchema(String parameterSchema) {
+        if (parameterSchema == null || parameterSchema.isBlank()) {
+            return "{\"type\":\"object\",\"properties\":{}}";
+        }
+        return parameterSchema;
+    }
+
+    private String sanitizeName(String value) {
+        String normalized = value == null ? "tool" : value.trim();
+        if (normalized.isEmpty()) {
+            normalized = "tool";
+        }
+        return normalized.replaceAll("[^a-zA-Z0-9_-]", "_");
+    }
+}

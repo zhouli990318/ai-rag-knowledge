@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: ai-rag-platform
+  profiles:
+    active: dev
+
+app:
+  mcp-gateway:
+    base-url: ${APP_MCP_GATEWAY_BASE_URL:http://localhost:8092/api/v1/mcp}

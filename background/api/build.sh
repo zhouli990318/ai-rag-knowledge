@@ -1,1 +1,0 @@
-docker build -t fuzhengwei/ai-mcp-knowledge-app:2.4 -f ./Dockerfile .

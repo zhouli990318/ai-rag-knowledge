@@ -1,0 +1,8 @@
+-- 初始化数据库
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS hstore;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- MCP Gateway 使用独立 schema
+CREATE SCHEMA IF NOT EXISTS mcp_gateway;
+CREATE SCHEMA IF NOT EXISTS ai_rag_platform;

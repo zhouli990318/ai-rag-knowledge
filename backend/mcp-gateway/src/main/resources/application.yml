@@ -1,0 +1,72 @@
+server:
+  port: 8092
+
+spring:
+  application:
+    name: mcp-gateway
+  main:
+    web-application-type: reactive
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5442/ai_rag_platform}
+    username: ${APP_DATASOURCE_USERNAME:postgres}
+    password: ${APP_DATASOURCE_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: mcp_gateway
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: mcp_gateway
+    baseline-on-migrate: true
+
+  ai:
+    mcp:
+      server:
+        name: mcp-gateway
+        version: 2.0.0
+
+logging:
+  level:
+    com.silver.ai.mcpgateway: DEBUG
+
+redis:
+  sdk:
+    config:
+      host: ${APP_REDIS_HOST:localhost}
+      port: ${APP_REDIS_PORT:6379}
+      password: ${APP_REDIS_PASSWORD:}
+
+app:
+  mcp:
+    sse-path: ${APP_MCP_SSE_PATH:/sse}
+    streamable-http-path: ${APP_MCP_STREAMABLE_HTTP_PATH:/mcp/message}
+    session:
+      ttl: ${APP_MCP_SESSION_TTL:PT30M}
+      cleanup-interval: ${APP_MCP_SESSION_CLEANUP_INTERVAL:PT5M}
+      allowed-passthrough-headers:
+        - X-Request-Id
+        - X-Correlation-Id
+        - Traceparent
+        - Tracestate
+        - Accept-Language
+        - User-Agent
+      blocked-passthrough-headers:
+        - Authorization
+        - Cookie
+        - Host
+        - Content-Length
+        - Connection
+        - Transfer-Encoding
