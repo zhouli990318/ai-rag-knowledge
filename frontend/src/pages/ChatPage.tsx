@@ -1,10 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  Box, TextField, IconButton, Paper, Typography, Select, MenuItem,
-  FormControl, InputLabel, Chip, List, ListItemButton, ListItemText,
-  Divider, Button, CircularProgress, Stack, Avatar,
-} from '@mui/material';
-import { Send, Add, Delete, SmartToy, Person } from '@mui/icons-material';
+import { useState, useEffect, useCallback } from 'react';
+import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '../api/chatApi';
 import { mcpGatewayApi } from '../api/mcpApi';
@@ -12,8 +7,11 @@ import { providerApi } from '../api/providerApi';
 import { knowledgeApi } from '../api/knowledgeApi';
 import { useChatStore } from '../stores/chatStore';
 import { ChatMessage, Conversation, KnowledgeBase, McpApiSource, Provider } from '../api/types';
-import MarkdownRenderer from '../components/MarkdownRenderer';
 import { useSnackbar } from 'notistack';
+import ConversationList from './chat/ConversationList';
+import ChatConfig from './chat/ChatConfig';
+import ChatInput from './chat/ChatInput';
+import MessageArea from './chat/MessageArea';
 
 type DisplayMessage = Pick<ChatMessage, 'role' | 'content'> & {
   id: number | string;
@@ -23,6 +21,10 @@ type DisplayMessage = Pick<ChatMessage, 'role' | 'content'> & {
 export default function ChatPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isDark = theme.palette.mode === 'dark';
+
   const { activeConversationId, setActiveConversation } = useChatStore();
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -32,9 +34,10 @@ export default function ChatPage() {
   const [selectedMcpServers, setSelectedMcpServers] = useState<number[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
   const [pendingConversationLink, setPendingConversationLink] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showList, setShowList] = useState(true); // mobile: toggle list vs chat
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
-  const { data: conversations = [] } = useQuery({ queryKey: ['conversations'], queryFn: chatApi.getConversations });
+  const { data: conversations = [], isLoading: convsLoading } = useQuery({ queryKey: ['conversations'], queryFn: chatApi.getConversations });
   const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
   const { data: kbs = [] } = useQuery({ queryKey: ['knowledgeBases'], queryFn: knowledgeApi.list });
   const { data: mcpSources = [] } = useQuery({ queryKey: ['mcp-sources'], queryFn: mcpGatewayApi.listSources });
@@ -45,19 +48,13 @@ export default function ChatPage() {
   });
 
   const enabledProviders = providers.filter((p: Provider) => p.enabled);
-  const activeMcpSources = mcpSources.filter((source: McpApiSource) => source.active);
+  const activeMcpSources = mcpSources.filter((s: McpApiSource) => s.active);
 
   useEffect(() => {
     if (enabledProviders.length > 0 && !selectedProvider) {
       setSelectedProvider(enabledProviders[0].id);
     }
   }, [enabledProviders, selectedProvider]);
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  useEffect(scrollToBottom, [activeConv?.messages, optimisticMessages, streamContent, scrollToBottom]);
 
   useEffect(() => {
     if (pendingConversationLink && !activeConversationId && conversations.length > 0) {
@@ -69,20 +66,13 @@ export default function ChatPage() {
   useEffect(() => {
     if (!streaming && activeConv?.messages?.length) {
       setOptimisticMessages([]);
-      if (streamContent) {
-        setStreamContent('');
-      }
+      if (streamContent) setStreamContent('');
     }
   }, [activeConv?.messages, streaming, streamContent]);
 
   useEffect(() => {
-    if (!activeConv) {
-      return;
-    }
-
-    if (activeConv.providerId) {
-      setSelectedProvider(activeConv.providerId);
-    }
+    if (!activeConv) return;
+    if (activeConv.providerId) setSelectedProvider(activeConv.providerId);
     setSelectedKb(activeConv.knowledgeBaseId ?? 0);
     setSelectedMcpServers(activeConv.mcpServerIds ?? []);
   }, [activeConv]);
@@ -97,24 +87,28 @@ export default function ChatPage() {
     },
   });
 
+  const resetDraft = useCallback(() => {
+    setOptimisticMessages([]);
+    setStreamContent('');
+    setPendingConversationLink(false);
+    setSelectedKb(0);
+    setSelectedMcpServers([]);
+    setActiveConversation(null);
+  }, [setActiveConversation]);
+
   const handleSend = async () => {
     if (!input.trim() || !selectedProvider || streaming) return;
     const message = input.trim();
     setInput('');
     setStreaming(true);
     setStreamContent('');
-    setOptimisticMessages((current) => ([
-      ...current,
-      {
-        id: `local-user-${Date.now()}`,
-        role: 'USER',
-        content: message,
-      },
-    ]));
+    setOptimisticMessages((cur) => [...cur, { id: `local-user-${Date.now()}`, role: 'USER', content: message }]);
 
-    if (!activeConversationId) {
-      setPendingConversationLink(true);
-    }
+    if (!activeConversationId) setPendingConversationLink(true);
+    if (isMobile) setShowList(false);
+
+    const controller = new AbortController();
+    setAbortController(controller);
 
     try {
       const res = await chatApi.streamChat({
@@ -147,193 +141,105 @@ export default function ChatPage() {
         }
       }
 
-      // Refresh conversations
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (activeConversationId) {
         queryClient.invalidateQueries({ queryKey: ['conversation', activeConversationId] });
       }
     } catch (e: any) {
-      setOptimisticMessages((current) => current.filter((item) => item.content !== message || item.role !== 'USER'));
-      setStreamContent('');
-      enqueueSnackbar(e.message || '发送失败', { variant: 'error' });
+      if (e.name !== 'AbortError') {
+        setOptimisticMessages((cur) => cur.filter((m) => m.content !== message || m.role !== 'USER'));
+        setStreamContent('');
+        enqueueSnackbar(e.message || '发送失败', { variant: 'error' });
+      }
     } finally {
       setStreaming(false);
+      setAbortController(null);
     }
   };
 
-  const resetDraftConversation = () => {
-    setOptimisticMessages([]);
-    setStreamContent('');
-    setPendingConversationLink(false);
-    setSelectedKb(0);
-    setSelectedMcpServers([]);
-    setActiveConversation(null);
+  const handleStop = () => {
+    abortController?.abort();
+    setStreaming(false);
+  };
+
+  const handleSelectConversation = (id: number) => {
+    setActiveConversation(id);
+    if (isMobile) setShowList(false);
   };
 
   const messages: DisplayMessage[] = [...(activeConv?.messages || []), ...optimisticMessages];
 
-  const renderMessage = (message: DisplayMessage, isStreamingMessage = false) => {
-    const isAssistant = message.role === 'ASSISTANT';
+  // ---------- MOBILE ----------
+  if (isMobile) {
+    if (showList) {
+      return (
+        <Box sx={{ height: '100%' }}>
+          <ConversationList
+            conversations={conversations}
+            activeId={activeConversationId}
+            onSelect={handleSelectConversation}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            onNew={() => { resetDraft(); setShowList(false); }}
+            isLoading={convsLoading}
+          />
+        </Box>
+      );
+    }
 
     return (
-      <Box
-        key={message.id}
-        sx={{
-          display: 'flex',
-          flexDirection: isAssistant ? 'row-reverse' : 'row',
-          gap: 1.5,
-          alignItems: 'flex-start',
-        }}
-      >
-        <Avatar sx={{ width: 32, height: 32, bgcolor: isAssistant ? 'secondary.main' : 'primary.main' }}>
-          {isAssistant ? <SmartToy fontSize="small" /> : <Person fontSize="small" />}
-        </Avatar>
-        <Paper
-          variant="outlined"
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Back button */}
+        <Box
+          onClick={() => setShowList(true)}
           sx={{
-            p: 1.5,
-            maxWidth: { xs: '100%', md: '80%' },
-            minWidth: 0,
-            bgcolor: isAssistant ? 'action.hover' : 'background.paper',
+            px: 1, py: 0.75, cursor: 'pointer', display: 'flex', alignItems: 'center',
+            color: '#007AFF', fontSize: 17,
+            '&:active': { opacity: 0.6 },
           }}
         >
-          <Box sx={{ minWidth: 0 }}>
-            <MarkdownRenderer content={message.content} />
-            {isStreamingMessage && streaming && (
-              <Box
-                component="span"
-                sx={{
-                  display: 'inline-block',
-                  width: 8,
-                  height: '1em',
-                  ml: 0.5,
-                  verticalAlign: 'text-bottom',
-                  bgcolor: 'secondary.main',
-                  animation: 'chat-cursor-blink 1s step-end infinite',
-                  '@keyframes chat-cursor-blink': {
-                    '50%': { opacity: 0 },
-                  },
-                }}
-              />
-            )}
-          </Box>
-        </Paper>
+          ‹ 对话列表
+        </Box>
+        <ChatConfig
+          selectedProvider={selectedProvider} setSelectedProvider={setSelectedProvider}
+          selectedKb={selectedKb} setSelectedKb={setSelectedKb}
+          selectedMcpServers={selectedMcpServers} setSelectedMcpServers={setSelectedMcpServers}
+          providers={enabledProviders} kbs={kbs} mcpSources={activeMcpSources}
+        />
+        <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} />
+        <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
       </Box>
     );
-  };
+  }
 
+  // ---------- DESKTOP ----------
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 80px)', gap: 2 }}>
-      {/* Sidebar */}
-      <Paper sx={{ width: 260, display: { xs: 'none', md: 'flex' }, flexDirection: 'column', overflow: 'hidden' }}>
-        <Box sx={{ p: 1.5 }}>
-          <Button fullWidth variant="contained" startIcon={<Add />} onClick={resetDraftConversation}>
-            新建对话
-          </Button>
-        </Box>
-        <Divider />
-        <List sx={{ flex: 1, overflow: 'auto' }}>
-          {conversations.map((c: Conversation) => (
-            <ListItemButton
-              key={c.id}
-              selected={c.id === activeConversationId}
-              onClick={() => setActiveConversation(c.id)}
-            >
-              <ListItemText primary={c.title} primaryTypographyProps={{ noWrap: true, fontSize: 14 }} />
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(c.id); }}>
-                <Delete fontSize="small" />
-              </IconButton>
-            </ListItemButton>
-          ))}
-        </List>
-      </Paper>
+    <Box sx={{ display: 'flex', height: '100%' }}>
+      {/* Left panel */}
+      <Box sx={{
+        width: 280, flexShrink: 0,
+        borderRight: `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+        backgroundColor: isDark ? 'rgba(28,28,30,0.4)' : 'rgba(242,242,247,0.5)',
+      }}>
+        <ConversationList
+          conversations={conversations}
+          activeId={activeConversationId}
+          onSelect={handleSelectConversation}
+          onDelete={(id) => deleteMutation.mutate(id)}
+          onNew={resetDraft}
+          isLoading={convsLoading}
+        />
+      </Box>
 
-      {/* Chat area */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Config bar */}
-        <Paper sx={{ p: 1.5, mb: 1, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>AI 供应商</InputLabel>
-            <Select value={selectedProvider} onChange={(e) => setSelectedProvider(Number(e.target.value))} label="AI 供应商">
-              {enabledProviders.map((p: Provider) => (
-                <MenuItem key={p.id} value={p.id}>{p.name} ({p.providerType})</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <InputLabel>知识库 (RAG)</InputLabel>
-            <Select value={selectedKb} onChange={(e) => setSelectedKb(Number(e.target.value))} label="知识库 (RAG)">
-              <MenuItem value={0}>不使用</MenuItem>
-              {kbs.map((kb: KnowledgeBase) => (
-                <MenuItem key={kb.id} value={kb.id}>{kb.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel>MCP 服务器</InputLabel>
-            <Select
-              multiple
-              value={selectedMcpServers}
-              onChange={(e) => setSelectedMcpServers(e.target.value as number[])}
-              label="MCP 服务器"
-              renderValue={(selected) => {
-                const ids = selected as number[];
-                if (ids.length === 0) {
-                  return '不使用';
-                }
-                return activeMcpSources
-                  .filter((source) => ids.includes(source.id))
-                  .map((source) => source.name)
-                  .join(', ');
-              }}
-            >
-              {activeMcpSources.map((source: McpApiSource) => (
-                <MenuItem key={source.id} value={source.id}>{source.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {selectedKb > 0 && <Chip label="RAG 已启用" color="secondary" size="small" />}
-          {selectedMcpServers.length > 0 && <Chip label={`MCP ${selectedMcpServers.length} 个`} color="primary" size="small" />}
-        </Paper>
-
-        {/* Messages */}
-        <Paper sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-          {messages.length === 0 && !streamContent && (
-            <Box sx={{ textAlign: 'center', mt: 8 }}>
-              <SmartToy sx={{ fontSize: 64, color: 'text.disabled' }} />
-              <Typography color="text.secondary" mt={2}>开始一段新对话</Typography>
-            </Box>
-          )}
-          <Stack spacing={2}>
-            {messages.map((message) => renderMessage(message))}
-            {streamContent && (
-              renderMessage({
-                id: 'stream-assistant',
-                role: 'ASSISTANT',
-                content: streamContent,
-              }, true)
-            )}
-          </Stack>
-          <div ref={messagesEndRef} />
-        </Paper>
-
-        {/* Input */}
-        <Paper sx={{ p: 1.5, mt: 1, display: 'flex', gap: 1, alignItems: 'flex-end' }}>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={4}
-            placeholder="输入消息..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            disabled={streaming}
-            size="small"
-          />
-          <IconButton color="primary" onClick={handleSend} disabled={streaming || !input.trim()}>
-            {streaming ? <CircularProgress size={24} /> : <Send />}
-          </IconButton>
-        </Paper>
+      {/* Right panel - chat */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <ChatConfig
+          selectedProvider={selectedProvider} setSelectedProvider={setSelectedProvider}
+          selectedKb={selectedKb} setSelectedKb={setSelectedKb}
+          selectedMcpServers={selectedMcpServers} setSelectedMcpServers={setSelectedMcpServers}
+          providers={enabledProviders} kbs={kbs} mcpSources={activeMcpSources}
+        />
+        <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} onNewChat={resetDraft} />
+        <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
       </Box>
     </Box>
   );
