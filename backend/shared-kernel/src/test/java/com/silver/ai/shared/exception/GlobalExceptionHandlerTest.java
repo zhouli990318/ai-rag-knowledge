@@ -13,8 +13,10 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.lang.reflect.Method;
+import java.util.Objects;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalExceptionHandlerTest {
@@ -26,10 +28,11 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ApiResponse<Void>> response = handler.handleBusinessException(
                 new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, "99")
         );
+        ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(ErrorCode.CONVERSATION_NOT_FOUND.getCode(), response.getBody().getCode());
-        assertEquals(ErrorCode.CONVERSATION_NOT_FOUND.getMessage() + ": 99", response.getBody().getMessage());
+        assertEquals(ErrorCode.CONVERSATION_NOT_FOUND.getCode(), body.getCode());
+        assertEquals(ErrorCode.CONVERSATION_NOT_FOUND.getMessage() + ": 99", body.getMessage());
     }
 
     @Test
@@ -38,15 +41,18 @@ class GlobalExceptionHandlerTest {
         BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(request, "request");
         bindingResult.addError(new FieldError("request", "name", "不能为空"));
 
-        Method method = GlobalExceptionHandlerTest.class.getDeclaredMethod("sampleEndpoint", SampleRequest.class);
+        Method method = Objects.requireNonNull(
+            GlobalExceptionHandlerTest.class.getDeclaredMethod("sampleEndpoint", SampleRequest.class)
+        );
         MethodParameter parameter = new MethodParameter(method, 0);
         MethodArgumentNotValidException exception = new MethodArgumentNotValidException(parameter, bindingResult);
 
         ResponseEntity<ApiResponse<Void>> response = handler.handleValidation(exception);
+        ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(ErrorCode.INVALID_PARAMETER.getCode(), response.getBody().getCode());
-        assertTrue(response.getBody().getMessage().contains("name: 不能为空"));
+        assertEquals(ErrorCode.INVALID_PARAMETER.getCode(), body.getCode());
+        assertTrue(body.getMessage().contains("name: 不能为空"));
     }
 
     @Test
@@ -54,28 +60,37 @@ class GlobalExceptionHandlerTest {
         ResponseEntity<ApiResponse<Void>> response = handler.handleMissingParam(
                 new MissingServletRequestParameterException("providerId", "Long")
         );
+        ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(ErrorCode.INVALID_PARAMETER.getCode(), response.getBody().getCode());
-        assertEquals(ErrorCode.INVALID_PARAMETER.getMessage() + ": providerId", response.getBody().getMessage());
+        assertEquals(ErrorCode.INVALID_PARAMETER.getCode(), body.getCode());
+        assertEquals(ErrorCode.INVALID_PARAMETER.getMessage() + ": providerId", body.getMessage());
     }
 
     @Test
     void handleMaxUploadSizeShouldReturnPayloadTooLarge() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleMaxUploadSize(new MaxUploadSizeExceededException(1024));
+        ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
-        assertEquals(40013, response.getBody().getCode());
-        assertEquals("文件大小超过限制", response.getBody().getMessage());
+        assertEquals(40013, body.getCode());
+        assertEquals("文件大小超过限制", body.getMessage());
     }
 
     @Test
     void handleUnexpectedShouldReturnInternalError() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleUnexpected(new RuntimeException("boom"));
+        ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals(ErrorCode.INTERNAL_ERROR.getCode(), response.getBody().getCode());
-        assertEquals(ErrorCode.INTERNAL_ERROR.getMessage(), response.getBody().getMessage());
+        assertEquals(ErrorCode.INTERNAL_ERROR.getCode(), body.getCode());
+        assertEquals(ErrorCode.INTERNAL_ERROR.getMessage(), body.getMessage());
+    }
+
+    private ApiResponse<Void> assertBody(ResponseEntity<ApiResponse<Void>> response) {
+        ApiResponse<Void> body = response.getBody();
+        assertNotNull(body);
+        return body;
     }
 
     @SuppressWarnings("unused")
@@ -83,6 +98,7 @@ class GlobalExceptionHandlerTest {
     }
 
     private static class SampleRequest {
+        @SuppressWarnings("unused")
         private String name;
     }
 }

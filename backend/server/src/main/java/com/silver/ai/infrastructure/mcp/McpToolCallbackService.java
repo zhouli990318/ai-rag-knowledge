@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class McpToolCallbackService {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =

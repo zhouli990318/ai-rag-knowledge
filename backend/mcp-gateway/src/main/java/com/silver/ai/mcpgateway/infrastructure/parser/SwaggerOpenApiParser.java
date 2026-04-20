@@ -121,7 +121,6 @@ public class SwaggerOpenApiParser implements OpenApiParserPort {
         mappings.add(mapping);
     }
 
-    @SuppressWarnings("unchecked")
     private String buildParameterSchema(Operation operation) {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
@@ -148,11 +147,14 @@ public class SwaggerOpenApiParser implements OpenApiParserPort {
             if (jsonContent != null && jsonContent.getSchema() != null) {
                 Schema<?> bodySchema = jsonContent.getSchema();
                 if (bodySchema.getProperties() != null) {
-                    for (Map.Entry<String, Schema> entry : bodySchema.getProperties().entrySet()) {
+                    for (Map.Entry<String, ?> entry : bodySchema.getProperties().entrySet()) {
+                        if (!(entry.getValue() instanceof Schema<?> propertySchema)) {
+                            continue;
+                        }
                         Map<String, Object> prop = new LinkedHashMap<>();
-                        prop.put("type", getSchemaType(entry.getValue()));
-                        prop.put("description", entry.getValue().getDescription() != null
-                                ? entry.getValue().getDescription() : entry.getKey());
+                        prop.put("type", getSchemaType(propertySchema));
+                        prop.put("description", propertySchema.getDescription() != null
+                                ? propertySchema.getDescription() : entry.getKey());
                         prop.put("in", "body");
                         properties.put(entry.getKey(), prop);
                     }

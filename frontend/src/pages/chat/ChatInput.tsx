@@ -1,3 +1,4 @@
+import { memo, useCallback } from 'react';
 import { Box, IconButton, InputBase, useTheme } from '@mui/material';
 import { ArrowUpward, Stop } from '@mui/icons-material';
 
@@ -10,17 +11,17 @@ interface Props {
   onStop?: () => void;
 }
 
-export default function ChatInput({ value, onChange, onSend, streaming, disabled, onStop }: Props) {
+export default memo(function ChatInput({ value, onChange, onSend, streaming, disabled, onStop }: Props) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const canSend = value.trim().length > 0 && !disabled;
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (canSend && !streaming) onSend();
     }
-  };
+  }, [canSend, streaming, onSend]);
 
   return (
     <Box sx={{
@@ -101,4 +102,4 @@ export default function ChatInput({ value, onChange, onSend, streaming, disabled
       </Box>
     </Box>
   );
-}
+});

@@ -1,6 +1,7 @@
 package com.silver.ai.application.service;
 
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
+import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
@@ -23,32 +24,34 @@ class KnowledgeBaseAppServiceTest {
         KnowledgeBaseAppService service = new KnowledgeBaseAppService(
                 knowledgeBaseRepository,
                 mock(DocumentRepository.class),
+                mock(DocumentChunkRepository.class),
                 mock(DocumentProcessingDomainService.class),
                 mock(RetrievalDomainService.class),
-        mock(VectorStorePort.class));
+                mock(VectorStorePort.class));
         when(knowledgeBaseRepository.existsByName("kb")).thenReturn(false);
         when(knowledgeBaseRepository.save(any(KnowledgeBase.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-    KnowledgeBase knowledgeBase = service.createKnowledgeBase("kb", "desc");
+        KnowledgeBase knowledgeBase = service.createKnowledgeBase("kb", "desc");
 
-    assertEquals("kb", knowledgeBase.getName());
-    assertEquals("desc", knowledgeBase.getDescription());
+        assertEquals("kb", knowledgeBase.getName());
+        assertEquals("desc", knowledgeBase.getDescription());
     }
 
     @Test
     void createKnowledgeBaseShouldRejectDuplicateName() {
-    KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-    when(knowledgeBaseRepository.existsByName("kb")).thenReturn(true);
+        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        when(knowledgeBaseRepository.existsByName("kb")).thenReturn(true);
 
         KnowledgeBaseAppService service = new KnowledgeBaseAppService(
-        knowledgeBaseRepository,
+                knowledgeBaseRepository,
                 mock(DocumentRepository.class),
+                mock(DocumentChunkRepository.class),
                 mock(DocumentProcessingDomainService.class),
                 mock(RetrievalDomainService.class),
-        mock(VectorStorePort.class));
+                mock(VectorStorePort.class));
 
         BusinessException exception = assertThrows(BusinessException.class,
-            () -> service.createKnowledgeBase("kb", "desc"));
+                () -> service.createKnowledgeBase("kb", "desc"));
 
         assertEquals(true, exception.getMessage().contains("知识库名称已存在: kb"));
     }

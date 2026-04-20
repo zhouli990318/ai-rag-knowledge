@@ -10,6 +10,7 @@ import com.silver.ai.infrastructure.ai.ChatMemoryManager;
 import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
 import com.silver.ai.infrastructure.mcp.McpToolCallbackService;
 import com.silver.ai.shared.exception.BusinessException;
+import com.silver.ai.shared.result.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -25,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -104,5 +106,80 @@ class ChatAppServiceTest {
         when(conversationRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(BusinessException.class, () -> service.getConversation(99L));
+    }
+
+    @Test
+    void chatShouldUseConversationScopedMcpServersWhenRequestOmitsThem() {
+        ChatModelPort chatModelPort = mock(ChatModelPort.class);
+        ConversationRepository conversationRepository = mock(ConversationRepository.class);
+        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        RetrievalDomainService retrievalDomainService = mock(RetrievalDomainService.class);
+        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
+        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
+        McpToolCallbackService mcpToolCallbackService = mock(McpToolCallbackService.class);
+        ChatAppService service = new ChatAppService(chatModelPort, conversationRepository, knowledgeBaseRepository,
+                retrievalDomainService, promptTemplateEngine, chatMemoryManager, mcpToolCallbackService);
+        Conversation conversation = Conversation.builder()
+                .id(7L)
+                .providerId(1L)
+                .model("model-x")
+                .mcpServerIds(List.of(11L))
+                .build();
+        ToolCallback toolCallback = mock(ToolCallback.class);
+
+        when(conversationRepository.findById(7L)).thenReturn(Optional.of(conversation));
+        when(conversationRepository.save(any(Conversation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(promptTemplateEngine.render(any())).thenReturn("system");
+        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
+                .thenReturn(List.of(new UserMessage("hello")));
+        when(mcpToolCallbackService.getToolCallbacks(List.of(11L))).thenReturn(List.of(toolCallback));
+        when(chatModelPort.chat(1L, "model-x", List.of(new UserMessage("hello")), List.of(toolCallback)))
+                .thenReturn("reply");
+
+        String response = service.chat(7L, 1L, "model-x", "hello", null, null, null);
+
+        assertEquals("reply", response);
+        verify(mcpToolCallbackService).getToolCallbacks(List.of(11L));
+    }
+
+    @Test
+    void streamChatShouldEmitFriendlyErrorMessageAndPersistIt() {
+        ChatModelPort chatModelPort = mock(ChatModelPort.class);
+        ConversationRepository conversationRepository = mock(ConversationRepository.class);
+        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        RetrievalDomainService retrievalDomainService = mock(RetrievalDomainService.class);
+        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
+        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
+        McpToolCallbackService mcpToolCallbackService = mock(McpToolCallbackService.class);
+        ChatAppService service = new ChatAppService(chatModelPort, conversationRepository, knowledgeBaseRepository,
+                retrievalDomainService, promptTemplateEngine, chatMemoryManager, mcpToolCallbackService);
+        Conversation conversation = Conversation.builder()
+                .id(8L)
+                .providerId(1L)
+                .model("model-x")
+                .mcpServerIds(List.of(11L))
+                .build();
+        ToolCallback toolCallback = mock(ToolCallback.class);
+        IllegalStateException rootCause = new IllegalStateException("No ToolCallback found for tool name: getAlarmInfoUsingGET");
+        BusinessException businessException = new BusinessException(ErrorCode.CHAT_STREAM_ERROR, rootCause.getMessage(), rootCause);
+
+        when(conversationRepository.findById(8L)).thenReturn(Optional.of(conversation));
+        when(conversationRepository.save(any(Conversation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(promptTemplateEngine.render(any())).thenReturn("system");
+        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
+                .thenReturn(List.of(new UserMessage("hello")));
+        when(mcpToolCallbackService.getToolCallbacks(List.of(11L))).thenReturn(List.of(toolCallback));
+        when(chatModelPort.streamChat(eq(1L), eq("model-x"), eq(List.of(new UserMessage("hello"))), eq(List.of(toolCallback))))
+                .thenReturn(Flux.error(businessException));
+
+        List<String> chunks = service.streamChat(8L, 1L, "model-x", "hello", null, null, null)
+                .collectList()
+                .block();
+
+        assertEquals(List.of("抱歉，当前工具不可用，请重新选择 MCP 工具源后重试。"), chunks);
+        ArgumentCaptor<Conversation> captor = ArgumentCaptor.forClass(Conversation.class);
+        verify(conversationRepository, times(2)).save(captor.capture());
+        Conversation secondSavedConversation = captor.getAllValues().get(1);
+        assertEquals("抱歉，当前工具不可用，请重新选择 MCP 工具源后重试。", secondSavedConversation.getMessages().get(1).getContent());
     }
 }

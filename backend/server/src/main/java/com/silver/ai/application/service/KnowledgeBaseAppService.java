@@ -5,7 +5,6 @@ import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.model.DocumentChunk;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.model.RetrievalConfig;
-import com.silver.ai.domain.knowledge.model.DocumentStatus;
 import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
@@ -17,7 +16,6 @@ import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +33,7 @@ import java.util.Set;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class KnowledgeBaseAppService {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -188,8 +187,11 @@ public class KnowledgeBaseAppService {
                 );
             }
 
-            try (Git git = cloneCommand.call()) {
+            Git git = cloneCommand.call();
+            try {
                 processGitFiles(tempDir.toFile(), knowledgeBaseId, kb.getChunkStrategy());
+            } finally {
+                git.close();
             }
 
             log.info("Git repository import completed: {}", repoUrl);

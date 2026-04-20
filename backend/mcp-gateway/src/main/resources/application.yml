@@ -23,7 +23,7 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        default_schema: mcp_gateway
+        "[default_schema]": mcp_gateway
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
   flyway:
@@ -40,7 +40,7 @@ spring:
 
 logging:
   level:
-    com.silver.ai.mcpgateway: DEBUG
+    "[com.silver.ai.mcpgateway]": DEBUG
 
 redis:
   sdk:

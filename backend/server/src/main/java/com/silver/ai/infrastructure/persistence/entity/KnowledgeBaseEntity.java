@@ -1,7 +1,6 @@
 package com.silver.ai.infrastructure.persistence.entity;
 
 import com.silver.ai.domain.knowledge.model.ChunkStrategy;
-import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import jakarta.persistence.*;
 import lombok.*;
 

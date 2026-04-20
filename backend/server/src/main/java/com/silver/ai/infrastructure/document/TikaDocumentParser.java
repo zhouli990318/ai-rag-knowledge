@@ -13,6 +13,7 @@ import java.util.List;
 
 @Slf4j
 @Component
+@SuppressWarnings("null")
 public class TikaDocumentParser implements DocumentParserPort {
 
     @Override

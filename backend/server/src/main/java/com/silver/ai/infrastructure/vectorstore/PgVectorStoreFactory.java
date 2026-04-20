@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class PgVectorStoreFactory {
 
     private final JdbcTemplate jdbcTemplate;

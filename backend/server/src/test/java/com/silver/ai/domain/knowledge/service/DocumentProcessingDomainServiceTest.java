@@ -3,6 +3,7 @@ package com.silver.ai.domain.knowledge.service;
 import com.silver.ai.domain.knowledge.model.ChunkStrategy;
 import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.model.DocumentStatus;
+import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.DocumentParserPort;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.domain.knowledge.port.TextSplitterPort;
@@ -18,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,7 +32,13 @@ class DocumentProcessingDomainServiceTest {
         TextSplitterPort splitter = mock(TextSplitterPort.class);
         VectorStorePort vectorStore = mock(VectorStorePort.class);
         DocumentRepository repository = mock(DocumentRepository.class);
-        DocumentProcessingDomainService service = new DocumentProcessingDomainService(parser, splitter, vectorStore, repository);
+        DocumentChunkRepository documentChunkRepository = mock(DocumentChunkRepository.class);
+        DocumentProcessingDomainService service = new DocumentProcessingDomainService(
+            parser,
+            splitter,
+            vectorStore,
+            repository,
+            documentChunkRepository);
         Document document = Document.builder()
                 .id(11L)
                 .knowledgeBaseId(22L)
@@ -48,6 +54,7 @@ class DocumentProcessingDomainServiceTest {
         assertEquals(DocumentStatus.INDEXED, document.getStatus());
         assertEquals(2, document.getChunkCount());
         verify(repository, org.mockito.Mockito.times(2)).save(document);
+        verify(documentChunkRepository).deleteByDocumentId(11L);
         verify(vectorStore).addDocuments(argThat(docs -> docs.size() == 2
                 && "11".equals(docs.get(0).getMetadata().get("document_id"))
                 && "22".equals(docs.get(0).getMetadata().get("knowledge_base_id"))));
@@ -59,7 +66,13 @@ class DocumentProcessingDomainServiceTest {
         TextSplitterPort splitter = mock(TextSplitterPort.class);
         VectorStorePort vectorStore = mock(VectorStorePort.class);
         DocumentRepository repository = mock(DocumentRepository.class);
-        DocumentProcessingDomainService service = new DocumentProcessingDomainService(parser, splitter, vectorStore, repository);
+        DocumentChunkRepository documentChunkRepository = mock(DocumentChunkRepository.class);
+        DocumentProcessingDomainService service = new DocumentProcessingDomainService(
+            parser,
+            splitter,
+            vectorStore,
+            repository,
+            documentChunkRepository);
         Document document = Document.builder().fileName("empty.txt").build();
         when(parser.parse(any(), any())).thenReturn(List.of());
 
@@ -71,6 +84,7 @@ class DocumentProcessingDomainServiceTest {
 
         assertEquals(DocumentStatus.FAILED, document.getStatus());
         verify(repository, org.mockito.Mockito.times(2)).save(document);
+        verify(documentChunkRepository, never()).deleteByDocumentId(any());
         verify(vectorStore, never()).addDocuments(any());
     }
 }

@@ -1,8 +1,6 @@
 package com.silver.ai.infrastructure.ai;
 
 import com.silver.ai.domain.provider.model.ModelProvider;
-import com.silver.ai.shared.exception.BusinessException;
-import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;

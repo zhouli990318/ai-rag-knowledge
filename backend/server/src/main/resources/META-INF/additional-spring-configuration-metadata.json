@@ -1,0 +1,49 @@
+{
+  "properties": [
+    {
+      "name": "redis.sdk.config.host",
+      "type": "java.lang.String",
+      "description": "Redisson server host."
+    },
+    {
+      "name": "redis.sdk.config.port",
+      "type": "java.lang.Integer",
+      "description": "Redisson server port."
+    },
+    {
+      "name": "redis.sdk.config.password",
+      "type": "java.lang.String",
+      "description": "Redisson server password."
+    },
+    {
+      "name": "app.crypto.secret-key",
+      "type": "java.lang.String",
+      "description": "Secret key used for API key encryption."
+    },
+    {
+      "name": "app.default-embedding.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL of the default embedding provider."
+    },
+    {
+      "name": "app.default-embedding.model",
+      "type": "java.lang.String",
+      "description": "Model name of the default embedding provider."
+    },
+    {
+      "name": "app.default-embedding.dimensions",
+      "type": "java.lang.Integer",
+      "description": "Embedding vector dimensions."
+    },
+    {
+      "name": "app.mcp-gateway.base-url",
+      "type": "java.lang.String",
+      "description": "Base URL of the MCP gateway service."
+    },
+    {
+      "name": "app.storage.upload-dir",
+      "type": "java.lang.String",
+      "description": "Local upload storage directory."
+    }
+  ]
+}

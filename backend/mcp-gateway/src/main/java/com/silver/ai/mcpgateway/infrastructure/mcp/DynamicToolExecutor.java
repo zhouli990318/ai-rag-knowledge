@@ -1,11 +1,6 @@
 package com.silver.ai.mcpgateway.infrastructure.mcp;
 
 import com.silver.ai.mcpgateway.application.McpGatewayAppService;
-import com.silver.ai.mcpgateway.domain.model.ApiSource;
-import com.silver.ai.mcpgateway.domain.model.ToolMapping;
-import com.silver.ai.mcpgateway.domain.port.ApiSourceRepository;
-import com.silver.ai.mcpgateway.domain.service.ToolInvocationDomainService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;

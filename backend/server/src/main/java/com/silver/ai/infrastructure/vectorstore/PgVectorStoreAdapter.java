@@ -19,6 +19,7 @@ import java.util.Objects;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class PgVectorStoreAdapter implements VectorStorePort {
 
     private final VectorStore vectorStore;

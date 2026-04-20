@@ -13,6 +13,7 @@ import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class ModelProviderRepositoryAdapter implements ModelProviderRepository {
 
     private final JpaModelProviderRepository jpa;

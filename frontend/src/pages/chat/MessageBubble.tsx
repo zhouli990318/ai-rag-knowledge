@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 
@@ -8,7 +9,7 @@ interface Props {
   showTimestamp?: string;
 }
 
-export default function MessageBubble({ role, content, isStreaming, showTimestamp }: Props) {
+export default memo(function MessageBubble({ role, content, isStreaming, showTimestamp }: Props) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const isUser = role === 'USER';
@@ -63,4 +64,4 @@ export default function MessageBubble({ role, content, isStreaming, showTimestam
       </Box>
     </Box>
   );
-}
+});

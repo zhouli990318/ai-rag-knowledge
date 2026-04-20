@@ -18,6 +18,7 @@ import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class ConversationRepositoryAdapter implements ConversationRepository {
 
     private final JpaConversationRepository jpa;

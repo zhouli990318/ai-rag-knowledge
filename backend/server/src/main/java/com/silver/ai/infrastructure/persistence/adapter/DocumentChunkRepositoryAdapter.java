@@ -16,6 +16,7 @@ import java.util.Map;
 
 @Repository
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class DocumentChunkRepositoryAdapter implements DocumentChunkRepository {
 
     private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '../api/chatApi';
@@ -47,14 +47,14 @@ export default function ChatPage() {
     enabled: !!activeConversationId,
   });
 
-  const enabledProviders = providers.filter((p: Provider) => p.enabled);
-  const activeMcpSources = mcpSources.filter((s: McpApiSource) => s.active);
+  const enabledProviders = useMemo(() => providers.filter((p: Provider) => p.enabled), [providers]);
+  const activeMcpSources = useMemo(() => mcpSources.filter((s: McpApiSource) => s.active), [mcpSources]);
 
   useEffect(() => {
     if (enabledProviders.length > 0 && !selectedProvider) {
       setSelectedProvider(enabledProviders[0].id);
     }
-  }, [enabledProviders, selectedProvider]);
+  }, [enabledProviders.length, enabledProviders, selectedProvider]);
 
   useEffect(() => {
     if (pendingConversationLink && !activeConversationId && conversations.length > 0) {
@@ -75,7 +75,8 @@ export default function ChatPage() {
     if (activeConv.providerId) setSelectedProvider(activeConv.providerId);
     setSelectedKb(activeConv.knowledgeBaseId ?? 0);
     setSelectedMcpServers(activeConv.mcpServerIds ?? []);
-  }, [activeConv]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConv?.id, activeConv?.providerId, activeConv?.knowledgeBaseId]);
 
   const deleteMutation = useMutation({
     mutationFn: chatApi.deleteConversation,
@@ -157,17 +158,22 @@ export default function ChatPage() {
     }
   };
 
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     abortController?.abort();
     setStreaming(false);
-  };
+  }, [abortController]);
 
-  const handleSelectConversation = (id: number) => {
+  const handleSelectConversation = useCallback((id: number) => {
     setActiveConversation(id);
     if (isMobile) setShowList(false);
-  };
+  }, [setActiveConversation, isMobile]);
 
-  const messages: DisplayMessage[] = [...(activeConv?.messages || []), ...optimisticMessages];
+  const handleDelete = useCallback((id: number) => deleteMutation.mutate(id), [deleteMutation]);
+
+  const messages: DisplayMessage[] = useMemo(
+    () => [...(activeConv?.messages || []), ...optimisticMessages],
+    [activeConv?.messages, optimisticMessages],
+  );
 
   // ---------- MOBILE ----------
   if (isMobile) {
@@ -178,7 +184,7 @@ export default function ChatPage() {
             conversations={conversations}
             activeId={activeConversationId}
             onSelect={handleSelectConversation}
-            onDelete={(id) => deleteMutation.mutate(id)}
+            onDelete={handleDelete}
             onNew={() => { resetDraft(); setShowList(false); }}
             isLoading={convsLoading}
           />
@@ -224,7 +230,7 @@ export default function ChatPage() {
           conversations={conversations}
           activeId={activeConversationId}
           onSelect={handleSelectConversation}
-          onDelete={(id) => deleteMutation.mutate(id)}
+          onDelete={handleDelete}
           onNew={resetDraft}
           isLoading={convsLoading}
         />

@@ -1,7 +1,5 @@
 package com.silver.ai.domain.provider.port;
 
-import org.springframework.ai.document.Document;
-
 import java.util.List;
 
 /**

@@ -13,6 +13,7 @@ import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class DocumentRepositoryAdapter implements DocumentRepository {
 
     private final JpaDocumentRepository jpa;

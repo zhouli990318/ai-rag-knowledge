@@ -24,6 +24,7 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class DocumentProcessingDomainService {
 
     private final DocumentParserPort documentParser;

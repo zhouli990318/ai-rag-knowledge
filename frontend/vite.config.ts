@@ -12,6 +12,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-mui': ['@mui/material', '@mui/icons-material'],
+          'vendor-query': ['@tanstack/react-query'],
+          'vendor-markdown': ['react-markdown', 'react-syntax-highlighter', 'remark-gfm'],
+          'vendor-motion': ['framer-motion'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

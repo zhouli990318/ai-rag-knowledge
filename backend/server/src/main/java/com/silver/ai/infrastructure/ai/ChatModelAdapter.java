@@ -46,7 +46,7 @@ public class ChatModelAdapter implements ChatModelPort {
                     })
                     .filter(text -> !text.isEmpty())
                     .onErrorMap(e -> {
-                        log.error("Stream chat error for provider {}: {}", providerId, e.getMessage());
+                        log.error("Stream chat error for provider {}: {}", providerId, e.getMessage(), e);
                         return new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e);
                     });
         } catch (Exception e) {

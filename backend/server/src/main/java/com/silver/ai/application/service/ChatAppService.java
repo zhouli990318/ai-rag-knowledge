@@ -52,18 +52,23 @@ public class ChatAppService {
 
         // 构建消息列表
         List<Message> messages = buildMessages(conversation, userMessage, systemPrompt);
-        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(mcpServerIds);
+        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
 
         final Conversation savedConv = conversation;
         StringBuilder fullResponse = new StringBuilder();
 
         return chatModelPort.streamChat(providerId, model, messages, toolCallbacks)
                 .doOnNext(fullResponse::append)
+                .onErrorResume(error -> {
+                    log.error("Stream chat error", error);
+                    String errorMessage = resolveStreamErrorMessage(error);
+                    fullResponse.append(errorMessage);
+                    return Flux.just(errorMessage);
+                })
                 .doOnComplete(() -> {
                     savedConv.addMessage(MessageRole.ASSISTANT, fullResponse.toString());
                     conversationRepository.save(savedConv);
-                })
-                .doOnError(e -> log.error("Stream chat error", e));
+                });
     }
 
     /**
@@ -78,7 +83,7 @@ public class ChatAppService {
         conversation = conversationRepository.save(conversation);
 
         List<Message> messages = buildMessages(conversation, userMessage, systemPrompt);
-        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(mcpServerIds);
+        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
         String response = chatModelPort.chat(providerId, model, messages, toolCallbacks);
 
         conversation.addMessage(MessageRole.ASSISTANT, response);
@@ -150,5 +155,20 @@ public class ChatAppService {
         }
 
         return chatMemoryManager.buildMessages(conversation, effectiveSystemPrompt, CONTEXT_WINDOW);
+    }
+
+    private String resolveStreamErrorMessage(Throwable error) {
+        Throwable rootCause = error;
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+
+        if (rootCause instanceof IllegalStateException illegalStateException
+                && illegalStateException.getMessage() != null
+                && illegalStateException.getMessage().contains("No ToolCallback found for tool name:")) {
+            return "抱歉，当前工具不可用，请重新选择 MCP 工具源后重试。";
+        }
+
+        return "抱歉，流式对话出现异常，请稍后重试。";
     }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import {
   Box, Typography, Chip, IconButton, Select, MenuItem,
   FormControl, InputLabel, Collapse, useTheme,
@@ -18,7 +18,7 @@ interface Props {
   mcpSources: McpApiSource[];
 }
 
-export default function ChatConfig({
+export default memo(function ChatConfig({
   selectedProvider, setSelectedProvider,
   selectedKb, setSelectedKb,
   selectedMcpServers, setSelectedMcpServers,
@@ -114,4 +114,4 @@ export default function ChatConfig({
       </Collapse>
     </Box>
   );
-}
+});

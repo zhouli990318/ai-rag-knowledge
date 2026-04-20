@@ -14,6 +14,7 @@ import java.util.Deque;
 import java.util.List;
 
 @Component
+@SuppressWarnings("null")
 public class ChatMemoryManager {
 
     private static final int MAX_CONTEXT_CHARS = 12000;

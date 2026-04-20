@@ -21,12 +21,12 @@ public class RedisConfig {
     public RedissonClient redissonClient() {
         Config config = new Config();
         String address = "redis://" + host + ":" + port;
-        var serverConfig = config.useSingleServer()
+        config.useSingleServer()
                 .setAddress(address)
                 .setConnectionMinimumIdleSize(5)
                 .setConnectionPoolSize(20);
         if (password != null && !password.isBlank()) {
-            serverConfig.setPassword(password);
+            config.setPassword(password);
         }
         return Redisson.create(config);
     }

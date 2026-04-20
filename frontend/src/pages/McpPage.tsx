@@ -1,21 +1,36 @@
-import { useState } from 'react';
+﻿import { useState, lazy, Suspense } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, IconButton, Switch, Select, MenuItem,
   FormControl, InputLabel, LinearProgress, useTheme, useMediaQuery,
-  Tooltip, Drawer,
+  Tooltip, Drawer, CircularProgress,
 } from '@mui/material';
 import {
   Add, Delete, PlayArrow, Edit, ContentCopy, Refresh,
   Api, CheckCircle,
 } from '@mui/icons-material';
-import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mcpGatewayApi } from '../api/mcpApi';
-import { McpApiSource, McpConnectionInfo, McpToolMapping } from '../api/types';
+import { McpApiSource, McpToolMapping } from '../api/types';
 import { useSnackbar } from 'notistack';
 import { IOSSegmentedControl, IOSStatusBadge, IOSEmptyState } from '../components/ios';
 import { motion } from 'framer-motion';
-import Editor from '@monaco-editor/react';
+
+const LazyEditor = lazy(() => import('@monaco-editor/react'));
+
+function MonacoEditor({ value, onChange, height = 180, isDark = false }: { value: string; onChange: (v: string) => void; height?: number; isDark?: boolean }) {
+  return (
+    <Box sx={{ height, borderRadius: 3, overflow: 'hidden', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}>
+      <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress size={24} /></Box>}>
+        <LazyEditor height="100%" defaultLanguage="json" value={value} onChange={(v) => onChange(v || '')} theme={isDark ? 'vs-dark' : 'light'} options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
+      </Suspense>
+    </Box>
+  );
+}
+
+function MobileTextarea({ value, onChange }: { value: string; onChange: (v: string) => void; height?: number; isDark?: boolean }) {
+  return <TextField multiline fullWidth minRows={4} maxRows={10} value={value} onChange={(e) => onChange(e.target.value)} sx={{ fontFamily: 'monospace' }} />;
+}
 
 type ParameterRow = {
   key: string; name: string; type: string; description: string; required: boolean;
@@ -71,24 +86,16 @@ export default function McpPage() {
   const [form, setForm] = useState({ name: '', description: '', baseUrl: '', authType: 'NONE', authConfig: '' });
 
   const { data: sources = [], isLoading } = useQuery({ queryKey: ['mcp-sources'], queryFn: mcpGatewayApi.listSources });
-  const connectionInfoQueries = useQueries({
-    queries: sources.map((source) => ({
-      queryKey: ['mcp-source-connection-info', source.id],
-      queryFn: () => mcpGatewayApi.getSourceConnectionInfo(source.id),
-    })),
+  const { data: connectionInfo } = useQuery({
+    queryKey: ['mcp-source-connection-info', selectedSource?.id],
+    queryFn: () => mcpGatewayApi.getSourceConnectionInfo(selectedSource!.id),
+    enabled: !!selectedSource,
   });
   const { data: tools = [], refetch: refetchTools } = useQuery({
     queryKey: ['mcp-tools', selectedSource?.id],
     queryFn: () => mcpGatewayApi.getTools(selectedSource!.id),
     enabled: !!selectedSource,
   });
-
-  const connectionInfoBySourceId = new Map<number, McpConnectionInfo>();
-  connectionInfoQueries.forEach((q, i) => {
-    const s = sources[i];
-    if (s && q.data) connectionInfoBySourceId.set(s.id, q.data);
-  });
-  const connectionInfo = selectedSource ? connectionInfoBySourceId.get(selectedSource.id) : undefined;
 
   // Mutations
   const createMutation = useMutation({
@@ -149,15 +156,7 @@ export default function McpPage() {
     catch { enqueueSnackbar('复制失败', { variant: 'error' }); }
   };
 
-  const MonacoOrTextarea = isMobile
-    ? ({ value, onChange, height }: { value: string; onChange: (v: string) => void; height?: number }) => (
-        <TextField multiline fullWidth minRows={4} maxRows={10} value={value} onChange={(e) => onChange(e.target.value)} sx={{ fontFamily: 'monospace' }} />
-      )
-    : ({ value, onChange, height = 180 }: { value: string; onChange: (v: string) => void; height?: number }) => (
-        <Box sx={{ height, borderRadius: 3, overflow: 'hidden', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}>
-          <Editor height="100%" defaultLanguage="json" value={value} onChange={(v) => onChange(v || '')} theme={isDark ? 'vs-dark' : 'light'} options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
-        </Box>
-      );
+  const CodeEditor = isMobile ? MobileTextarea : MonacoEditor;
 
   return (
     <Box sx={{ p: 3 }}>
@@ -175,7 +174,6 @@ export default function McpPage() {
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
           {sources.map((s: McpApiSource) => {
             const isActive = selectedSource?.id === s.id;
-            const info = connectionInfoBySourceId.get(s.id);
             return (
               <motion.div key={s.id} whileTap={{ scale: 0.97 }}>
                 <Box
@@ -277,7 +275,7 @@ export default function McpPage() {
             </Box>
             {parseMode === 'paste' ? (
               <Box>
-                <MonacoOrTextarea value={specContent} onChange={setSpecContent} height={180} />
+                <CodeEditor value={specContent} onChange={setSpecContent} height={180} />
                 <Button variant="outlined" startIcon={<Refresh />} onClick={() => parseMutation.mutate({ openApiSpec: specContent })} disabled={parseMutation.isPending} sx={{ mt: 1, borderRadius: 10 }}>
                   解析
                 </Button>
@@ -413,20 +411,20 @@ export default function McpPage() {
                 </Box>
               </Box>
             ) : (
-              <MonacoOrTextarea value={editingTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(v) => setEditingTool((c) => c ? { ...c, parameterSchema: v } : c)} height={200} />
+              <CodeEditor value={editingTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(v) => setEditingTool((c) => c ? { ...c, parameterSchema: v } : c)} height={200} />
             )}
           </Box>
 
           {/* Response schema */}
           <Box>
             <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>响应 Schema</Typography>
-            <MonacoOrTextarea value={editingTool?.responseSchema || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, responseSchema: v } : c)} height={160} />
+            <CodeEditor value={editingTool?.responseSchema || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, responseSchema: v } : c)} height={160} />
           </Box>
 
           {/* Example */}
           <Box>
             <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>调用示例</Typography>
-            <MonacoOrTextarea value={editingTool?.examplePayload || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, examplePayload: v } : c)} height={140} />
+            <CodeEditor value={editingTool?.examplePayload || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, examplePayload: v } : c)} height={140} />
           </Box>
         </DialogContent>
         <DialogActions>
@@ -450,7 +448,7 @@ export default function McpPage() {
         }}
       >
         <Typography sx={{ fontSize: 17, fontWeight: 600, mb: 2 }}>测试工具调用</Typography>
-        <MonacoOrTextarea value={testArgs} onChange={setTestArgs} height={160} />
+        <CodeEditor value={testArgs} onChange={setTestArgs} height={160} />
         <Button variant="contained" startIcon={<PlayArrow />} fullWidth
           onClick={() => testToolId && testToolMutation.mutate({ id: testToolId, args: testArgs })}
           sx={{ mt: 2, borderRadius: 10 }}>

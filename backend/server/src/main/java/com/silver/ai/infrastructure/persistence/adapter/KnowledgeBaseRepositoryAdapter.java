@@ -14,6 +14,7 @@ import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@SuppressWarnings("null")
 public class KnowledgeBaseRepositoryAdapter implements KnowledgeBaseRepository {
 
     private final JpaKnowledgeBaseRepository jpa;

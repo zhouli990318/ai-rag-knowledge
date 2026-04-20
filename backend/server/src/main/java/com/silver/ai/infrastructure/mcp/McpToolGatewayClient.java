@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 import java.util.Collections;
@@ -14,6 +13,7 @@ import java.util.List;
 
 @Slf4j
 @Component
+@SuppressWarnings("null")
 public class McpToolGatewayClient {
 
     private static final ParameterizedTypeReference<McpGatewayResponse<List<McpToolDefinition>>> TOOL_LIST_TYPE =
@@ -27,8 +27,11 @@ public class McpToolGatewayClient {
     private final RestClient restClient;
 
     public McpToolGatewayClient(RestClient.Builder restClientBuilder, McpGatewayProperties properties) {
-        String baseUrl = StringUtils.trimWhitespace(properties.baseUrl());
-        if (!StringUtils.hasText(baseUrl)) {
+        String baseUrl = properties.baseUrl();
+        if (baseUrl != null) {
+            baseUrl = baseUrl.trim();
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalStateException("app.mcp-gateway.base-url 未配置");
         }
         this.restClient = restClientBuilder.baseUrl(baseUrl).build();
