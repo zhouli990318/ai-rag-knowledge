@@ -1,6 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
@@ -13,7 +16,8 @@ import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
 import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
 import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
-import { Box, useTheme } from '@mui/material';
+import { Box, IconButton, useTheme } from '@mui/material';
+import { ContentCopy, Check } from '@mui/icons-material';
 
 SyntaxHighlighter.registerLanguage('typescript', typescript);
 SyntaxHighlighter.registerLanguage('tsx', typescript);
@@ -34,15 +38,50 @@ SyntaxHighlighter.registerLanguage('yml', yaml);
 SyntaxHighlighter.registerLanguage('markdown', markdown);
 SyntaxHighlighter.registerLanguage('md', markdown);
 
-const REMARK_PLUGINS = [remarkGfm];
+const REMARK_PLUGINS = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS = [rehypeKatex];
+
+/* ---- Copy button for code blocks ---- */
+function CopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [code]);
+
+  return (
+    <IconButton
+      size="small"
+      onClick={handleCopy}
+      sx={{
+        position: 'absolute', top: 6, right: 6,
+        color: 'rgba(255,255,255,0.5)',
+        opacity: 0,
+        transition: 'opacity 0.15s',
+        '.code-block-wrapper:hover &': { opacity: 1 },
+        '&:hover': { color: 'rgba(255,255,255,0.85)' },
+      }}
+    >
+      {copied ? <Check sx={{ fontSize: 16 }} /> : <ContentCopy sx={{ fontSize: 16 }} />}
+    </IconButton>
+  );
+}
+
+/* ---- Streaming cursor character ---- */
+const CURSOR_CHAR = '▋';
 
 interface Props {
   content: string;
+  isStreaming?: boolean;
 }
 
-export default memo(function MarkdownRenderer({ content }: Props) {
+export default memo(function MarkdownRenderer({ content, isStreaming }: Props) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+
+  const displayContent = isStreaming ? content + CURSOR_CHAR : content;
 
   const components = useMemo(
     () => ({
@@ -50,14 +89,20 @@ export default memo(function MarkdownRenderer({ content }: Props) {
         const match = /language-(\w+)/.exec(className || '');
         const code = String(children).replace(/\n$/, '');
         return match ? (
-          <SyntaxHighlighter
-            style={oneDark}
-            language={match[1]}
-            PreTag="div"
-            customStyle={{ borderRadius: 8, fontSize: 13, margin: '8px 0' }}
+          <Box
+            className="code-block-wrapper"
+            sx={{ position: 'relative', my: '8px' }}
           >
-            {code}
-          </SyntaxHighlighter>
+            <SyntaxHighlighter
+              style={oneDark}
+              language={match[1]}
+              PreTag="div"
+              customStyle={{ borderRadius: 8, fontSize: 13, margin: 0 }}
+            >
+              {code}
+            </SyntaxHighlighter>
+            <CopyButton code={code} />
+          </Box>
         ) : (
           <code
             style={{
@@ -97,9 +142,15 @@ export default memo(function MarkdownRenderer({ content }: Props) {
         px: 1, py: 0.5, fontSize: 14,
       },
       '& th': { fontWeight: 600 },
+      '& .katex-display': { my: 1, overflowX: 'auto' },
+      '@keyframes cursor-blink': { '50%': { opacity: 0 } },
     }}>
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
-        {content}
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={components}
+      >
+        {displayContent}
       </ReactMarkdown>
     </Box>
   );

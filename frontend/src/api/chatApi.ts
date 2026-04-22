@@ -14,11 +14,12 @@ export interface StreamChatRequest {
 }
 
 export const chatApi = {
-  streamChat: (data: StreamChatRequest) => {
+  streamChat: (data: StreamChatRequest, signal?: AbortSignal) => {
     return fetch(`${BASE}/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+      signal,
     });
   },
 

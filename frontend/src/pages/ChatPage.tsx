@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '../api/chatApi';
@@ -33,9 +33,15 @@ export default function ChatPage() {
   const [selectedKb, setSelectedKb] = useState<number>(0);
   const [selectedMcpServers, setSelectedMcpServers] = useState<number[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
-  const [pendingConversationLink, setPendingConversationLink] = useState(false);
   const [showList, setShowList] = useState(true); // mobile: toggle list vs chat
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup stream on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const { data: conversations = [], isLoading: convsLoading } = useQuery({ queryKey: ['conversations'], queryFn: chatApi.getConversations });
   const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
@@ -55,13 +61,6 @@ export default function ChatPage() {
       setSelectedProvider(enabledProviders[0].id);
     }
   }, [enabledProviders.length, enabledProviders, selectedProvider]);
-
-  useEffect(() => {
-    if (pendingConversationLink && !activeConversationId && conversations.length > 0) {
-      setActiveConversation(conversations[0].id);
-      setPendingConversationLink(false);
-    }
-  }, [pendingConversationLink, activeConversationId, conversations, setActiveConversation]);
 
   useEffect(() => {
     if (!streaming && activeConv?.messages?.length) {
@@ -85,13 +84,14 @@ export default function ChatPage() {
       setStreamContent('');
       setActiveConversation(null);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      enqueueSnackbar('对话已删除', { variant: 'success' });
     },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '删除失败', { variant: 'error' }),
   });
 
   const resetDraft = useCallback(() => {
     setOptimisticMessages([]);
     setStreamContent('');
-    setPendingConversationLink(false);
     setSelectedKb(0);
     setSelectedMcpServers([]);
     setActiveConversation(null);
@@ -105,11 +105,10 @@ export default function ChatPage() {
     setStreamContent('');
     setOptimisticMessages((cur) => [...cur, { id: `local-user-${Date.now()}`, role: 'USER', content: message }]);
 
-    if (!activeConversationId) setPendingConversationLink(true);
     if (isMobile) setShowList(false);
 
     const controller = new AbortController();
-    setAbortController(controller);
+    abortControllerRef.current = controller;
 
     try {
       const res = await chatApi.streamChat({
@@ -119,13 +118,20 @@ export default function ChatPage() {
         message,
         systemPrompt: selectedKb > 0 ? '请优先根据知识库内容回答。' : undefined,
         mcpServerIds: selectedMcpServers,
-      });
+      }, controller.signal);
 
       if (!res.ok) throw new Error('Stream failed');
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
+      let rafId = 0;
+      let pendingUpdate = false;
+
+      const flushContent = () => {
+        setStreamContent(fullContent);
+        pendingUpdate = false;
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -137,13 +143,25 @@ export default function ChatPage() {
             const data = line.slice(5).trim();
             if (data === '[DONE]') continue;
             fullContent += data;
-            setStreamContent(fullContent);
+            if (!pendingUpdate) {
+              pendingUpdate = true;
+              rafId = requestAnimationFrame(flushContent);
+            }
           }
         }
       }
+      cancelAnimationFrame(rafId);
+      setStreamContent(fullContent);
 
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      if (activeConversationId) {
+      if (!activeConversationId) {
+        // New conversation created by backend during streaming — fetch and link
+        await queryClient.refetchQueries({ queryKey: ['conversations'] });
+        const updatedConvs = queryClient.getQueryData<Conversation[]>(['conversations']);
+        if (updatedConvs && updatedConvs.length > 0) {
+          setActiveConversation(updatedConvs[0].id);
+        }
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
         queryClient.invalidateQueries({ queryKey: ['conversation', activeConversationId] });
       }
     } catch (e: any) {
@@ -154,14 +172,14 @@ export default function ChatPage() {
       }
     } finally {
       setStreaming(false);
-      setAbortController(null);
+      abortControllerRef.current = null;
     }
   };
 
   const handleStop = useCallback(() => {
-    abortController?.abort();
+    abortControllerRef.current?.abort();
     setStreaming(false);
-  }, [abortController]);
+  }, []);
 
   const handleSelectConversation = useCallback((id: number) => {
     setActiveConversation(id);

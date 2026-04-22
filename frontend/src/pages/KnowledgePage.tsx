@@ -140,10 +140,12 @@ export default function KnowledgePage() {
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => knowledgeApi.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] }); setCreateOpen(false); enqueueSnackbar('创建成功', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '创建失败', { variant: 'error' }),
   });
   const deleteMutation = useMutation({
     mutationFn: knowledgeApi.delete,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] }); setSelectedKb(null); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] }); setSelectedKb(null); enqueueSnackbar('删除成功', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '删除失败', { variant: 'error' }),
   });
   const uploadMutation = useMutation({
     mutationFn: (file: File) => knowledgeApi.uploadDocument(selectedKb!.id, file),
@@ -152,11 +154,13 @@ export default function KnowledgePage() {
   });
   const deleteDocMutation = useMutation({
     mutationFn: (docId: number) => knowledgeApi.deleteDocument(selectedKb!.id, docId),
-    onSuccess: () => refetchDocs(),
+    onSuccess: () => { refetchDocs(); enqueueSnackbar('文档已删除', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '删除失败', { variant: 'error' }),
   });
   const gitImportMutation = useMutation({
     mutationFn: (url: string) => knowledgeApi.importGit(selectedKb!.id, { repoUrl: url }),
     onSuccess: () => { setGitOpen(false); refetchDocs(); enqueueSnackbar('导入任务已提交', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '导入失败', { variant: 'error' }),
   });
   const rebuildMutation = useMutation({
     mutationFn: (kbId: number) => knowledgeApi.rebuildVectors(kbId),
@@ -175,8 +179,12 @@ export default function KnowledgePage() {
 
   const handleSearch = async () => {
     if (!selectedKb || !searchQuery.trim()) return;
-    const results = await knowledgeApi.search(selectedKb.id, searchQuery);
-    setSearchResults(results);
+    try {
+      const results = await knowledgeApi.search(selectedKb.id, searchQuery);
+      setSearchResults(results);
+    } catch (e: any) {
+      enqueueSnackbar(e?.response?.data?.message || '搜索失败', { variant: 'error' });
+    }
   };
 
   const handleCreate = (payload: KnowledgeFormState) => {

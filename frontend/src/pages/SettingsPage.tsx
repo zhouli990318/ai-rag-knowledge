@@ -84,7 +84,8 @@ function ProviderDialog({
       embeddingModel: '',
       embeddingDimensions: 1536,
     });
-  }, [initialProvider, open, providerTypes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProvider, open]);
 
   const selectedType = providerTypes.find((type) => type.type === form.providerType);
 
@@ -159,11 +160,13 @@ export default function SettingsPage() {
   });
   const deleteMutation = useMutation({
     mutationFn: providerApi.delete,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['providers'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); enqueueSnackbar('删除成功', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '删除失败', { variant: 'error' }),
   });
   const toggleMutation = useMutation({
     mutationFn: providerApi.toggle,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['providers'] }),
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['providers'] }); enqueueSnackbar(data.enabled ? '已启用' : '已停用', { variant: 'success' }); },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '操作失败', { variant: 'error' }),
   });
   const testMutation = useMutation({
     mutationFn: providerApi.test,
@@ -239,7 +242,7 @@ export default function SettingsPage() {
                     <Typography sx={{ fontSize: 17, fontWeight: 500 }}>{p.name}</Typography>
                     <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                       {p.defaultModel || p.providerType}
-                      {p.baseUrl && ` · ${new URL(p.baseUrl).host}`}
+                      {p.baseUrl && (() => { try { return ` · ${new URL(p.baseUrl).host}`; } catch { return ''; } })()}
                     </Typography>
                   </Box>
 

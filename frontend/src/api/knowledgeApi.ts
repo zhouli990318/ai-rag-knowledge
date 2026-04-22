@@ -26,7 +26,7 @@ export const knowledgeApi = {
     api.post<ApiResponse<string>>(`${BASE}/${kbId}/rebuild-vectors`).then((r) => r.data.data),
 
   importGit: (kbId: number, data: { repoUrl: string; branch?: string; filePatterns?: string[] }) =>
-    api.post<ApiResponse<void>>(`${BASE}/${kbId}/git-import`, data),
+    api.post<ApiResponse<void>>(`${BASE}/${kbId}/git-import`, data).then((r) => r.data.data),
 
   search: (kbId: number, query: string, topK?: number) =>
     api.post<ApiResponse<SearchResult[]>>(`${BASE}/${kbId}/search`, { query, topK }).then((r) => r.data.data),

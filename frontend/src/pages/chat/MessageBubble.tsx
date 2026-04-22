@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
+import fixIncompleteMarkdown from '../../utils/fixIncompleteMarkdown';
 
 interface Props {
   role: 'USER' | 'ASSISTANT' | 'SYSTEM';
@@ -13,6 +14,8 @@ export default memo(function MessageBubble({ role, content, isStreaming, showTim
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const isUser = role === 'USER';
+
+  const displayContent = isStreaming ? fixIncompleteMarkdown(content) : content;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
@@ -46,20 +49,7 @@ export default memo(function MessageBubble({ role, content, isStreaming, showTim
         {isUser ? (
           <Typography sx={{ fontSize: 16, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{content}</Typography>
         ) : (
-          <MarkdownRenderer content={content} />
-        )}
-        {isStreaming && (
-          <Box
-            component="span"
-            sx={{
-              display: 'inline-block',
-              width: 2, height: '1.1em',
-              ml: 0.5, verticalAlign: 'text-bottom',
-              backgroundColor: isDark ? '#FFFFFF' : '#000000',
-              animation: 'ios-cursor-blink 1s step-end infinite',
-              '@keyframes ios-cursor-blink': { '50%': { opacity: 0 } },
-            }}
-          />
+          <MarkdownRenderer content={displayContent} isStreaming={isStreaming} />
         )}
       </Box>
     </Box>

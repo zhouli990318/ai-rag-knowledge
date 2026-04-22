@@ -21,3 +21,12 @@ export const mcpApi = axios.create({
   timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
+
+mcpApi.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    const msg = err.response?.data?.message || err.message;
+    console.error('MCP API Error:', msg);
+    return Promise.reject(err);
+  },
+);

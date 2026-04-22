@@ -1,8 +1,8 @@
 export interface ApiResponse<T> {
-  success: boolean;
+  code: number;
   data: T;
   message: string | null;
-  code: number;
+  timestamp?: string;
 }
 
 export interface Provider {
