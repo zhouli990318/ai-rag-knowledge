@@ -14,6 +14,7 @@ import org.springframework.ai.model.tool.DefaultToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 
@@ -31,10 +32,9 @@ public class ChatModelAdapter implements ChatModelPort {
     @Override
     public Flux<String> streamChat(Long providerId, String model, List<Message> messages,
                                    List<ToolCallback> toolCallbacks) {
-        ModelProvider provider = getEnabledProvider(providerId);
-        ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
-
-        try {
+        return Flux.defer(() -> {
+            ModelProvider provider = getEnabledProvider(providerId);
+            ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
             Prompt prompt = createPrompt(messages, toolCallbacks);
             return chatModel.stream(prompt)
                     .map(response -> {
@@ -44,15 +44,14 @@ public class ChatModelAdapter implements ChatModelPort {
                         }
                         return "";
                     })
-                    .filter(text -> !text.isEmpty())
-                    .onErrorMap(e -> {
-                        log.error("Stream chat error for provider {}: {}", providerId, e.getMessage(), e);
-                        return new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e);
-                    });
-        } catch (Exception e) {
-            log.error("Failed to start stream chat for provider {}", providerId, e);
-            return Flux.error(new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e));
-        }
+                    .filter(text -> !text.isEmpty());
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .onErrorMap(e -> {
+            if (e instanceof BusinessException) return e;
+            log.error("Stream chat error for provider {}: {}", providerId, e.getMessage(), e);
+            return new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e);
+        });
     }
 
     @Override
@@ -72,7 +71,8 @@ public class ChatModelAdapter implements ChatModelPort {
 
     private ModelProvider getEnabledProvider(Long providerId) {
         ModelProvider provider = providerRepository.findById(providerId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PROVIDER_NOT_FOUND));
+                .switchIfEmpty(reactor.core.publisher.Mono.error(new BusinessException(ErrorCode.PROVIDER_NOT_FOUND)))
+                .block();
         provider.ensureEnabled();
         return provider;
     }

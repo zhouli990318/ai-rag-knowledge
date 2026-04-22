@@ -1,17 +1,16 @@
 package com.silver.ai.domain.chat.port;
 
 import com.silver.ai.domain.chat.model.Conversation;
-
-import java.util.List;
-import java.util.Optional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface ConversationRepository {
 
-    Conversation save(Conversation conversation);
+    Mono<Conversation> save(Conversation conversation);
 
-    Optional<Conversation> findById(Long id);
+    Mono<Conversation> findById(Long id);
 
-    List<Conversation> findAllOrderByUpdatedAtDesc();
+    Flux<Conversation> findAllOrderByUpdatedAtDesc();
 
-    void deleteById(Long id);
+    Mono<Void> deleteById(Long id);
 }

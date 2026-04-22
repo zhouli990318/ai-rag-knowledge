@@ -3,47 +3,48 @@ package com.silver.ai.infrastructure.persistence.adapter;
 import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.infrastructure.persistence.entity.DocumentEntity;
-import com.silver.ai.infrastructure.persistence.jpa.JpaDocumentRepository;
+import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcDocumentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Repository
 @RequiredArgsConstructor
 @SuppressWarnings("null")
 public class DocumentRepositoryAdapter implements DocumentRepository {
 
-    private final JpaDocumentRepository jpa;
+    private final R2dbcDocumentRepository r2dbc;
 
     @Override
-    public Document save(Document doc) {
+    public Mono<Document> save(Document doc) {
         DocumentEntity entity = toEntity(doc);
-        entity = jpa.save(entity);
-        return toDomain(entity);
+        if (entity.getId() == null && entity.getCreatedAt() == null) {
+            entity.setCreatedAt(LocalDateTime.now());
+        }
+        return r2dbc.save(entity).map(this::toDomain);
     }
 
     @Override
-    public Optional<Document> findById(Long id) {
-        return jpa.findById(id).map(this::toDomain);
+    public Mono<Document> findById(Long id) {
+        return r2dbc.findById(id).map(this::toDomain);
     }
 
     @Override
-    public List<Document> findByKnowledgeBaseId(Long knowledgeBaseId) {
-        return jpa.findByKnowledgeBaseId(knowledgeBaseId).stream().map(this::toDomain).toList();
+    public Flux<Document> findByKnowledgeBaseId(Long knowledgeBaseId) {
+        return r2dbc.findByKnowledgeBaseId(knowledgeBaseId).map(this::toDomain);
     }
 
     @Override
-    public void deleteById(Long id) {
-        jpa.deleteById(id);
+    public Mono<Void> deleteById(Long id) {
+        return r2dbc.deleteById(id);
     }
 
     @Override
-    @Transactional
-    public void deleteByKnowledgeBaseId(Long knowledgeBaseId) {
-        jpa.deleteByKnowledgeBaseId(knowledgeBaseId);
+    public Mono<Void> deleteByKnowledgeBaseId(Long knowledgeBaseId) {
+        return r2dbc.deleteByKnowledgeBaseId(knowledgeBaseId);
     }
 
     private DocumentEntity toEntity(Document d) {
@@ -56,6 +57,7 @@ public class DocumentRepositoryAdapter implements DocumentRepository {
                 .status(d.getStatus())
                 .chunkCount(d.getChunkCount())
                 .errorMessage(d.getErrorMessage())
+                .createdAt(d.getCreatedAt())
                 .build();
     }
 

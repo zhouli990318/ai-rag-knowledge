@@ -22,6 +22,8 @@ import java.util.Objects;
 @SuppressWarnings("null")
 public class PgVectorStoreAdapter implements VectorStorePort {
 
+    private static final int DELETE_BATCH_SIZE = 1000;
+
     private final VectorStore vectorStore;
 
     @Override
@@ -63,25 +65,34 @@ public class PgVectorStoreAdapter implements VectorStorePort {
     @Override
     public void deleteByMetadata(String key, String value) {
         try {
-            List<Document> matchedDocuments = vectorStore.similaritySearch(SearchRequest.builder()
-                    .query(value)
-                    .topK(10000)
-                    .similarityThreshold(0.0d)
-                    .filterExpression(buildFilterExpression(Map.of(key, value)))
-                    .build());
+            int totalDeleted = 0;
 
-            List<String> documentIds = matchedDocuments.stream()
-                    .map(Document::getId)
-                    .filter(Objects::nonNull)
-                    .toList();
+            while (true) {
+                List<Document> matchedDocuments = vectorStore.similaritySearch(SearchRequest.builder()
+                        .query(value)
+                        .topK(DELETE_BATCH_SIZE)
+                        .similarityThreshold(0.0d)
+                        .filterExpression(buildFilterExpression(Map.of(key, value)))
+                        .build());
 
-            if (documentIds.isEmpty()) {
-                log.info("No vectors matched {}={}", key, value);
-                return;
+                List<String> documentIds = matchedDocuments.stream()
+                        .map(Document::getId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList();
+
+                if (documentIds.isEmpty()) {
+                    if (totalDeleted == 0) {
+                        log.info("No vectors matched {}={}", key, value);
+                    } else {
+                        log.info("Deleted {} vectors where {}={}", totalDeleted, key, value);
+                    }
+                    return;
+                }
+
+                vectorStore.delete(documentIds);
+                totalDeleted += documentIds.size();
             }
-
-            vectorStore.delete(documentIds);
-            log.info("Deleted {} vectors where {}={}", documentIds.size(), key, value);
         } catch (Exception e) {
             log.error("Failed to delete vectors by metadata {}={}", key, value, e);
             throw new BusinessException(ErrorCode.VECTOR_STORE_ERROR, e.getMessage(), e);

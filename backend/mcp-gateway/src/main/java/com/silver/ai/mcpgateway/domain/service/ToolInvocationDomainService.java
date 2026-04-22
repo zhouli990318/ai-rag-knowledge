@@ -69,6 +69,10 @@ public class ToolInvocationDomainService {
         String fullPath = path;
         if (pathVariables != null) {
             for (Entry<String, String> entry : pathVariables.entrySet()) {
+                if (entry.getValue() == null || entry.getValue().isBlank()) {
+                    throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED,
+                            "路径变量 '" + entry.getKey() + "' 不能为空");
+                }
                 fullPath = fullPath.replace("{" + entry.getKey() + "}", entry.getValue());
             }
         }

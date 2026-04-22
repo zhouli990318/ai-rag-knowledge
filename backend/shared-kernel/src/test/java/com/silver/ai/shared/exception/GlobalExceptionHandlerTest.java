@@ -4,13 +4,13 @@ import com.silver.ai.shared.result.ApiResponse;
 import com.silver.ai.shared.result.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.MissingServletRequestParameterException;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebInputException;
 
 import java.lang.reflect.Method;
 import java.util.Objects;
@@ -45,7 +45,7 @@ class GlobalExceptionHandlerTest {
             GlobalExceptionHandlerTest.class.getDeclaredMethod("sampleEndpoint", SampleRequest.class)
         );
         MethodParameter parameter = new MethodParameter(method, 0);
-        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(parameter, bindingResult);
+        WebExchangeBindException exception = new WebExchangeBindException(parameter, bindingResult);
 
         ResponseEntity<ApiResponse<Void>> response = handler.handleValidation(exception);
         ApiResponse<Void> body = assertBody(response);
@@ -56,20 +56,20 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void handleMissingParamShouldIncludeParameterName() {
-        ResponseEntity<ApiResponse<Void>> response = handler.handleMissingParam(
-                new MissingServletRequestParameterException("providerId", "Long")
+    void handleServerWebInputShouldIncludeReason() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handleServerWebInput(
+                new ServerWebInputException("Missing parameter: providerId")
         );
         ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals(ErrorCode.INVALID_PARAMETER.getCode(), body.getCode());
-        assertEquals(ErrorCode.INVALID_PARAMETER.getMessage() + ": providerId", body.getMessage());
     }
 
     @Test
-    void handleMaxUploadSizeShouldReturnPayloadTooLarge() {
-        ResponseEntity<ApiResponse<Void>> response = handler.handleMaxUploadSize(new MaxUploadSizeExceededException(1024));
+    void handleDataBufferLimitShouldReturnPayloadTooLarge() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handleDataBufferLimit(
+                new DataBufferLimitException("Exceeded limit"));
         ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());

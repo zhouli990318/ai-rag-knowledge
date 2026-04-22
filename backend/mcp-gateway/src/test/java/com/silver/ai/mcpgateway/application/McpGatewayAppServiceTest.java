@@ -9,12 +9,13 @@ import com.silver.ai.mcpgateway.domain.port.ToolMappingRepository;
 import com.silver.ai.mcpgateway.domain.service.ToolInvocationDomainService;
 import com.silver.ai.shared.exception.BusinessException;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
@@ -32,13 +33,14 @@ class McpGatewayAppServiceTest {
         McpGatewayAppService service = new McpGatewayAppService(sourceRepository, toolRepository, parser, invocationService);
         ApiSource savedSource = ApiSource.builder().id(10L).name("demo").build();
         ToolMapping mapping = ToolMapping.builder().toolName("tool-1").build();
-        when(sourceRepository.save(any(ApiSource.class))).thenReturn(savedSource);
+        when(sourceRepository.save(any(ApiSource.class))).thenReturn(Mono.just(savedSource));
         when(parser.parse("spec", 10L)).thenReturn(List.of(mapping));
-        when(toolRepository.save(mapping)).thenReturn(mapping);
+        when(toolRepository.save(mapping)).thenReturn(Mono.just(mapping));
 
-        ApiSource result = service.createApiSource("demo", "desc", "https://api.example.com", AuthType.NONE, null, "spec");
+        StepVerifier.create(service.createApiSource("demo", "desc", "https://api.example.com", AuthType.NONE, null, "spec"))
+                .assertNext(result -> assertEquals(10L, result.getId()))
+                .verifyComplete();
 
-        assertEquals(10L, result.getId());
         verify(parser).parse("spec", 10L);
         verify(toolRepository).save(mapping);
     }
@@ -51,15 +53,19 @@ class McpGatewayAppServiceTest {
         McpGatewayAppService service = new McpGatewayAppService(sourceRepository, toolRepository, parser, mock(ToolInvocationDomainService.class));
         ApiSource source = ApiSource.builder().id(3L).name("demo").build();
         ToolMapping mapping = ToolMapping.builder().toolName("new-tool").build();
-        when(sourceRepository.findById(3L)).thenReturn(Optional.of(source));
-        when(sourceRepository.save(any(ApiSource.class))).thenReturn(source);
+        when(sourceRepository.findById(3L)).thenReturn(Mono.just(source));
+        when(sourceRepository.save(any(ApiSource.class))).thenReturn(Mono.just(source));
         when(parser.parse("new-spec", 3L)).thenReturn(List.of(mapping));
-        when(toolRepository.save(mapping)).thenReturn(mapping);
+        when(toolRepository.deleteByApiSourceId(3L)).thenReturn(Mono.empty());
+        when(toolRepository.save(mapping)).thenReturn(Mono.just(mapping));
 
-        List<ToolMapping> result = service.parseOpenApiSpec(3L, "new-spec");
+        StepVerifier.create(service.parseOpenApiSpec(3L, "new-spec"))
+                .assertNext(result -> {
+                    assertEquals(1, result.size());
+                    assertEquals("new-spec", source.getOpenApiSpec());
+                })
+                .verifyComplete();
 
-        assertEquals(1, result.size());
-        assertEquals("new-spec", source.getOpenApiSpec());
         verify(toolRepository).deleteByApiSourceId(3L);
         verify(toolRepository).save(mapping);
     }
@@ -69,11 +75,12 @@ class McpGatewayAppServiceTest {
         ToolMappingRepository toolRepository = mock(ToolMappingRepository.class);
         McpGatewayAppService service = new McpGatewayAppService(mock(ApiSourceRepository.class), toolRepository,
                 mock(OpenApiParserPort.class), mock(ToolInvocationDomainService.class));
-        when(toolRepository.findById(99L)).thenReturn(Optional.empty());
+        when(toolRepository.findById(99L)).thenReturn(Mono.empty());
 
-        BusinessException exception = assertThrows(BusinessException.class, () -> service.invokeTool(99L, "{}"));
-
-        assertEquals("MCP工具不存在", exception.getErrorCode().getMessage());
+        StepVerifier.create(service.invokeTool(99L, "{}"))
+                .expectErrorMatches(ex -> ex instanceof BusinessException
+                        && "MCP工具不存在".equals(((BusinessException) ex).getErrorCode().getMessage()))
+                .verify();
     }
 
     @Test
@@ -82,11 +89,12 @@ class McpGatewayAppServiceTest {
         McpGatewayAppService service = new McpGatewayAppService(sourceRepository, mock(ToolMappingRepository.class),
                 mock(OpenApiParserPort.class), mock(ToolInvocationDomainService.class));
         ApiSource savedSource = ApiSource.builder().id(10L).name("demo").baseUrl("http://192.168.9.148:8080/api").build();
-        when(sourceRepository.save(any(ApiSource.class))).thenReturn(savedSource);
+        when(sourceRepository.save(any(ApiSource.class))).thenReturn(Mono.just(savedSource));
 
-        ApiSource result = service.createApiSource("demo", "desc", "192.168.9.148:8080/api", AuthType.NONE, null, null);
+        StepVerifier.create(service.createApiSource("demo", "desc", "192.168.9.148:8080/api", AuthType.NONE, null, null))
+                .assertNext(result -> assertEquals("http://192.168.9.148:8080/api", result.getBaseUrl()))
+                .verifyComplete();
 
-        assertEquals("http://192.168.9.148:8080/api", result.getBaseUrl());
         verify(sourceRepository).save(argThat(source -> "http://192.168.9.148:8080/api".equals(source.getBaseUrl())));
     }
 
@@ -95,9 +103,11 @@ class McpGatewayAppServiceTest {
         McpGatewayAppService service = new McpGatewayAppService(mock(ApiSourceRepository.class), mock(ToolMappingRepository.class),
                 mock(OpenApiParserPort.class), mock(ToolInvocationDomainService.class));
 
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> service.createApiSource("demo", "desc", "http://bad host", AuthType.NONE, null, null));
-
-        assertEquals("参数校验失败", exception.getErrorCode().getMessage());
+        // normalizeBaseUrl throws synchronously before returning Mono
+        StepVerifier.create(Mono.defer(() ->
+                        service.createApiSource("demo", "desc", "http://bad host", AuthType.NONE, null, null)))
+                .expectErrorMatches(ex -> ex instanceof BusinessException
+                        && "参数校验失败".equals(((BusinessException) ex).getErrorCode().getMessage()))
+                .verify();
     }
 }

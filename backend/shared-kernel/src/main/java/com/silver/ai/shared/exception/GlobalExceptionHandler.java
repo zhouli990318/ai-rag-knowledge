@@ -3,13 +3,13 @@ package com.silver.ai.shared.exception;
 import com.silver.ai.shared.result.ApiResponse;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebInputException;
 
 import java.util.stream.Collectors;
 
@@ -24,8 +24,8 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ex.getCode(), ex.getMessage()));
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
+    @ExceptionHandler(WebExchangeBindException.class)
+    public ResponseEntity<ApiResponse<Void>> handleValidation(WebExchangeBindException ex) {
         String errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .collect(Collectors.joining("; "));
@@ -33,14 +33,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ErrorCode.INVALID_PARAMETER, errors));
     }
 
-    @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingParam(MissingServletRequestParameterException ex) {
+    @ExceptionHandler(ServerWebInputException.class)
+    public ResponseEntity<ApiResponse<Void>> handleServerWebInput(ServerWebInputException ex) {
         return ResponseEntity.badRequest()
-                .body(ApiResponse.fail(ErrorCode.INVALID_PARAMETER, ex.getParameterName()));
+                .body(ApiResponse.fail(ErrorCode.INVALID_PARAMETER, ex.getReason()));
     }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+    @ExceptionHandler(DataBufferLimitException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataBufferLimit(DataBufferLimitException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(ApiResponse.fail(40013, "文件大小超过限制"));
     }

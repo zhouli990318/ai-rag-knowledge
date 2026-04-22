@@ -9,8 +9,9 @@ import com.silver.ai.interfaces.dto.SearchRequest;
 import com.silver.ai.shared.result.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -23,76 +24,67 @@ public class KnowledgeBaseController {
     private final KnowledgeBaseAppService knowledgeBaseAppService;
 
     @GetMapping
-    public ApiResponse<List<KnowledgeBase>> list() {
-        return ApiResponse.ok(knowledgeBaseAppService.listKnowledgeBases());
+    public Mono<ApiResponse<List<KnowledgeBase>>> list() {
+        return knowledgeBaseAppService.listKnowledgeBases().collectList().map(ApiResponse::ok);
     }
 
     @PostMapping
-    public ApiResponse<KnowledgeBase> create(@Valid @RequestBody KnowledgeBaseRequest req) {
-        KnowledgeBase kb = knowledgeBaseAppService.createKnowledgeBase(
-                req.getName(), req.getDescription());
-        return ApiResponse.ok(kb);
+    public Mono<ApiResponse<KnowledgeBase>> create(@Valid @RequestBody KnowledgeBaseRequest req) {
+        return knowledgeBaseAppService.createKnowledgeBase(req.getName(), req.getDescription())
+                .map(ApiResponse::ok);
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<KnowledgeBase> update(@PathVariable Long id, @Valid @RequestBody KnowledgeBaseRequest req) {
-        KnowledgeBase kb = knowledgeBaseAppService.updateKnowledgeBase(id,
-                req.getName(), req.getDescription(),
-                req.getChunkStrategy(), req.getRetrievalConfig());
-        return ApiResponse.ok(kb);
+    public Mono<ApiResponse<KnowledgeBase>> update(@PathVariable Long id, @Valid @RequestBody KnowledgeBaseRequest req) {
+        return knowledgeBaseAppService.updateKnowledgeBase(id,
+                        req.getName(), req.getDescription(),
+                        req.getChunkStrategy(), req.getRetrievalConfig())
+                .map(ApiResponse::ok);
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
-        knowledgeBaseAppService.deleteKnowledgeBase(id);
-        return ApiResponse.ok();
+    public Mono<ApiResponse<Void>> delete(@PathVariable Long id) {
+        return knowledgeBaseAppService.deleteKnowledgeBase(id).then(Mono.fromCallable(ApiResponse::ok));
     }
 
-    // ===== Documents =====
-
     @PostMapping("/{id}/documents")
-    public ApiResponse<Document> uploadDocument(@PathVariable Long id,
-                                                 @RequestParam("file") MultipartFile file) {
-        Document doc = knowledgeBaseAppService.uploadDocument(id, file);
-        return ApiResponse.ok(doc);
+    public Mono<ApiResponse<Document>> uploadDocument(@PathVariable Long id,
+                                                       @RequestPart("file") FilePart file) {
+        return knowledgeBaseAppService.uploadDocument(id, file).map(ApiResponse::ok);
     }
 
     @GetMapping("/{id}/documents")
-    public ApiResponse<List<Document>> listDocuments(@PathVariable Long id) {
-        return ApiResponse.ok(knowledgeBaseAppService.listDocuments(id));
+    public Mono<ApiResponse<List<Document>>> listDocuments(@PathVariable Long id) {
+        return knowledgeBaseAppService.listDocuments(id).collectList().map(ApiResponse::ok);
     }
 
     @DeleteMapping("/{id}/documents/{docId}")
-    public ApiResponse<Void> deleteDocument(@PathVariable Long id, @PathVariable Long docId) {
-        knowledgeBaseAppService.deleteDocument(docId);
-        return ApiResponse.ok();
+    public Mono<ApiResponse<Void>> deleteDocument(@PathVariable Long id, @PathVariable Long docId) {
+        return knowledgeBaseAppService.deleteDocument(id, docId).then(Mono.fromCallable(ApiResponse::ok));
     }
 
     @PostMapping("/{id}/rebuild-vectors")
-    public ApiResponse<String> rebuildVectors(@PathVariable Long id) {
-        knowledgeBaseAppService.rebuildVectors(id);
-        return ApiResponse.ok("向量库重建任务已完成");
+    public Mono<ApiResponse<String>> rebuildVectors(@PathVariable Long id) {
+        return knowledgeBaseAppService.rebuildVectors(id)
+                .thenReturn(ApiResponse.ok("向量库重建任务已完成"));
     }
-
-    // ===== Git Import =====
 
     @PostMapping("/{id}/git-import")
-    public ApiResponse<String> importGit(@PathVariable Long id, @RequestBody GitImportRequest req) {
-        knowledgeBaseAppService.importGitRepository(id, req.getRepoUrl(), req.getUserName(), req.getToken());
-        return ApiResponse.ok("Git仓库导入任务已提交");
+    public Mono<ApiResponse<String>> importGit(@PathVariable Long id, @RequestBody GitImportRequest req) {
+        return knowledgeBaseAppService.importGitRepository(id, req.getRepoUrl(), req.getUserName(), req.getToken())
+                .thenReturn(ApiResponse.ok("Git仓库导入任务已提交"));
     }
 
-    // ===== Search =====
-
     @PostMapping("/{id}/search")
-    public ApiResponse<List<Map<String, Object>>> search(@PathVariable Long id, @RequestBody SearchRequest req) {
-        var results = knowledgeBaseAppService.searchKnowledge(id, req.getQuery(), req.getTopK());
-        var mapped = results.stream()
-                .map(doc -> Map.<String, Object>of(
-                        "content", doc.getText(),
-                        "metadata", doc.getMetadata()
-                ))
-                .toList();
-        return ApiResponse.ok(mapped);
+    public Mono<ApiResponse<List<Map<String, Object>>>> search(@PathVariable Long id, @RequestBody SearchRequest req) {
+        return knowledgeBaseAppService.searchKnowledge(id, req.getQuery(), req.getTopK())
+                .map(results -> {
+                    var mapped = results.stream()
+                            .map(doc -> Map.<String, Object>of(
+                                    "content", doc.getText(),
+                                    "metadata", doc.getMetadata()
+                            )).toList();
+                    return ApiResponse.ok(mapped);
+                });
     }
 }

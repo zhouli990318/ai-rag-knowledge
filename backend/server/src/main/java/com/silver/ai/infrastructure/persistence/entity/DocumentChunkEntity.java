@@ -1,22 +1,13 @@
 package com.silver.ai.infrastructure.persistence.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "document_chunk")
+@Table("document_chunk")
 @Getter
 @Setter
 @Builder
@@ -25,26 +16,19 @@ import java.time.LocalDateTime;
 public class DocumentChunkEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "document_id", nullable = false)
+    @Column("document_id")
     private Long documentId;
 
-    @Column(name = "chunk_index", nullable = false)
+    @Column("chunk_index")
     private int chunkIndex;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    @Column(name = "metadata_json", columnDefinition = "TEXT")
+    @Column("metadata_json")
     private String metadataJson;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column("created_at")
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
 }

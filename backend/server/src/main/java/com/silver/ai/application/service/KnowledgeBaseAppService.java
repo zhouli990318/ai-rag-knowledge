@@ -16,14 +16,15 @@ import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -48,186 +49,200 @@ public class KnowledgeBaseAppService {
             "txt", "md", "html", "htm", "csv", "json", "xml"
     );
 
-    // ===== 知识库 CRUD =====
+    // ===== Knowledge Base CRUD =====
 
-    public KnowledgeBase createKnowledgeBase(String name, String description) {
-        if (knowledgeBaseRepository.existsByName(name)) {
-            throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "知识库名称已存在: " + name);
-        }
-
-        KnowledgeBase kb = KnowledgeBase.builder()
-                .name(name)
-                .description(description)
-                .build();
-        return knowledgeBaseRepository.save(kb);
+    public Mono<KnowledgeBase> createKnowledgeBase(String name, String description) {
+        return knowledgeBaseRepository.existsByName(name)
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "知识库名称已存在: " + name));
+                    }
+                    KnowledgeBase kb = KnowledgeBase.builder().name(name).description(description).build();
+                    return knowledgeBaseRepository.save(kb);
+                });
     }
 
-    public KnowledgeBase updateKnowledgeBase(Long id, String name, String description,
-                                              ChunkStrategy chunkStrategy,
-                                              RetrievalConfig retrievalConfig) {
-        KnowledgeBase kb = getKnowledgeBase(id);
-        kb.updateInfo(name, description);
-        if (chunkStrategy != null) {
-            kb.updateChunkStrategy(chunkStrategy);
-        }
-        if (retrievalConfig != null) {
-            kb.updateRetrievalConfig(retrievalConfig);
-        }
-        return knowledgeBaseRepository.save(kb);
+    public Mono<KnowledgeBase> updateKnowledgeBase(Long id, String name, String description,
+                                                    ChunkStrategy chunkStrategy, RetrievalConfig retrievalConfig) {
+        return getKnowledgeBase(id)
+                .flatMap(kb -> {
+                    kb.updateInfo(name, description);
+                    if (chunkStrategy != null) kb.updateChunkStrategy(chunkStrategy);
+                    if (retrievalConfig != null) kb.updateRetrievalConfig(retrievalConfig);
+                    return knowledgeBaseRepository.save(kb);
+                });
     }
 
-    public KnowledgeBase getKnowledgeBase(Long id) {
+    public Mono<KnowledgeBase> getKnowledgeBase(Long id) {
         return knowledgeBaseRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND));
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND)));
     }
 
-    public List<KnowledgeBase> listKnowledgeBases() {
+    public Flux<KnowledgeBase> listKnowledgeBases() {
         return knowledgeBaseRepository.findAll();
     }
 
-    @Transactional
-    public void deleteKnowledgeBase(Long id) {
-        // 删除向量
-        vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(id));
-        // 删除文档记录
-        documentRepository.deleteByKnowledgeBaseId(id);
-        // 删除知识库
-        knowledgeBaseRepository.deleteById(id);
+    public Mono<Void> deleteKnowledgeBase(Long id) {
+        return documentRepository.findByKnowledgeBaseId(id).collectList()
+                .flatMap(documents -> Mono.fromCallable(() -> {
+                    vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(id));
+                    return documents;
+                }).subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(documents -> Flux.fromIterable(documents)
+                        .flatMap(doc -> documentChunkRepository.deleteByDocumentId(doc.getId()))
+                        .then())
+                .then(documentRepository.deleteByKnowledgeBaseId(id))
+                .then(knowledgeBaseRepository.deleteById(id));
     }
 
-    // ===== 文档管理 =====
+    // ===== Document Management =====
 
-    /**
-     * 上传文档（异步处理向量化）
-     */
-    public Document uploadDocument(Long knowledgeBaseId, MultipartFile file) {
-        KnowledgeBase kb = getKnowledgeBase(knowledgeBaseId);
-
-        String fileName = file.getOriginalFilename();
-        validateFileType(fileName);
-        byte[] fileBytes = readFileBytes(file);
-
-        // 创建文档记录
-        Document document = Document.builder()
-                .knowledgeBaseId(knowledgeBaseId)
-                .fileName(fileName)
-                .fileType(getFileExtension(fileName))
-                .fileSize(file.getSize())
-                .build();
-        document = documentRepository.save(document);
-
-        // 异步处理
-        processDocumentAsync(document, kb.getChunkStrategy(), fileBytes);
-
-        kb.incrementDocumentCount();
-        knowledgeBaseRepository.save(kb);
-
-        return document;
+    public Mono<Document> uploadDocument(Long knowledgeBaseId, FilePart file) {
+        return getKnowledgeBase(knowledgeBaseId)
+                .flatMap(kb -> {
+                    String fileName = file.filename();
+                    validateFileType(fileName);
+                    return DataBufferUtils.join(file.content())
+                            .map(dataBuffer -> {
+                                byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                                dataBuffer.read(bytes);
+                                DataBufferUtils.release(dataBuffer);
+                                return bytes;
+                            })
+                            .flatMap(fileBytes -> {
+                                Document document = Document.builder()
+                                        .knowledgeBaseId(knowledgeBaseId)
+                                        .fileName(fileName)
+                                        .fileType(getFileExtension(fileName))
+                                        .fileSize(fileBytes.length)
+                                        .build();
+                                return documentRepository.save(document)
+                                        .flatMap(saved -> {
+                                            // Fire-and-forget async processing
+                                            processDocumentAsync(saved, kb.getChunkStrategy(), fileBytes)
+                                                    .subscribe(
+                                                            v -> {},
+                                                            e -> log.error("Async doc processing failed: {}", saved.getFileName(), e)
+                                                    );
+                                            kb.incrementDocumentCount();
+                                            return knowledgeBaseRepository.save(kb).thenReturn(saved);
+                                        });
+                            });
+                });
     }
 
-    @Async
-    public void processDocumentAsync(Document document, ChunkStrategy chunkStrategy, byte[] fileBytes) {
-        try (InputStream is = new ByteArrayInputStream(fileBytes)) {
-            documentProcessingService.processDocument(document, is, chunkStrategy);
-        } catch (IOException e) {
-            log.error("Failed to process uploaded content: {}", document.getFileName(), e);
-            document.markFailed("文件处理失败: " + e.getMessage());
-            documentRepository.save(document);
-        }
+    private Mono<Void> processDocumentAsync(Document document, ChunkStrategy chunkStrategy, byte[] fileBytes) {
+        return documentRepository.findById(document.getId())
+                .flatMap(currentDocument ->
+                        knowledgeBaseRepository.findById(currentDocument.getKnowledgeBaseId())
+                                .flatMap(kb -> Mono.using(
+                                        () -> new ByteArrayInputStream(fileBytes),
+                                        is -> documentProcessingService.processDocument(currentDocument, is, chunkStrategy),
+                                        is -> {
+                                            try { is.close(); } catch (Exception ignored) {}
+                                        }
+                                ))
+                )
+                .onErrorResume(e -> {
+                    log.error("Failed to process uploaded content: {}", document.getFileName(), e);
+                    return markDocumentFailedIfPresent(document.getId(), "文件处理失败: " + e.getMessage());
+                });
     }
 
-    public List<Document> listDocuments(Long knowledgeBaseId) {
+    public Flux<Document> listDocuments(Long knowledgeBaseId) {
         return documentRepository.findByKnowledgeBaseId(knowledgeBaseId);
     }
 
-    @Transactional
-    public void deleteDocument(Long documentId) {
-        Document document = documentRepository.findById(documentId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
-
-        // 删除向量
-        vectorStorePort.deleteByMetadata("document_id", String.valueOf(documentId));
-
-        documentRepository.deleteById(documentId);
-
-        // 更新知识库文档计数
-        knowledgeBaseRepository.findById(document.getKnowledgeBaseId()).ifPresent(kb -> {
-            kb.decrementDocumentCount();
-            knowledgeBaseRepository.save(kb);
-        });
+    public Mono<Void> deleteDocument(Long knowledgeBaseId, Long documentId) {
+        return documentRepository.findById(documentId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND)))
+                .flatMap(document -> {
+                    if (knowledgeBaseId != null && !knowledgeBaseId.equals(document.getKnowledgeBaseId())) {
+                        return Mono.error(new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
+                    }
+                    return Mono.fromCallable(() -> {
+                                vectorStorePort.deleteByMetadata("document_id", String.valueOf(documentId));
+                                return true;
+                            }).subscribeOn(Schedulers.boundedElastic())
+                            .then(documentChunkRepository.deleteByDocumentId(documentId))
+                            .then(documentRepository.deleteById(documentId))
+                            .then(knowledgeBaseRepository.findById(document.getKnowledgeBaseId())
+                                    .flatMap(kb -> {
+                                        kb.decrementDocumentCount();
+                                        return knowledgeBaseRepository.save(kb);
+                                    })
+                                    .then());
+                });
     }
 
-    public void rebuildVectors(Long knowledgeBaseId) {
-        KnowledgeBase kb = getKnowledgeBase(knowledgeBaseId);
-        List<Document> documents = documentRepository.findByKnowledgeBaseId(knowledgeBaseId);
-
-        vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(knowledgeBaseId));
-
-        for (Document document : documents) {
-            rebuildDocumentVectors(kb, document);
-        }
-    }
-
-    // ===== Git 仓库导入 =====
-
-    @Async
-    public void importGitRepository(Long knowledgeBaseId, String repoUrl, String userName, String token) {
-        KnowledgeBase kb = getKnowledgeBase(knowledgeBaseId);
-        Path tempDir = null;
-
-        try {
-            tempDir = Files.createTempDirectory("git-import-");
-            var cloneCommand = Git.cloneRepository()
-                    .setURI(repoUrl)
-                    .setDirectory(tempDir.toFile());
-
-            if (userName != null && token != null) {
-                cloneCommand.setCredentialsProvider(
-                        new org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(userName, token)
+    public Mono<Void> rebuildVectors(Long knowledgeBaseId) {
+        return getKnowledgeBase(knowledgeBaseId)
+                .flatMap(kb -> Mono.fromCallable(() -> {
+                            vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(knowledgeBaseId));
+                            return kb;
+                        }).subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(ignored ->
+                                documentRepository.findByKnowledgeBaseId(knowledgeBaseId)
+                                        .flatMap(document -> rebuildDocumentVectors(kb, document))
+                                        .then()
+                        )
                 );
-            }
-
-            Git git = cloneCommand.call();
-            try {
-                processGitFiles(tempDir.toFile(), knowledgeBaseId, kb.getChunkStrategy());
-            } finally {
-                git.close();
-            }
-
-            log.info("Git repository import completed: {}", repoUrl);
-        } catch (Exception e) {
-            log.error("Failed to import git repository: {}", repoUrl, e);
-        } finally {
-            if (tempDir != null) {
-                deleteDirectory(tempDir.toFile());
-            }
-        }
     }
 
-    // ===== 搜索测试 =====
+    // ===== Git Import =====
 
-    public List<org.springframework.ai.document.Document> searchKnowledge(Long knowledgeBaseId, String query, int topK) {
-        KnowledgeBase kb = getKnowledgeBase(knowledgeBaseId);
-        return retrievalDomainService.search(kb, query, topK);
+    public Mono<Void> importGitRepository(Long knowledgeBaseId, String repoUrl, String userName, String token) {
+        return getKnowledgeBase(knowledgeBaseId)
+                .flatMap(kb -> Mono.fromCallable(() -> {
+                    Path tempDir = Files.createTempDirectory("git-import-");
+                    try {
+                        var cloneCommand = Git.cloneRepository()
+                                .setURI(repoUrl).setDirectory(tempDir.toFile());
+                        if (userName != null && token != null) {
+                            cloneCommand.setCredentialsProvider(
+                                    new org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider(userName, token));
+                        }
+                        try (Git git = cloneCommand.call()) {
+                            processGitFilesBlocking(tempDir.toFile(), knowledgeBaseId, kb.getChunkStrategy());
+                        }
+                        log.info("Git repository import completed: {}", repoUrl);
+                    } catch (Exception e) {
+                        log.error("Failed to import git repository: {}", repoUrl, e);
+                    } finally {
+                        deleteDirectory(tempDir.toFile());
+                    }
+                    return true;
+                }).subscribeOn(Schedulers.boundedElastic()).then());
+    }
+
+    // ===== Search =====
+
+    public Mono<List<org.springframework.ai.document.Document>> searchKnowledge(Long knowledgeBaseId, String query, int topK) {
+        return getKnowledgeBase(knowledgeBaseId)
+                .flatMap(kb -> Mono.fromCallable(() -> retrievalDomainService.search(kb, query, topK))
+                        .subscribeOn(Schedulers.boundedElastic()));
     }
 
     // ===== Private methods =====
 
-    private void processGitFiles(File dir, Long knowledgeBaseId, ChunkStrategy chunkStrategy) {
+    private void processGitFilesBlocking(File dir, Long knowledgeBaseId, ChunkStrategy chunkStrategy) {
         File[] files = dir.listFiles();
         if (files == null) return;
-
         for (File file : files) {
             if (file.isDirectory()) {
                 if (!file.getName().startsWith(".")) {
-                    processGitFiles(file, knowledgeBaseId, chunkStrategy);
+                    processGitFilesBlocking(file, knowledgeBaseId, chunkStrategy);
                 }
                 continue;
             }
-
             String ext = getFileExtension(file.getName());
             if (!SUPPORTED_EXTENSIONS.contains(ext) && !isCodeFile(ext)) continue;
 
+            KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId).block();
+            if (kb == null) {
+                log.info("Stop git import because knowledge base {} was deleted", knowledgeBaseId);
+                return;
+            }
             try {
                 Document document = Document.builder()
                         .knowledgeBaseId(knowledgeBaseId)
@@ -235,15 +250,60 @@ public class KnowledgeBaseAppService {
                         .fileType(ext)
                         .fileSize(file.length())
                         .build();
-                document = documentRepository.save(document);
-
+                document = documentRepository.save(document).block();
+                kb.incrementDocumentCount();
+                knowledgeBaseRepository.save(kb).block();
                 try (InputStream is = Files.newInputStream(file.toPath())) {
-                    documentProcessingService.processDocument(document, is, chunkStrategy);
+                    documentProcessingService.processDocument(document, is, chunkStrategy).block();
                 }
             } catch (Exception e) {
                 log.warn("Failed to process git file: {}", file.getName(), e);
             }
         }
+    }
+
+    private Mono<Void> rebuildDocumentVectors(KnowledgeBase kb, Document document) {
+        return documentChunkRepository.findByDocumentId(document.getId()).collectList()
+                .flatMap(chunks -> {
+                    if (chunks.isEmpty()) {
+                        document.markFailed("未找到可重建的文本分片");
+                        return documentRepository.save(document).then();
+                    }
+                    return Mono.fromCallable(() -> {
+                                vectorStorePort.deleteByMetadata("document_id", String.valueOf(document.getId()));
+                                List<org.springframework.ai.document.Document> aiDocs = chunks.stream()
+                                        .map(this::toAiDocument).toList();
+                                vectorStorePort.addDocuments(aiDocs);
+                                return chunks.size();
+                            }).subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(chunkCount -> {
+                                document.markIndexed(chunkCount);
+                                return documentRepository.save(document);
+                            })
+                            .doOnNext(d -> log.info("Rebuilt vectors for kb {} doc {} with {} chunks",
+                                    kb.getId(), d.getId(), d.getChunkCount()))
+                            .onErrorResume(e -> {
+                                log.error("Failed to rebuild vectors for document {}", document.getId(), e);
+                                document.markFailed("重建向量失败: " + e.getMessage());
+                                return documentRepository.save(document);
+                            })
+                            .then();
+                });
+    }
+
+    private Mono<Void> markDocumentFailedIfPresent(Long documentId, String errorMessage) {
+        return documentRepository.findById(documentId)
+                .flatMap(doc -> {
+                    doc.markFailed(errorMessage);
+                    return documentRepository.save(doc);
+                })
+                .then();
+    }
+
+    private org.springframework.ai.document.Document toAiDocument(DocumentChunk chunk) {
+        var aiDoc = new org.springframework.ai.document.Document(chunk.getContent());
+        aiDoc.getMetadata().putAll(chunk.getMetadata());
+        return aiDoc;
     }
 
     private boolean isCodeFile(String ext) {
@@ -257,45 +317,6 @@ public class KnowledgeBaseAppService {
         if (!SUPPORTED_EXTENSIONS.contains(ext) && !isCodeFile(ext)) {
             throw new BusinessException(ErrorCode.UNSUPPORTED_FILE_TYPE, ext);
         }
-    }
-
-    private byte[] readFileBytes(MultipartFile file) {
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new BusinessException(ErrorCode.DOCUMENT_PROCESSING_FAILED, "文件读取失败", e);
-        }
-    }
-
-    private void rebuildDocumentVectors(KnowledgeBase knowledgeBase, Document document) {
-        List<DocumentChunk> chunks = documentChunkRepository.findByDocumentId(document.getId());
-        if (chunks.isEmpty()) {
-            document.markFailed("未找到可重建的文本分片");
-            documentRepository.save(document);
-            return;
-        }
-
-        try {
-            vectorStorePort.deleteByMetadata("document_id", String.valueOf(document.getId()));
-            List<org.springframework.ai.document.Document> aiDocuments = chunks.stream()
-                    .map(this::toAiDocument)
-                    .toList();
-            vectorStorePort.addDocuments(aiDocuments);
-            document.markIndexed(chunks.size());
-            documentRepository.save(document);
-            log.info("Rebuilt vectors for knowledge base {} document {} with {} chunks",
-                    knowledgeBase.getId(), document.getId(), chunks.size());
-        } catch (Exception e) {
-            log.error("Failed to rebuild vectors for document {}", document.getId(), e);
-            document.markFailed("重建向量失败: " + e.getMessage());
-            documentRepository.save(document);
-        }
-    }
-
-    private org.springframework.ai.document.Document toAiDocument(DocumentChunk chunk) {
-        var aiDocument = new org.springframework.ai.document.Document(chunk.getContent());
-        aiDocument.getMetadata().putAll(chunk.getMetadata());
-        return aiDocument;
     }
 
     private String getFileExtension(String fileName) {

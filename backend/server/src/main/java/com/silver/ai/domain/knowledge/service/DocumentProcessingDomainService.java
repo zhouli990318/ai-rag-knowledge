@@ -13,14 +13,13 @@ import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 文档处理领域服务 — 编排：解析 → 分片 → 向量化存储
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -34,54 +33,49 @@ public class DocumentProcessingDomainService {
     private final DocumentChunkRepository documentChunkRepository;
 
     /**
-     * 处理文档：解析文件内容 → 文本分片 → 存入向量库
+     * 处理文档：解析文件内容 -> 文本分片 -> 存入向量库
      */
-    public void processDocument(Document document, InputStream inputStream, ChunkStrategy chunkStrategy) {
+    public Mono<Void> processDocument(Document document, InputStream inputStream, ChunkStrategy chunkStrategy) {
         document.markProcessing();
-        documentRepository.save(document);
-
-        try {
-            // 解析文档
-            List<String> rawTexts = documentParser.parse(inputStream, document.getFileName());
-            if (rawTexts.isEmpty()) {
-                throw new BusinessException(ErrorCode.DOCUMENT_PARSE_FAILED, "文档内容为空");
-            }
-
-            // 分片
-            List<String> chunks = textSplitter.splitAll(rawTexts, chunkStrategy);
-            if (chunks.isEmpty()) {
-                throw new BusinessException(ErrorCode.DOCUMENT_PARSE_FAILED, "分片结果为空");
-            }
-
-                documentChunkRepository.deleteByDocumentId(document.getId());
-
-                List<DocumentChunk> storedChunks = buildDocumentChunks(document, chunks);
-                documentChunkRepository.saveAll(storedChunks);
-
-            // 构建 Spring AI Document 列表（含 metadata）
-                List<org.springframework.ai.document.Document> aiDocuments = storedChunks.stream()
-                    .map(this::toAiDocument)
-                    .toList();
-
-            // 存入向量库
-            vectorStore.addDocuments(aiDocuments);
-
-            // 更新状态
-            document.markIndexed(chunks.size());
-            documentRepository.save(document);
-
-            log.info("Document processed successfully: {} -> {} chunks", document.getFileName(), chunks.size());
-
-        } catch (BusinessException e) {
-            document.markFailed(e.getMessage());
-            documentRepository.save(document);
-            throw e;
-        } catch (Exception e) {
-            log.error("Failed to process document: {}", document.getFileName(), e);
-            document.markFailed(e.getMessage());
-            documentRepository.save(document);
-            throw new BusinessException(ErrorCode.DOCUMENT_PROCESSING_FAILED, document.getFileName(), e);
-        }
+        return documentRepository.save(document)
+                .flatMap(saved -> Mono.fromCallable(() -> {
+                            // Blocking: parse + split
+                            List<String> rawTexts = documentParser.parse(inputStream, saved.getFileName());
+                            if (rawTexts.isEmpty()) {
+                                throw new BusinessException(ErrorCode.DOCUMENT_PARSE_FAILED, "文档内容为空");
+                            }
+                            List<String> chunks = textSplitter.splitAll(rawTexts, chunkStrategy);
+                            if (chunks.isEmpty()) {
+                                throw new BusinessException(ErrorCode.DOCUMENT_PARSE_FAILED, "分片结果为空");
+                            }
+                            return chunks;
+                        }).subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(chunks -> documentChunkRepository.deleteByDocumentId(saved.getId())
+                                .then(Mono.defer(() -> {
+                                    List<DocumentChunk> storedChunks = buildDocumentChunks(saved, chunks);
+                                    return documentChunkRepository.saveAll(storedChunks)
+                                            .then(Mono.fromCallable(() -> {
+                                                // Blocking: vectorStore
+                                                List<org.springframework.ai.document.Document> aiDocs = storedChunks.stream()
+                                                        .map(this::toAiDocument).toList();
+                                                vectorStore.addDocuments(aiDocs);
+                                                return chunks.size();
+                                            }).subscribeOn(Schedulers.boundedElastic()));
+                                }))
+                        )
+                        .flatMap(chunkCount -> {
+                            document.markIndexed(chunkCount);
+                            return documentRepository.save(document);
+                        })
+                        .doOnSuccess(d -> log.info("Document processed: {} -> {} chunks", d.getFileName(), d.getChunkCount()))
+                        .onErrorResume(e -> {
+                            log.error("Failed to process document: {}", document.getFileName(), e);
+                            document.markFailed(e.getMessage());
+                            return documentRepository.save(document)
+                                    .then(Mono.error(e));
+                        })
+                )
+                .then();
     }
 
     private List<DocumentChunk> buildDocumentChunks(Document document, List<String> chunks) {

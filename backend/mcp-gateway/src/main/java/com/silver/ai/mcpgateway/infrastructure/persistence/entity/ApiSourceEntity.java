@@ -2,61 +2,47 @@ package com.silver.ai.mcpgateway.infrastructure.persistence.entity;
 
 import com.silver.ai.mcpgateway.domain.model.AuthType;
 import com.silver.ai.mcpgateway.domain.model.ProtocolType;
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "api_source", schema = "mcp_gateway")
+@Table("mcp_gateway.api_source")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ApiSourceEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
     private String name;
 
     private String description;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "protocol_type")
+    @Column("protocol_type")
     @Builder.Default
     private ProtocolType protocolType = ProtocolType.HTTP;
 
-    @Column(name = "base_url")
+    @Column("base_url")
     private String baseUrl;
 
-    @Column(name = "openapi_spec", columnDefinition = "TEXT")
+    @Column("openapi_spec")
     private String openApiSpec;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "auth_type")
+    @Column("auth_type")
     @Builder.Default
     private AuthType authType = AuthType.NONE;
 
-    @Column(name = "auth_config", columnDefinition = "TEXT")
+    @Column("auth_config")
     private String authConfig;
 
     @Builder.Default
     private boolean active = true;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column("updated_at")
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

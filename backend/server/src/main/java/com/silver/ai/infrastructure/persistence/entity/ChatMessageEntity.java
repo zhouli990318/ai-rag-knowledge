@@ -1,13 +1,14 @@
 package com.silver.ai.infrastructure.persistence.entity;
 
 import com.silver.ai.domain.chat.model.MessageRole;
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "chat_message")
+@Table("chat_message")
 @Getter
 @Setter
 @Builder
@@ -16,24 +17,15 @@ import java.time.LocalDateTime;
 public class ChatMessageEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "conversation_id", nullable = false)
+    @Column("conversation_id")
     private Long conversationId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private MessageRole role;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column("created_at")
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-    }
 }

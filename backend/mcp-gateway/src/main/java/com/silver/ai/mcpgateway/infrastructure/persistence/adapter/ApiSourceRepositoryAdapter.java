@@ -3,46 +3,48 @@ package com.silver.ai.mcpgateway.infrastructure.persistence.adapter;
 import com.silver.ai.mcpgateway.domain.model.ApiSource;
 import com.silver.ai.mcpgateway.domain.port.ApiSourceRepository;
 import com.silver.ai.mcpgateway.infrastructure.persistence.entity.ApiSourceEntity;
-import com.silver.ai.mcpgateway.infrastructure.persistence.jpa.JpaApiSourceRepository;
+import com.silver.ai.mcpgateway.infrastructure.persistence.r2dbc.R2dbcApiSourceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
 public class ApiSourceRepositoryAdapter implements ApiSourceRepository {
 
-    private final JpaApiSourceRepository jpa;
+    private final R2dbcApiSourceRepository r2dbc;
 
     @Override
-    public ApiSource save(ApiSource source) {
-        return toDomain(jpa.save(toEntity(source)));
+    public Mono<ApiSource> save(ApiSource source) {
+        return r2dbc.save(toEntity(source)).map(this::toDomain);
     }
 
     @Override
-    public Optional<ApiSource> findById(Long id) {
-        return jpa.findById(id).map(this::toDomain);
+    public Mono<ApiSource> findById(Long id) {
+        return r2dbc.findById(id).map(this::toDomain);
     }
 
     @Override
-    public List<ApiSource> findAll() {
-        return jpa.findAll().stream().map(this::toDomain).toList();
+    public Flux<ApiSource> findAll() {
+        return r2dbc.findAll().map(this::toDomain);
     }
 
     @Override
-    public List<ApiSource> findByActive(boolean active) {
-        return jpa.findByActive(active).stream().map(this::toDomain).toList();
+    public Flux<ApiSource> findByActive(boolean active) {
+        return r2dbc.findByActive(active).map(this::toDomain);
     }
 
     @Override
-    public void deleteById(Long id) {
-        jpa.deleteById(id);
+    public Mono<Void> deleteById(Long id) {
+        return r2dbc.deleteById(id);
     }
 
     private ApiSourceEntity toEntity(ApiSource d) {
+        LocalDateTime now = LocalDateTime.now();
         return ApiSourceEntity.builder()
                 .id(d.getId())
                 .name(d.getName())
@@ -53,6 +55,8 @@ public class ApiSourceRepositoryAdapter implements ApiSourceRepository {
                 .authType(d.getAuthType())
                 .authConfig(d.getAuthConfig())
                 .active(d.isActive())
+                .createdAt(d.getCreatedAt() != null ? d.getCreatedAt() : now)
+                .updatedAt(now)
                 .build();
     }
 

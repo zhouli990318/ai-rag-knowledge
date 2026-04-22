@@ -5,132 +5,137 @@ import com.silver.ai.domain.chat.model.Conversation;
 import com.silver.ai.domain.chat.port.ConversationRepository;
 import com.silver.ai.infrastructure.persistence.entity.ChatMessageEntity;
 import com.silver.ai.infrastructure.persistence.entity.ConversationEntity;
-import com.silver.ai.infrastructure.persistence.jpa.JpaConversationRepository;
+import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcChatMessageRepository;
+import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcConversationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
 @SuppressWarnings("null")
 public class ConversationRepositoryAdapter implements ConversationRepository {
 
-    private final JpaConversationRepository jpa;
+    private final R2dbcConversationRepository conversationRepo;
+    private final R2dbcChatMessageRepository messageRepo;
+    private final DatabaseClient databaseClient;
 
     @Override
-    @Transactional
-    public Conversation save(Conversation conv) {
-        if (conv.getId() == null) {
-            ConversationEntity entity = new ConversationEntity();
-            applyConversationFields(entity, conv);
-            entity = jpa.saveAndFlush(entity);
-            syncMessages(entity, conv.getMessages());
-            jpa.flush();
-            return toDomain(entity);
-        }
-
-        Optional<ConversationEntity> existingEntity = jpa.findById(conv.getId());
-        if (existingEntity.isPresent()) {
-            ConversationEntity entity = existingEntity.get();
-            applyConversationFields(entity, conv);
-            syncMessages(entity, conv.getMessages());
-            jpa.flush();
-            return toDomain(entity);
-        }
-
+    public Mono<Conversation> save(Conversation conv) {
         ConversationEntity entity = toEntity(conv);
-        entity = jpa.saveAndFlush(entity);
-        return toDomain(entity);
-    }
-
-    @Override
-    public Optional<Conversation> findById(Long id) {
-        return jpa.findById(id).map(this::toDomain);
-    }
-
-    @Override
-    public List<Conversation> findAllOrderByUpdatedAtDesc() {
-        return jpa.findAllByOrderByUpdatedAtDesc().stream().map(this::toDomain).toList();
-    }
-
-    @Override
-    public void deleteById(Long id) {
-        jpa.deleteById(id);
-    }
-
-    private void applyConversationFields(ConversationEntity entity, Conversation conversation) {
-        entity.setTitle(conversation.getTitle());
-        entity.setProviderId(conversation.getProviderId());
-        entity.setModel(conversation.getModel());
-        entity.setKnowledgeBaseId(conversation.getKnowledgeBaseId());
-        entity.setMcpServerIds(new ArrayList<>(conversation.getMcpServerIds()));
-    }
-
-    private void syncMessages(ConversationEntity entity, List<ChatMessage> domainMessages) {
-        List<ChatMessageEntity> managedMessages = entity.getMessages();
-        Map<Long, ChatMessageEntity> existingById = new HashMap<>();
-        for (ChatMessageEntity message : managedMessages) {
-            if (message.getId() != null) {
-                existingById.put(message.getId(), message);
-            }
+        LocalDateTime now = LocalDateTime.now();
+        if (entity.getId() == null) {
+            entity.setCreatedAt(now);
         }
+        entity.setUpdatedAt(now);
 
-        List<ChatMessageEntity> newMessages = new ArrayList<>();
-        for (ChatMessage domainMessage : domainMessages) {
-            ChatMessageEntity existing = domainMessage.getId() != null ? existingById.remove(domainMessage.getId()) : null;
-            if (existing != null) {
-                updateMessageEntity(existing, domainMessage, entity.getId());
-            } else {
-                newMessages.add(toMessageEntity(domainMessage, entity.getId()));
-            }
+        return conversationRepo.save(entity)
+                .flatMap(saved -> {
+                    Long convId = saved.getId();
+                    // Save new messages (those without id)
+                    List<ChatMessageEntity> newMsgs = conv.getMessages().stream()
+                            .filter(m -> m.getId() == null)
+                            .map(m -> toMessageEntity(m, convId))
+                            .toList();
+                    Mono<Void> saveMsgs = newMsgs.isEmpty() ? Mono.empty()
+                            : Flux.fromIterable(newMsgs).flatMap(messageRepo::save).then();
+
+                    // Sync mcpServerIds
+                    Mono<Void> syncMcp = deleteMcpServerIds(convId)
+                            .then(insertMcpServerIds(convId, conv.getMcpServerIds()));
+
+                    return saveMsgs.then(syncMcp).thenReturn(saved);
+                })
+                .flatMap(saved -> loadFull(saved.getId()));
+    }
+
+    @Override
+    public Mono<Conversation> findById(Long id) {
+        return loadFull(id);
+    }
+
+    @Override
+    public Flux<Conversation> findAllOrderByUpdatedAtDesc() {
+        return conversationRepo.findAllByOrderByUpdatedAtDesc()
+                .map(this::toDomainLight);
+    }
+
+    @Override
+    public Mono<Void> deleteById(Long id) {
+        return deleteMcpServerIds(id)
+                .then(messageRepo.deleteByConversationId(id))
+                .then(conversationRepo.deleteById(id));
+    }
+
+    private Mono<Conversation> loadFull(Long id) {
+        return conversationRepo.findById(id)
+                .flatMap(entity -> {
+                    Mono<List<ChatMessageEntity>> msgsMono = messageRepo
+                            .findByConversationIdOrderByCreatedAtAsc(id).collectList();
+                    Mono<List<Long>> mcpMono = loadMcpServerIds(id);
+                    return Mono.zip(msgsMono, mcpMono)
+                            .map(tuple -> toDomain(entity, tuple.getT1(), tuple.getT2()));
+                });
+    }
+
+    private Mono<List<Long>> loadMcpServerIds(Long conversationId) {
+        return databaseClient.sql("SELECT mcp_server_id FROM conversation_mcp_server WHERE conversation_id = :id")
+                .bind("id", conversationId)
+                .map(row -> row.get("mcp_server_id", Long.class))
+                .all()
+                .collectList();
+    }
+
+    private Mono<Void> deleteMcpServerIds(Long conversationId) {
+        return databaseClient.sql("DELETE FROM conversation_mcp_server WHERE conversation_id = :id")
+                .bind("id", conversationId)
+                .then();
+    }
+
+    private Mono<Void> insertMcpServerIds(Long conversationId, List<Long> mcpServerIds) {
+        if (mcpServerIds == null || mcpServerIds.isEmpty()) {
+            return Mono.empty();
         }
-
-        managedMessages.removeIf(message -> message.getId() != null && existingById.containsKey(message.getId()));
-        managedMessages.addAll(newMessages);
-    }
-
-    private ChatMessageEntity toMessageEntity(ChatMessage message, Long conversationId) {
-        return ChatMessageEntity.builder()
-                .id(message.getId())
-                .conversationId(message.getConversationId() != null ? message.getConversationId() : conversationId)
-                .role(message.getRole())
-                .content(message.getContent())
-                .createdAt(message.getCreatedAt())
-                .build();
-    }
-
-    private void updateMessageEntity(ChatMessageEntity entity, ChatMessage message, Long conversationId) {
-        entity.setConversationId(message.getConversationId() != null ? message.getConversationId() : conversationId);
-        entity.setRole(message.getRole());
-        entity.setContent(message.getContent());
-        entity.setCreatedAt(message.getCreatedAt());
+        return Flux.fromIterable(mcpServerIds)
+                .flatMap(serverId ->
+                        databaseClient.sql("INSERT INTO conversation_mcp_server (conversation_id, mcp_server_id) VALUES (:cid, :sid)")
+                                .bind("cid", conversationId)
+                                .bind("sid", serverId)
+                                .then()
+                ).then();
     }
 
     private ConversationEntity toEntity(Conversation d) {
-        ConversationEntity entity = ConversationEntity.builder()
+        return ConversationEntity.builder()
                 .id(d.getId())
                 .title(d.getTitle())
                 .providerId(d.getProviderId())
                 .model(d.getModel())
                 .knowledgeBaseId(d.getKnowledgeBaseId())
-            .mcpServerIds(new ArrayList<>(d.getMcpServerIds()))
+                .createdAt(d.getCreatedAt())
+                .updatedAt(d.getUpdatedAt())
                 .build();
+    }
 
-        List<ChatMessageEntity> msgEntities = d.getMessages().stream()
-                .map(m -> toMessageEntity(m, d.getId()))
-                .toList();
-        entity.setMessages(new java.util.ArrayList<>(msgEntities));
+    private ChatMessageEntity toMessageEntity(ChatMessage m, Long conversationId) {
+        ChatMessageEntity entity = ChatMessageEntity.builder()
+                .id(m.getId())
+                .conversationId(conversationId)
+                .role(m.getRole())
+                .content(m.getContent())
+                .createdAt(m.getCreatedAt() != null ? m.getCreatedAt() : LocalDateTime.now())
+                .build();
         return entity;
     }
 
-    private Conversation toDomain(ConversationEntity e) {
-        List<ChatMessage> messages = e.getMessages().stream()
+    private Conversation toDomain(ConversationEntity e, List<ChatMessageEntity> msgs, List<Long> mcpServerIds) {
+        List<ChatMessage> messages = msgs.stream()
                 .map(m -> ChatMessage.builder()
                         .id(m.getId())
                         .conversationId(m.getConversationId())
@@ -146,8 +151,22 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .providerId(e.getProviderId())
                 .model(e.getModel())
                 .knowledgeBaseId(e.getKnowledgeBaseId())
-            .mcpServerIds(new ArrayList<>(e.getMcpServerIds()))
-                .messages(new java.util.ArrayList<>(messages))
+                .mcpServerIds(new ArrayList<>(mcpServerIds))
+                .messages(new ArrayList<>(messages))
+                .createdAt(e.getCreatedAt())
+                .updatedAt(e.getUpdatedAt())
+                .build();
+    }
+
+    private Conversation toDomainLight(ConversationEntity e) {
+        return Conversation.builder()
+                .id(e.getId())
+                .title(e.getTitle())
+                .providerId(e.getProviderId())
+                .model(e.getModel())
+                .knowledgeBaseId(e.getKnowledgeBaseId())
+                .mcpServerIds(new ArrayList<>())
+                .messages(new ArrayList<>())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

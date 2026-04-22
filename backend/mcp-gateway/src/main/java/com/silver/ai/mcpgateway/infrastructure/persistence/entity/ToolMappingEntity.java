@@ -1,53 +1,48 @@
 package com.silver.ai.mcpgateway.infrastructure.persistence.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "tool_mapping", schema = "mcp_gateway")
+@Table("mcp_gateway.tool_mapping")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ToolMappingEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "api_source_id", nullable = false)
+    @Column("api_source_id")
     private Long apiSourceId;
 
-    @Column(name = "operation_id")
+    @Column("operation_id")
     private String operationId;
 
-    @Column(name = "tool_name", nullable = false)
+    @Column("tool_name")
     private String toolName;
 
-    @Column(name = "tool_description", length = 2000)
+    @Column("tool_description")
     private String toolDescription;
 
-    @Column(name = "http_method", length = 10)
+    @Column("http_method")
     private String httpMethod;
 
     private String path;
 
-    @Column(name = "parameter_schema", columnDefinition = "TEXT")
+    @Column("parameter_schema")
     private String parameterSchema;
 
-    @Column(name = "response_schema", columnDefinition = "TEXT")
+    @Column("response_schema")
     private String responseSchema;
 
-    @Column(name = "example_payload", columnDefinition = "TEXT")
+    @Column("example_payload")
     private String examplePayload;
 
     @Builder.Default
     private boolean enabled = true;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column("created_at")
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
 }

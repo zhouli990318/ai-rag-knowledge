@@ -8,6 +8,7 @@ import com.silver.ai.mcpgateway.domain.port.ToolMappingRepository;
 import com.silver.ai.mcpgateway.domain.service.ToolInvocationDomainService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -46,9 +47,9 @@ class DynamicApiToolCallbackProviderTest {
                 .enabled(false)
                 .build();
 
-        when(sourceRepository.findByActive(true)).thenReturn(List.of(activeSource, inactiveSource));
-        when(toolRepository.findByApiSourceId(1L)).thenReturn(List.of(activeTool, disabledTool));
-        when(toolRepository.findByApiSourceId(2L)).thenReturn(List.of());
+        when(sourceRepository.findByActive(true)).thenReturn(Flux.just(activeSource, inactiveSource));
+        when(toolRepository.findByApiSourceId(1L)).thenReturn(Flux.just(activeTool, disabledTool));
+        when(toolRepository.findByApiSourceId(2L)).thenReturn(Flux.empty());
 
         ToolCallback[] callbacks = provider.getToolCallbacks();
 
@@ -73,9 +74,9 @@ class DynamicApiToolCallbackProviderTest {
         ToolMapping toolA = ToolMapping.builder().id(10L).apiSourceId(1L).toolName("search").enabled(true).build();
         ToolMapping toolB = ToolMapping.builder().id(20L).apiSourceId(2L).toolName("search").enabled(true).build();
 
-        when(sourceRepository.findByActive(true)).thenReturn(List.of(sourceA, sourceB));
-        when(toolRepository.findByApiSourceId(1L)).thenReturn(List.of(toolA));
-        when(toolRepository.findByApiSourceId(2L)).thenReturn(List.of(toolB));
+        when(sourceRepository.findByActive(true)).thenReturn(Flux.just(sourceA, sourceB));
+        when(toolRepository.findByApiSourceId(1L)).thenReturn(Flux.just(toolA));
+        when(toolRepository.findByApiSourceId(2L)).thenReturn(Flux.just(toolB));
 
         ToolCallback[] callbacks = provider.getToolCallbacks();
 

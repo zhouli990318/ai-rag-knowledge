@@ -40,7 +40,7 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
     public ToolCallback[] getToolCallbacks() {
         Set<String> usedNames = new java.util.HashSet<>();
 
-        List<ToolCallback> callbacks = apiSourceRepository.findByActive(true).stream()
+        List<ToolCallback> callbacks = apiSourceRepository.findByActive(true).collectList().blockOptional().orElse(java.util.List.of()).stream()
             .flatMap(source -> getEnabledToolMappings(source.getId()).stream()
                 .map(mapping -> createCallback(source, mapping, usedNames, true)))
                 .collect(Collectors.toList());
@@ -51,6 +51,7 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
         public ToolCallback[] getToolCallbacksForSource(Long sourceId) {
         ApiSource source = apiSourceRepository.findById(sourceId)
             .filter(ApiSource::isActive)
+            .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
 
         Set<String> usedNames = new java.util.HashSet<>();
@@ -74,8 +75,10 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
 
     private String invokeTool(Long toolId, Map<String, Object> arguments, ToolContext toolContext) {
         ToolMapping mapping = toolMappingRepository.findById(toolId)
+            .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND));
         ApiSource source = apiSourceRepository.findById(mapping.getApiSourceId())
+            .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
 
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -94,9 +97,11 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
     }
 
     private List<ToolMapping> getEnabledToolMappings(Long sourceId) {
-        return toolMappingRepository.findByApiSourceId(sourceId).stream()
+        return toolMappingRepository.findByApiSourceId(sourceId)
                 .filter(ToolMapping::isEnabled)
-                .toList();
+                .collectList()
+                .blockOptional()
+                .orElse(java.util.List.of());
     }
 
     private String resolveToolName(ApiSource source, ToolMapping mapping, Set<String> usedNames,

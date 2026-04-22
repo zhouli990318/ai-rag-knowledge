@@ -1,19 +1,18 @@
 package com.silver.ai.mcpgateway.domain.port;
 
 import com.silver.ai.mcpgateway.domain.model.ApiSource;
-
-import java.util.List;
-import java.util.Optional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface ApiSourceRepository {
 
-    ApiSource save(ApiSource source);
+    Mono<ApiSource> save(ApiSource source);
 
-    Optional<ApiSource> findById(Long id);
+    Mono<ApiSource> findById(Long id);
 
-    List<ApiSource> findAll();
+    Flux<ApiSource> findAll();
 
-    List<ApiSource> findByActive(boolean active);
+    Flux<ApiSource> findByActive(boolean active);
 
-    void deleteById(Long id);
+    Mono<Void> deleteById(Long id);
 }

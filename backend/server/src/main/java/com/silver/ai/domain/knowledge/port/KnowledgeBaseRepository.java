@@ -1,19 +1,18 @@
 package com.silver.ai.domain.knowledge.port;
 
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
-
-import java.util.List;
-import java.util.Optional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface KnowledgeBaseRepository {
 
-    KnowledgeBase save(KnowledgeBase knowledgeBase);
+    Mono<KnowledgeBase> save(KnowledgeBase knowledgeBase);
 
-    Optional<KnowledgeBase> findById(Long id);
+    Mono<KnowledgeBase> findById(Long id);
 
-    List<KnowledgeBase> findAll();
+    Flux<KnowledgeBase> findAll();
 
-    void deleteById(Long id);
+    Mono<Void> deleteById(Long id);
 
-    boolean existsByName(String name);
+    Mono<Boolean> existsByName(String name);
 }

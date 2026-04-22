@@ -3,6 +3,7 @@ package com.silver.ai.infrastructure.mcp;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.function.FunctionToolCallback;
@@ -14,8 +15,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
@@ -36,10 +39,19 @@ public class McpToolCallbackService {
         return sourceIds.stream()
                 .filter(Objects::nonNull)
                 .distinct()
-                .flatMap(sourceId -> mcpToolGatewayClient.listTools(sourceId).stream())
+                .flatMap(this::loadToolsSafely)
                 .filter(McpToolDefinition::enabled)
                 .map(this::createToolCallback)
                 .collect(Collectors.toList());
+    }
+
+    private Stream<McpToolDefinition> loadToolsSafely(Long sourceId) {
+        try {
+            return mcpToolGatewayClient.listTools(sourceId).stream();
+        } catch (RuntimeException ex) {
+            log.warn("Skip MCP source {} because tool loading failed", sourceId, ex);
+            return Stream.empty();
+        }
     }
 
     private ToolCallback createToolCallback(McpToolDefinition toolDefinition) {

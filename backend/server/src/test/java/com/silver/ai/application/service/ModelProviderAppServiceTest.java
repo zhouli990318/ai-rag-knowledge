@@ -10,18 +10,15 @@ import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.util.CryptoUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import java.util.List;
-import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class ModelProviderAppServiceTest {
 
@@ -31,12 +28,13 @@ class ModelProviderAppServiceTest {
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
                 mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
         ReflectionTestUtils.setField(service, "cryptoSecretKey", "unit-test-key");
-        when(repository.existsByName("provider-a")).thenReturn(false);
-        when(repository.save(any(ModelProvider.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(repository.existsByName("provider-a")).thenReturn(Mono.just(false));
+        when(repository.save(any(ModelProvider.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
         ModelProvider provider = service.createProvider("provider-a", ProviderType.OPENAI, "plain-key",
-                "https://example.com", "gpt-4.1", "embed", 1536);
+                "https://example.com", "gpt-4.1", "embed", 1536).block();
 
+        assertNotNull(provider);
         assertFalse("plain-key".equals(provider.getApiKey()));
         assertEquals("plain-key", CryptoUtil.decrypt(provider.getApiKey(), "unit-test-key"));
     }
@@ -48,9 +46,10 @@ class ModelProviderAppServiceTest {
         EmbeddingModelRegistry embeddingRegistry = mock(EmbeddingModelRegistry.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class), chatRegistry, embeddingRegistry);
         ModelProvider provider = ModelProvider.builder().id(5L).providerType(ProviderType.OPENAI).enabled(true).build();
-        when(repository.findById(5L)).thenReturn(Optional.of(provider));
+        when(repository.findById(5L)).thenReturn(Mono.just(provider));
+        when(repository.save(any(ModelProvider.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
-        service.toggleProvider(5L);
+        service.toggleProvider(5L).block();
 
         assertFalse(provider.isEnabled());
         verify(repository).save(provider);
@@ -64,13 +63,11 @@ class ModelProviderAppServiceTest {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, chatModelPort,
                 mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        ModelProvider provider = ModelProvider.builder().id(2L).providerType(ProviderType.OPENAI).enabled(true).build();
-        when(repository.findById(2L)).thenReturn(Optional.of(provider));
         when(chatModelPort.chat(any(), any(), any(), any())).thenReturn("OK");
 
-        String result = service.testConnection(2L);
+        String result = service.testConnection(2L).block();
 
-        assertEquals("连接成功: OK", result);
+        assertEquals("\u8fde\u63a5\u6210\u529f: OK", result);
     }
 
     @Test
@@ -89,9 +86,10 @@ class ModelProviderAppServiceTest {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
                 mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        when(repository.existsByName("dup")).thenReturn(true);
+        when(repository.existsByName("dup")).thenReturn(Mono.just(true));
 
-        assertThrows(BusinessException.class, () -> service.createProvider("dup", ProviderType.OPENAI,
-                "key", null, null, null, null));
+        StepVerifier.create(service.createProvider("dup", ProviderType.OPENAI, "key", null, null, null, null))
+                .expectError(BusinessException.class)
+                .verify();
     }
 }

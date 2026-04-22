@@ -14,7 +14,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 检索增强领域服务 — 查询向量库并构建 RAG 上下文
+ * 检索增强领域服务 - VectorStorePort is JDBC-based, stays blocking.
+ * Called from boundedElastic threads in the service layer.
  */
 @Slf4j
 @Service
@@ -24,22 +25,12 @@ public class RetrievalDomainService {
     private final VectorStorePort vectorStore;
     private final PromptTemplateEngine promptTemplateEngine;
 
-    /**
-     * 检索相关文档内容，构建 RAG 系统提示
-     */
     public String retrieveContext(KnowledgeBase kb, String query) {
         var config = kb.getRetrievalConfig();
-
-        Map<String, Object> filter = Map.of(
-                "knowledge_base_id", String.valueOf(kb.getId())
-        );
+        Map<String, Object> filter = Map.of("knowledge_base_id", String.valueOf(kb.getId()));
 
         List<Document> relevantDocs = vectorStore.similaritySearch(
-                query,
-                config.getTopK(),
-                config.getSimilarityThreshold(),
-                filter
-        );
+                query, config.getTopK(), config.getSimilarityThreshold(), filter);
 
         if (relevantDocs.isEmpty()) {
             log.debug("No relevant documents found for query in knowledge base: {}", kb.getName());
@@ -53,13 +44,8 @@ public class RetrievalDomainService {
         return buildRagSystemPrompt(context);
     }
 
-    /**
-     * 直接返回检索到的文档列表（用于搜索测试）
-     */
     public List<Document> search(KnowledgeBase kb, String query, int topK) {
-        Map<String, Object> filter = Map.of(
-                "knowledge_base_id", String.valueOf(kb.getId())
-        );
+        Map<String, Object> filter = Map.of("knowledge_base_id", String.valueOf(kb.getId()));
         return vectorStore.similaritySearch(query, topK, kb.getRetrievalConfig().getSimilarityThreshold(), filter);
     }
 

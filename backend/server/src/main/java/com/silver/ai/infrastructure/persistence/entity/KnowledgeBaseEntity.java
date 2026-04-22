@@ -1,13 +1,14 @@
 package com.silver.ai.infrastructure.persistence.entity;
 
 import com.silver.ai.domain.knowledge.model.ChunkStrategy;
-import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "knowledge_base")
+@Table("knowledge_base")
 @Getter
 @Setter
 @Builder
@@ -16,71 +17,55 @@ import java.time.LocalDateTime;
 public class KnowledgeBaseEntity {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
     private String name;
 
     private String description;
 
-    @Column(name = "embedding_provider_id")
+    @Column("embedding_provider_id")
     private Long embeddingProviderId;
 
-    @Column(name = "embedding_model")
+    @Column("embedding_model")
     private String embeddingModel;
 
-    @Column(name = "embedding_dimensions")
+    @Column("embedding_dimensions")
     @Builder.Default
     private Integer embeddingDimensions = 1536;
 
-    // Chunk strategy as flat columns
-    @Column(name = "chunk_type")
-    @Enumerated(EnumType.STRING)
+    @Column("chunk_type")
     @Builder.Default
     private ChunkStrategy.ChunkType chunkType = ChunkStrategy.ChunkType.FIXED_SIZE;
 
-    @Column(name = "chunk_size")
+    @Column("chunk_size")
     @Builder.Default
     private int chunkSize = 800;
 
-    @Column(name = "chunk_overlap")
+    @Column("chunk_overlap")
     @Builder.Default
     private int chunkOverlap = 200;
 
-    // Retrieval config as flat columns
-    @Column(name = "retrieval_top_k")
+    @Column("retrieval_top_k")
     @Builder.Default
     private int retrievalTopK = 5;
 
-    @Column(name = "retrieval_threshold")
+    @Column("retrieval_threshold")
     @Builder.Default
     private double retrievalThreshold = 0.7;
 
-    @Column(name = "retrieval_filter")
+    @Column("retrieval_filter")
     private String retrievalFilter;
 
-    @Column(name = "document_count")
+    @Column("document_count")
     @Builder.Default
     private int documentCount = 0;
 
     @Builder.Default
     private boolean active = true;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column("updated_at")
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

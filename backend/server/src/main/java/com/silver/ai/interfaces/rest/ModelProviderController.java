@@ -7,6 +7,7 @@ import com.silver.ai.shared.result.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -19,46 +20,44 @@ public class ModelProviderController {
     private final ModelProviderAppService providerAppService;
 
     @GetMapping("/types")
-    public ApiResponse<List<Map<String, Object>>> getTypes() {
-        return ApiResponse.ok(providerAppService.getProviderTypes());
+    public Mono<ApiResponse<List<Map<String, Object>>>> getTypes() {
+        return Mono.just(ApiResponse.ok(providerAppService.getProviderTypes()));
     }
 
     @GetMapping
-    public ApiResponse<List<ModelProvider>> list() {
-        return ApiResponse.ok(providerAppService.listProviders());
+    public Mono<ApiResponse<List<ModelProvider>>> list() {
+        return providerAppService.listProviders().collectList().map(ApiResponse::ok);
     }
 
     @PostMapping
-    public ApiResponse<ModelProvider> create(@Valid @RequestBody ProviderRequest req) {
-        ModelProvider provider = providerAppService.createProvider(
+    public Mono<ApiResponse<ModelProvider>> create(@Valid @RequestBody ProviderRequest req) {
+        return providerAppService.createProvider(
                 req.getName(), req.getProviderType(), req.getApiKey(),
                 req.getBaseUrl(), req.getDefaultModel(),
-                req.getEmbeddingModel(), req.getEmbeddingDimensions());
-        return ApiResponse.ok(provider);
+                req.getEmbeddingModel(), req.getEmbeddingDimensions()
+        ).map(ApiResponse::ok);
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ModelProvider> update(@PathVariable Long id, @RequestBody ProviderRequest req) {
-        ModelProvider provider = providerAppService.updateProvider(id,
+    public Mono<ApiResponse<ModelProvider>> update(@PathVariable Long id, @RequestBody ProviderRequest req) {
+        return providerAppService.updateProvider(id,
                 req.getName(), req.getApiKey(), req.getBaseUrl(),
-                req.getDefaultModel(), req.getEmbeddingModel(), req.getEmbeddingDimensions());
-        return ApiResponse.ok(provider);
+                req.getDefaultModel(), req.getEmbeddingModel(), req.getEmbeddingDimensions()
+        ).map(ApiResponse::ok);
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
-        providerAppService.deleteProvider(id);
-        return ApiResponse.ok();
+    public Mono<ApiResponse<Void>> delete(@PathVariable Long id) {
+        return providerAppService.deleteProvider(id).then(Mono.fromCallable(ApiResponse::ok));
     }
 
     @PutMapping("/{id}/toggle")
-    public ApiResponse<Void> toggle(@PathVariable Long id) {
-        providerAppService.toggleProvider(id);
-        return ApiResponse.ok();
+    public Mono<ApiResponse<Void>> toggle(@PathVariable Long id) {
+        return providerAppService.toggleProvider(id).then(Mono.fromCallable(ApiResponse::ok));
     }
 
     @PostMapping("/{id}/test")
-    public ApiResponse<String> testConnection(@PathVariable Long id) {
-        return ApiResponse.ok(providerAppService.testConnection(id));
+    public Mono<ApiResponse<String>> testConnection(@PathVariable Long id) {
+        return providerAppService.testConnection(id).map(ApiResponse::ok);
     }
 }

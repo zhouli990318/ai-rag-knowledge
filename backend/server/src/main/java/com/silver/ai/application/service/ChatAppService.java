@@ -18,10 +18,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
@@ -38,27 +40,27 @@ public class ChatAppService {
 
     private static final int CONTEXT_WINDOW = 20;
 
-    /**
-     * 流式对话
-     */
     public Flux<String> streamChat(Long conversationId, Long providerId, String model,
                                     String userMessage, Long knowledgeBaseId, String systemPrompt,
                                     List<Long> mcpServerIds) {
-        Conversation conversation = getOrCreateConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds);
-
-        // 添加用户消息
-        conversation.addMessage(MessageRole.USER, userMessage);
-        conversation = conversationRepository.save(conversation);
-
-        // 构建消息列表
-        List<Message> messages = buildMessages(conversation, userMessage, systemPrompt);
-        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
-
-        final Conversation savedConv = conversation;
+        AtomicReference<Long> persistedConversationId = new AtomicReference<>();
+        AtomicReference<Conversation> persistedConversation = new AtomicReference<>();
         StringBuilder fullResponse = new StringBuilder();
 
-        return chatModelPort.streamChat(providerId, model, messages, toolCallbacks)
-                .doOnNext(fullResponse::append)
+        return Flux.defer(() ->
+                prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, userMessage)
+                        .flatMapMany(conversation -> {
+                            persistedConversationId.set(conversation.getId());
+                            persistedConversation.set(conversation);
+
+                            return buildMessages(conversation, userMessage, systemPrompt)
+                                    .flatMapMany(messages -> {
+                                        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
+                                        return chatModelPort.streamChat(providerId, model, messages, toolCallbacks)
+                                                .doOnNext(fullResponse::append);
+                                    });
+                        })
+        )
                 .onErrorResume(error -> {
                     log.error("Stream chat error", error);
                     String errorMessage = resolveStreamErrorMessage(error);
@@ -66,95 +68,119 @@ public class ChatAppService {
                     return Flux.just(errorMessage);
                 })
                 .doOnComplete(() -> {
-                    savedConv.addMessage(MessageRole.ASSISTANT, fullResponse.toString());
-                    conversationRepository.save(savedConv);
+                    if (persistedConversation.get() != null && fullResponse.length() > 0) {
+                        persistAssistantMessage(persistedConversationId.get(), persistedConversation.get(),
+                                fullResponse.toString()).subscribe();
+                    }
                 });
     }
 
-    /**
-     * 同步对话
-     */
-    public String chat(Long conversationId, Long providerId, String model,
-                       String userMessage, Long knowledgeBaseId, String systemPrompt,
-                       List<Long> mcpServerIds) {
-        Conversation conversation = getOrCreateConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds);
-
-        conversation.addMessage(MessageRole.USER, userMessage);
-        conversation = conversationRepository.save(conversation);
-
-        List<Message> messages = buildMessages(conversation, userMessage, systemPrompt);
-        List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
-        String response = chatModelPort.chat(providerId, model, messages, toolCallbacks);
-
-        conversation.addMessage(MessageRole.ASSISTANT, response);
-        conversationRepository.save(conversation);
-
-        return response;
+    public Mono<String> chat(Long conversationId, Long providerId, String model,
+                              String userMessage, Long knowledgeBaseId, String systemPrompt,
+                              List<Long> mcpServerIds) {
+        return prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, userMessage)
+                .flatMap(conversation ->
+                        buildMessages(conversation, userMessage, systemPrompt)
+                                .flatMap(messages -> {
+                                    List<ToolCallback> toolCallbacks = mcpToolCallbackService.getToolCallbacks(conversation.getMcpServerIds());
+                                    return Mono.fromCallable(() -> chatModelPort.chat(providerId, model, messages, toolCallbacks))
+                                            .subscribeOn(Schedulers.boundedElastic());
+                                })
+                                .flatMap(response ->
+                                        persistAssistantMessage(conversation.getId(), conversation, response)
+                                                .thenReturn(response)
+                                )
+                );
     }
 
-    public List<Conversation> getConversations() {
+    public Flux<Conversation> getConversations() {
         return conversationRepository.findAllOrderByUpdatedAtDesc();
     }
 
-    public Conversation getConversation(Long id) {
+    public Mono<Conversation> getConversation(Long id) {
         return conversationRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND));
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND)));
     }
 
-    @Transactional
-    public void deleteConversation(Long id) {
-        conversationRepository.deleteById(id);
+    public Mono<Void> deleteConversation(Long id) {
+        return conversationRepository.deleteById(id);
     }
 
-    private Conversation getOrCreateConversation(Long conversationId, Long providerId, String model,
-                                                 Long knowledgeBaseId, List<Long> mcpServerIds) {
-        if (conversationId != null) {
-            Conversation conv = conversationRepository.findById(conversationId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND));
-            if (knowledgeBaseId != null) {
-                conv.enableRag(knowledgeBaseId);
-            } else {
-                conv.disableRag();
-            }
+    private Mono<Conversation> prepareConversation(Long conversationId, Long providerId, String model,
+                                                    Long knowledgeBaseId, List<Long> mcpServerIds,
+                                                    String userMessage) {
+        if (conversationId == null) {
+            Conversation conversation = Conversation.builder()
+                    .providerId(providerId)
+                    .model(model)
+                    .knowledgeBaseId(knowledgeBaseId)
+                    .build();
             if (mcpServerIds != null) {
-                conv.updateMcpServers(mcpServerIds);
+                conversation.updateMcpServers(mcpServerIds);
             }
-            conv.updateModel(providerId, model);
-            return conv;
+            conversation.addMessage(MessageRole.USER, userMessage);
+            return conversationRepository.save(conversation);
         }
 
-        Conversation conversation = Conversation.builder()
-                .providerId(providerId)
-                .model(model)
-                .knowledgeBaseId(knowledgeBaseId)
-                .build();
+        return conversationRepository.findById(conversationId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND)))
+                .flatMap(conversation -> {
+                    applyConversationOptions(conversation, providerId, model, knowledgeBaseId, mcpServerIds);
+                    conversation.addMessage(MessageRole.USER, userMessage);
+                    return conversationRepository.save(conversation);
+                });
+    }
 
+    private void applyConversationOptions(Conversation conversation, Long providerId, String model,
+                                          Long knowledgeBaseId, List<Long> mcpServerIds) {
+        if (knowledgeBaseId != null) {
+            conversation.enableRag(knowledgeBaseId);
+        }
         if (mcpServerIds != null) {
             conversation.updateMcpServers(mcpServerIds);
         }
-
-        return conversation;
+        conversation.updateModel(providerId, model);
     }
 
-    private List<Message> buildMessages(Conversation conversation, String latestUserMessage, String customSystemPrompt) {
-        String ragSystemPrompt = null;
+    private Mono<Void> persistAssistantMessage(Long conversationId, Conversation fallbackConversation, String response) {
+        if (conversationId == null) {
+            fallbackConversation.addMessage(MessageRole.ASSISTANT, response);
+            return conversationRepository.save(fallbackConversation).then();
+        }
+
+        return conversationRepository.findById(conversationId)
+                .flatMap(conversation -> {
+                    conversation.addMessage(MessageRole.ASSISTANT, response);
+                    return conversationRepository.save(conversation);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("Skip assistant message persistence because conversation {} no longer exists", conversationId);
+                    return Mono.empty();
+                }))
+                .then();
+    }
+
+    private Mono<List<Message>> buildMessages(Conversation conversation, String latestUserMessage, String customSystemPrompt) {
+        Mono<String> ragPromptMono;
         if (conversation.isRagEnabled()) {
-            KnowledgeBase kb = knowledgeBaseRepository.findById(conversation.getKnowledgeBaseId())
-                    .orElse(null);
-            if (kb != null) {
-                ragSystemPrompt = retrievalDomainService.retrieveContext(kb, latestUserMessage);
+            ragPromptMono = knowledgeBaseRepository.findById(conversation.getKnowledgeBaseId())
+                    .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND)))
+                    .flatMap(kb -> Mono.fromCallable(() -> retrievalDomainService.retrieveContext(kb, latestUserMessage))
+                            .subscribeOn(Schedulers.boundedElastic()));
+        } else {
+            ragPromptMono = Mono.just("");
+        }
+
+        return ragPromptMono.map(ragSystemPrompt -> {
+            String effectiveSystemPrompt = promptTemplateEngine.render(PromptTemplates.GENERAL_SYSTEM);
+            if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
+                effectiveSystemPrompt = customSystemPrompt;
             }
-        }
-
-        String effectiveSystemPrompt = promptTemplateEngine.render(PromptTemplates.GENERAL_SYSTEM);
-        if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
-            effectiveSystemPrompt = customSystemPrompt;
-        }
-        if (ragSystemPrompt != null && !ragSystemPrompt.isBlank()) {
-            effectiveSystemPrompt = effectiveSystemPrompt + "\n\n" + ragSystemPrompt;
-        }
-
-        return chatMemoryManager.buildMessages(conversation, effectiveSystemPrompt, CONTEXT_WINDOW);
+            if (ragSystemPrompt != null && !ragSystemPrompt.isBlank()) {
+                effectiveSystemPrompt = effectiveSystemPrompt + "\n\n" + ragSystemPrompt;
+            }
+            return chatMemoryManager.buildMessages(conversation, effectiveSystemPrompt, CONTEXT_WINDOW);
+        });
     }
 
     private String resolveStreamErrorMessage(Throwable error) {
@@ -162,13 +188,15 @@ public class ChatAppService {
         while (rootCause.getCause() != null) {
             rootCause = rootCause.getCause();
         }
-
-        if (rootCause instanceof IllegalStateException illegalStateException
-                && illegalStateException.getMessage() != null
-                && illegalStateException.getMessage().contains("No ToolCallback found for tool name:")) {
+        if (rootCause instanceof IllegalStateException ise
+                && ise.getMessage() != null
+                && ise.getMessage().contains("No ToolCallback found for tool name:")) {
             return "抱歉，当前工具不可用，请重新选择 MCP 工具源后重试。";
         }
-
+        if (error instanceof BusinessException be
+                && be.getCode() == ErrorCode.KNOWLEDGE_BASE_NOT_FOUND.getCode()) {
+            return "抱歉，关联知识库不存在，请重新选择知识库后重试。";
+        }
         return "抱歉，流式对话出现异常，请稍后重试。";
     }
 }

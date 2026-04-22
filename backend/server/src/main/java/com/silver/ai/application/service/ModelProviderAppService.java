@@ -14,6 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.Arrays;
 import java.util.List;
@@ -32,95 +35,84 @@ public class ModelProviderAppService {
     @Value("${app.crypto.secret-key:SpringAiRagPlatform2024}")
     private String cryptoSecretKey;
 
-    public ModelProvider createProvider(String name, ProviderType providerType, String apiKey,
-                                        String baseUrl, String defaultModel,
-                                        String embeddingModel, Integer embeddingDimensions) {
-        if (providerRepository.existsByName(name)) {
-            throw new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "提供商名称已存在: " + name);
-        }
-
-        String encryptedKey = (apiKey != null && !apiKey.isBlank())
-                ? CryptoUtil.encrypt(apiKey, cryptoSecretKey) : null;
-
-        ModelProvider provider = ModelProvider.builder()
-                .name(name)
-                .providerType(providerType)
-                .apiKey(encryptedKey)
-                .baseUrl(baseUrl)
-                .defaultModel(defaultModel)
-                .embeddingModel(embeddingModel)
-                .embeddingDimensions(embeddingDimensions)
-                .build();
-
-        return providerRepository.save(provider);
+    public Mono<ModelProvider> createProvider(String name, ProviderType providerType, String apiKey,
+                                              String baseUrl, String defaultModel,
+                                              String embeddingModel, Integer embeddingDimensions) {
+        return providerRepository.existsByName(name)
+                .flatMap(exists -> {
+                    if (exists) {
+                        return Mono.error(new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "提供商名称已存在: " + name));
+                    }
+                    String encryptedKey = (apiKey != null && !apiKey.isBlank())
+                            ? CryptoUtil.encrypt(apiKey, cryptoSecretKey) : null;
+                    ModelProvider provider = ModelProvider.builder()
+                            .name(name)
+                            .providerType(providerType)
+                            .apiKey(encryptedKey)
+                            .baseUrl(baseUrl)
+                            .defaultModel(defaultModel)
+                            .embeddingModel(embeddingModel)
+                            .embeddingDimensions(embeddingDimensions)
+                            .build();
+                    return providerRepository.save(provider);
+                });
     }
 
-    public ModelProvider updateProvider(Long id, String name, String apiKey, String baseUrl,
-                                        String defaultModel, String embeddingModel,
-                                        Integer embeddingDimensions) {
-        ModelProvider provider = getProvider(id);
-
-        String encryptedKey = null;
-        if (apiKey != null && !apiKey.isBlank()) {
-            encryptedKey = CryptoUtil.encrypt(apiKey, cryptoSecretKey);
-        }
-
-        provider.updateConfig(name, encryptedKey, baseUrl, defaultModel, embeddingModel, embeddingDimensions);
-        ModelProvider saved = providerRepository.save(provider);
-
-        // 刷新缓存
-        chatModelRegistry.refresh(id);
-        embeddingModelRegistry.refresh(id);
-
-        return saved;
+    public Mono<ModelProvider> updateProvider(Long id, String name, String apiKey, String baseUrl,
+                                              String defaultModel, String embeddingModel,
+                                              Integer embeddingDimensions) {
+        return getProvider(id)
+                .flatMap(provider -> {
+                    String encryptedKey = null;
+                    if (apiKey != null && !apiKey.isBlank()) {
+                        encryptedKey = CryptoUtil.encrypt(apiKey, cryptoSecretKey);
+                    }
+                    provider.updateConfig(name, encryptedKey, baseUrl, defaultModel, embeddingModel, embeddingDimensions);
+                    return providerRepository.save(provider);
+                })
+                .doOnNext(saved -> {
+                    chatModelRegistry.refresh(id);
+                    embeddingModelRegistry.refresh(id);
+                });
     }
 
-    public ModelProvider getProvider(Long id) {
+    public Mono<ModelProvider> getProvider(Long id) {
         return providerRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PROVIDER_NOT_FOUND));
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.PROVIDER_NOT_FOUND)));
     }
 
-    public List<ModelProvider> listProviders() {
+    public Flux<ModelProvider> listProviders() {
         return providerRepository.findAll();
     }
 
-    public void deleteProvider(Long id) {
+    public Mono<Void> deleteProvider(Long id) {
         chatModelRegistry.refresh(id);
         embeddingModelRegistry.refresh(id);
-        providerRepository.deleteById(id);
+        return providerRepository.deleteById(id);
     }
 
-    public void toggleProvider(Long id) {
-        ModelProvider provider = getProvider(id);
-        if (provider.isEnabled()) {
-            provider.disable();
-        } else {
-            provider.enable();
-        }
-        providerRepository.save(provider);
-        chatModelRegistry.refresh(id);
-        embeddingModelRegistry.refresh(id);
+    public Mono<Void> toggleProvider(Long id) {
+        return getProvider(id)
+                .flatMap(provider -> {
+                    if (provider.isEnabled()) provider.disable(); else provider.enable();
+                    return providerRepository.save(provider);
+                })
+                .doOnNext(saved -> {
+                    chatModelRegistry.refresh(id);
+                    embeddingModelRegistry.refresh(id);
+                })
+                .then();
     }
 
-    /**
-     * 测试连通性
-     */
-    public String testConnection(Long id) {
-        try {
-            String response = chatModelPort.chat(
-                    id,
-                    null,
-                    List.of(new UserMessage("Hello, reply with 'OK' only.")),
-                    List.of());
+    public Mono<String> testConnection(Long id) {
+        return Mono.fromCallable(() -> {
+            String response = chatModelPort.chat(id, null,
+                    List.of(new UserMessage("Hello, reply with 'OK' only.")), List.of());
             return "连接成功: " + response;
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.PROVIDER_CONNECTION_FAILED, e.getMessage());
-        }
+        }).subscribeOn(Schedulers.boundedElastic())
+        .onErrorMap(e -> new BusinessException(ErrorCode.PROVIDER_CONNECTION_FAILED, e.getMessage()));
     }
 
-    /**
-     * 获取支持的提供商类型列表
-     */
     public List<Map<String, Object>> getProviderTypes() {
         return Arrays.stream(ProviderType.values())
                 .map(pt -> Map.<String, Object>of(

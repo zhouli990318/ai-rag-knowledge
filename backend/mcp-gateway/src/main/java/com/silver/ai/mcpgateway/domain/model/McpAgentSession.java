@@ -51,7 +51,7 @@ public class McpAgentSession {
         this.lastSeenAt = now;
     }
 
-    public void recordToolCall(String toolName, String argumentsJson, LocalDateTime now) {
+    public synchronized void recordToolCall(String toolName, String argumentsJson, LocalDateTime now) {
         lastToolName = toolName;
         lastToolArgumentsJson = argumentsJson;
         lastToolCallAt = now;

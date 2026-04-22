@@ -29,6 +29,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -38,6 +39,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.StampedLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -75,43 +77,81 @@ public class SourceScopedMcpServerRegistry {
     private Duration keepAliveInterval;
 
     private final ConcurrentMap<Long, RegisteredSourceServer> servers = new ConcurrentHashMap<>();
+    private final StampedLock stampedLock = new StampedLock();
 
     @PostConstruct
     public void initialize() {
         refreshAll();
     }
 
-    public synchronized void refreshAll() {
-        servers.keySet().forEach(this::removeSource);
-        apiSourceRepository.findByActive(true).forEach(this::refreshSource);
+    public void refreshAll() {
+        long stamp = stampedLock.writeLock();
+        try {
+            java.util.Set<Long> activeSourceIds = new java.util.HashSet<>();
+            apiSourceRepository.findByActive(true).collectList().blockOptional().orElse(java.util.List.of()).forEach(source -> {
+                if (source == null || source.getId() == null) {
+                    return;
+                }
+                activeSourceIds.add(source.getId());
+                try {
+                    refreshSourceInternal(source);
+                } catch (RuntimeException ex) {
+                    log.warn("Failed to refresh source-scoped MCP server for source {} during full refresh", source.getId(), ex);
+                }
+            });
+
+            new java.util.ArrayList<>(servers.keySet()).stream()
+                    .filter(sourceId -> !activeSourceIds.contains(sourceId))
+                    .forEach(this::removeSourceInternal);
+        } finally {
+            stampedLock.unlockWrite(stamp);
+        }
     }
 
-    public synchronized void refreshSource(ApiSource source) {
+    public void refreshSource(ApiSource source) {
+        long stamp = stampedLock.writeLock();
+        try {
+            refreshSourceInternal(source);
+        } finally {
+            stampedLock.unlockWrite(stamp);
+        }
+    }
+
+    public void removeSource(Long sourceId) {
+        long stamp = stampedLock.writeLock();
+        try {
+            removeSourceInternal(sourceId);
+        } finally {
+            stampedLock.unlockWrite(stamp);
+        }
+    }
+
+    private void refreshSourceInternal(ApiSource source) {
         if (source == null || source.getId() == null) {
             return;
         }
 
-        removeSource(source.getId());
         if (!source.isActive()) {
+            removeSourceInternal(source.getId());
             return;
         }
 
-        servers.put(source.getId(), createServer(source));
+        RegisteredSourceServer replacement = createServer(source);
+        RegisteredSourceServer previous = servers.put(source.getId(), replacement);
+        if (previous != null) {
+            closeServerQuietly(source.getId(), previous);
+        }
         log.info("Registered source-scoped MCP connection for source {}", source.getId());
     }
 
-    public synchronized void removeSource(Long sourceId) {
+    private void removeSourceInternal(Long sourceId) {
         if (sourceId == null) {
             return;
         }
 
         RegisteredSourceServer removed = servers.remove(sourceId);
         if (removed != null) {
-            try {
-                removed.server().closeGracefully();
-            } catch (Exception ex) {
-                log.warn("Failed to close MCP server for source {}", sourceId, ex);
-            }
+            closeServerQuietly(sourceId, removed);
         }
         sessionService.evictSource(sourceId);
     }
@@ -122,20 +162,53 @@ public class SourceScopedMcpServerRegistry {
             return Mono.empty();
         }
 
+        // Optimistic read — never blocks the Reactor NIO thread
+        long stamp = stampedLock.tryOptimisticRead();
         RegisteredSourceServer server = servers.get(sourceId);
-        if (server == null) {
-            apiSourceRepository.findById(sourceId)
-                    .filter(ApiSource::isActive)
-                    .ifPresent(this::refreshSource);
+        if (stampedLock.validate(stamp) && server != null) {
+            maybeProvisionSession(sourceId, request);
+            return server.routerFunction().route(request);
+        }
+
+        // Fallback: pessimistic read
+        stamp = stampedLock.readLock();
+        try {
             server = servers.get(sourceId);
-        }
-        if (server == null) {
-            return Mono.empty();
+            if (server != null) {
+                maybeProvisionSession(sourceId, request);
+                return server.routerFunction().route(request);
+            }
+        } finally {
+            stampedLock.unlockRead(stamp);
         }
 
-        maybeProvisionSession(sourceId, request);
+        // Lazy-init: acquire write lock on boundedElastic (blocking I/O)
+        return Mono.defer(() -> {
+            long ws = stampedLock.writeLock();
+            try {
+                // Double-check after acquiring write lock
+                RegisteredSourceServer srv = servers.get(sourceId);
+                if (srv == null) {
+                    try {
+                        apiSourceRepository.findById(sourceId)
+                                .filter(ApiSource::isActive)
+                                .blockOptional()
+                                .ifPresent(this::refreshSourceInternal);
+                    } catch (RuntimeException ex) {
+                        log.warn("Failed to lazily refresh source-scoped MCP server for source {}", sourceId, ex);
+                    }
+                    srv = servers.get(sourceId);
+                }
+                if (srv == null) {
+                    return Mono.empty();
+                }
 
-        return server.routerFunction().route(request);
+                maybeProvisionSession(sourceId, request);
+                return srv.routerFunction().route(request);
+            } finally {
+                stampedLock.unlockWrite(ws);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     public String serverNameFor(ApiSource source) {
@@ -171,26 +244,36 @@ public class SourceScopedMcpServerRegistry {
             .contextExtractor(request -> buildTransportContext(source.getId(), request))
                 .build();
 
-        McpServerAutoConfiguration autoConfiguration = new McpServerAutoConfiguration();
-        McpSyncServer server = autoConfiguration.mcpSyncServer(
-                transportProvider,
-                autoConfiguration.capabilitiesBuilder(),
-                buildServerProperties(source),
-                new McpServerChangeNotificationProperties(),
-                new FixedObjectProvider<>(Arrays.stream(toolCallbackProvider.getToolCallbacksForSource(source.getId()))
-                    .map(callback -> toSyncToolSpecification(source.getId(), callback, jsonMapper))
-                        .toList()),
-                new FixedObjectProvider<>(Collections.emptyList()),
-                new FixedObjectProvider<>(Collections.emptyList()),
-                new FixedObjectProvider<>(Collections.emptyList()),
-                new FixedObjectProvider<>(Collections.emptyList()),
-                new EmptyObjectProvider<>(),
-                Optional.empty()
-        );
+        try {
+            McpServerAutoConfiguration autoConfiguration = new McpServerAutoConfiguration();
+            McpSyncServer server = autoConfiguration.mcpSyncServer(
+                    transportProvider,
+                    autoConfiguration.capabilitiesBuilder(),
+                    buildServerProperties(source),
+                    new McpServerChangeNotificationProperties(),
+                    new FixedObjectProvider<>(Arrays.stream(toolCallbackProvider.getToolCallbacksForSource(source.getId()))
+                        .map(callback -> toSyncToolSpecification(source.getId(), callback, jsonMapper))
+                            .toList()),
+                    new FixedObjectProvider<>(Collections.emptyList()),
+                    new FixedObjectProvider<>(Collections.emptyList()),
+                    new FixedObjectProvider<>(Collections.emptyList()),
+                    new FixedObjectProvider<>(Collections.emptyList()),
+                    new EmptyObjectProvider<>(),
+                    Optional.empty()
+            );
 
-        @SuppressWarnings("unchecked")
-        RouterFunction<ServerResponse> routerFunction = (RouterFunction<ServerResponse>) transportProvider.getRouterFunction();
-        return new RegisteredSourceServer(routerFunction, server);
+            @SuppressWarnings("unchecked")
+            RouterFunction<ServerResponse> routerFunction = (RouterFunction<ServerResponse>) transportProvider.getRouterFunction();
+            return new RegisteredSourceServer(routerFunction, server);
+        } catch (Exception ex) {
+            try {
+                transportProvider.closeGracefully();
+            } catch (Exception cleanupEx) {
+                log.warn("Failed to cleanup transport provider for source {} after server creation failure",
+                        source.getId(), cleanupEx);
+            }
+            throw new IllegalStateException("Failed to create MCP server for source: " + source.getId(), ex);
+        }
     }
 
     private McpServerProperties buildServerProperties(ApiSource source) {
@@ -308,6 +391,14 @@ public class SourceScopedMcpServerRegistry {
             }
         });
         return result;
+    }
+
+    private void closeServerQuietly(Long sourceId, RegisteredSourceServer registeredSourceServer) {
+        try {
+            registeredSourceServer.server().closeGracefully();
+        } catch (Exception ex) {
+            log.warn("Failed to close MCP server for source {}", sourceId, ex);
+        }
     }
 
     private record RegisteredSourceServer(RouterFunction<ServerResponse> routerFunction, McpSyncServer server) {

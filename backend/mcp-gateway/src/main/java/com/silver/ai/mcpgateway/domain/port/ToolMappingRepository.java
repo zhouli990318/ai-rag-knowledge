@@ -1,21 +1,20 @@
 package com.silver.ai.mcpgateway.domain.port;
 
 import com.silver.ai.mcpgateway.domain.model.ToolMapping;
-
-import java.util.List;
-import java.util.Optional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 public interface ToolMappingRepository {
 
-    ToolMapping save(ToolMapping mapping);
+    Mono<ToolMapping> save(ToolMapping mapping);
 
-    Optional<ToolMapping> findById(Long id);
+    Mono<ToolMapping> findById(Long id);
 
-    List<ToolMapping> findByApiSourceId(Long apiSourceId);
+    Flux<ToolMapping> findByApiSourceId(Long apiSourceId);
 
-    List<ToolMapping> findByEnabled(boolean enabled);
+    Flux<ToolMapping> findByEnabled(boolean enabled);
 
-    void deleteByApiSourceId(Long apiSourceId);
+    Mono<Void> deleteByApiSourceId(Long apiSourceId);
 
-    void deleteById(Long id);
+    Mono<Void> deleteById(Long id);
 }

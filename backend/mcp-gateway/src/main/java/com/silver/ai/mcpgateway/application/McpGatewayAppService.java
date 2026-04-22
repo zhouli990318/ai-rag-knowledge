@@ -14,6 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 
@@ -29,117 +32,136 @@ public class McpGatewayAppService {
 
     // ===== API Source =====
 
-    public ApiSource createApiSource(String name, String description, String baseUrl,
-                                      AuthType authType, String authConfig, String openApiSpec) {
+    @Transactional
+    public Mono<ApiSource> createApiSource(String name, String description, String baseUrl,
+                                           AuthType authType, String authConfig, String openApiSpec) {
         String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
         ApiSource source = ApiSource.builder()
                 .name(name)
                 .description(description)
-            .baseUrl(normalizedBaseUrl)
+                .baseUrl(normalizedBaseUrl)
                 .authType(authType)
                 .authConfig(authConfig)
                 .openApiSpec(openApiSpec)
                 .build();
-        source = apiSourceRepository.save(source);
-
-        // 自动解析 OpenAPI spec
-        if (openApiSpec != null && !openApiSpec.isBlank()) {
-            parseAndSaveTools(source.getId(), openApiSpec);
-        }
-
-        return source;
+        return apiSourceRepository.save(source)
+                .flatMap(saved -> {
+                    if (openApiSpec != null && !openApiSpec.isBlank()) {
+                        return parseAndSaveTools(saved.getId(), openApiSpec)
+                                .then(Mono.just(saved));
+                    }
+                    return Mono.just(saved);
+                });
     }
 
-    public ApiSource updateApiSource(Long id, String name, String description, String baseUrl,
-                                      AuthType authType, String authConfig) {
-        ApiSource source = getApiSource(id);
-        source.updateInfo(name, description, normalizeBaseUrl(baseUrl), authType, authConfig);
-        return apiSourceRepository.save(source);
+    public Mono<ApiSource> updateApiSource(Long id, String name, String description, String baseUrl,
+                                            AuthType authType, String authConfig) {
+        return getApiSource(id)
+                .flatMap(source -> {
+                    source.updateInfo(name, description, normalizeBaseUrl(baseUrl), authType, authConfig);
+                    return apiSourceRepository.save(source);
+                });
     }
 
-    public ApiSource getApiSource(Long id) {
-        ApiSource source = apiSourceRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
-        source.setToolMappings(toolMappingRepository.findByApiSourceId(id));
-        return source;
+    public Mono<ApiSource> getApiSource(Long id) {
+        return apiSourceRepository.findById(id)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND)))
+                .flatMap(source ->
+                        toolMappingRepository.findByApiSourceId(id)
+                                .collectList()
+                                .map(tools -> {
+                                    source.setToolMappings(tools);
+                                    return source;
+                                })
+                );
     }
 
-    public List<ApiSource> listApiSources() {
+    public Flux<ApiSource> listApiSources() {
         return apiSourceRepository.findAll();
     }
 
     @Transactional
-    public void deleteApiSource(Long id) {
-        toolMappingRepository.deleteByApiSourceId(id);
-        apiSourceRepository.deleteById(id);
+    public Mono<Void> deleteApiSource(Long id) {
+        return toolMappingRepository.deleteByApiSourceId(id)
+                .then(apiSourceRepository.deleteById(id));
     }
 
     // ===== OpenAPI Parsing =====
 
     @Transactional
-    public List<ToolMapping> parseOpenApiSpec(Long apiSourceId, String openApiSpec) {
-        ApiSource source = apiSourceRepository.findById(apiSourceId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
-
-        source.updateSpec(openApiSpec);
-        apiSourceRepository.save(source);
-
-        // 删除旧映射
-        toolMappingRepository.deleteByApiSourceId(apiSourceId);
-
-        return parseAndSaveTools(apiSourceId, openApiSpec);
+    public Mono<List<ToolMapping>> parseOpenApiSpec(Long apiSourceId, String openApiSpec) {
+        return apiSourceRepository.findById(apiSourceId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND)))
+                .flatMap(source -> {
+                    source.updateSpec(openApiSpec);
+                    return apiSourceRepository.save(source);
+                })
+                .then(toolMappingRepository.deleteByApiSourceId(apiSourceId))
+                .then(parseAndSaveTools(apiSourceId, openApiSpec).collectList());
     }
 
     @Transactional
-    public List<ToolMapping> parseFromUrl(Long apiSourceId, String url) {
-        List<ToolMapping> mappings = openApiParser.parseFromUrl(url, apiSourceId);
-        toolMappingRepository.deleteByApiSourceId(apiSourceId);
-        return mappings.stream()
-                .map(toolMappingRepository::save)
-                .toList();
+    public Mono<List<ToolMapping>> parseFromUrl(Long apiSourceId, String url) {
+        return apiSourceRepository.findById(apiSourceId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND)))
+                .flatMap(source -> {
+                    // OpenAPI parsing is blocking I/O (HTTP call + parsing)
+                    List<ToolMapping> mappings = openApiParser.parseFromUrl(url, apiSourceId);
+                    source.updateSpec(url);
+                    return apiSourceRepository.save(source)
+                            .then(toolMappingRepository.deleteByApiSourceId(apiSourceId))
+                            .thenMany(Flux.fromIterable(mappings)
+                                    .flatMap(toolMappingRepository::save))
+                            .collectList();
+                });
     }
 
     // ===== Tool Mappings =====
 
-    public List<ToolMapping> getToolMappings(Long apiSourceId) {
+    public Flux<ToolMapping> getToolMappings(Long apiSourceId) {
         return toolMappingRepository.findByApiSourceId(apiSourceId);
     }
 
-    public List<ToolMapping> getAllEnabledTools() {
+    public Flux<ToolMapping> getAllEnabledTools() {
         return toolMappingRepository.findByEnabled(true);
     }
 
-    public ToolMapping updateToolMapping(Long toolId, String toolName, String toolDescription,
-                                         String httpMethod, String path,
-                                         String parameterSchema, String responseSchema,
-                                         String examplePayload,
-                                         Boolean enabled) {
-        ToolMapping mapping = toolMappingRepository.findById(toolId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND));
-        mapping.updateConfig(toolName, toolDescription, httpMethod, path, parameterSchema, responseSchema, examplePayload);
-        if (enabled != null) {
-            if (enabled) mapping.enable(); else mapping.disable();
-        }
-        return toolMappingRepository.save(mapping);
+    public Mono<ToolMapping> updateToolMapping(Long toolId, String toolName, String toolDescription,
+                                                String httpMethod, String path,
+                                                String parameterSchema, String responseSchema,
+                                                String examplePayload,
+                                                Boolean enabled) {
+        return toolMappingRepository.findById(toolId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND)))
+                .flatMap(mapping -> {
+                    mapping.updateConfig(toolName, toolDescription, httpMethod, path,
+                            parameterSchema, responseSchema, examplePayload);
+                    if (enabled != null) {
+                        if (enabled) mapping.enable(); else mapping.disable();
+                    }
+                    return toolMappingRepository.save(mapping);
+                });
     }
 
     // ===== Tool Invocation =====
 
-    public String invokeTool(Long toolId, String arguments) {
-        ToolMapping mapping = toolMappingRepository.findById(toolId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND));
-
-        ApiSource source = apiSourceRepository.findById(mapping.getApiSourceId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
-
-        return toolInvocationService.invoke(source, mapping, arguments);
+    public Mono<String> invokeTool(Long toolId, String arguments) {
+        return toolMappingRepository.findById(toolId)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND)))
+                .flatMap(mapping ->
+                        apiSourceRepository.findById(mapping.getApiSourceId())
+                                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND)))
+                                .flatMap(source ->
+                                        Mono.fromCallable(() -> toolInvocationService.invoke(source, mapping, arguments))
+                                                .subscribeOn(Schedulers.boundedElastic())
+                                )
+                );
     }
 
-    private List<ToolMapping> parseAndSaveTools(Long apiSourceId, String openApiSpec) {
+    private Flux<ToolMapping> parseAndSaveTools(Long apiSourceId, String openApiSpec) {
         List<ToolMapping> mappings = openApiParser.parse(openApiSpec, apiSourceId);
-        return mappings.stream()
-                .map(toolMappingRepository::save)
-                .toList();
+        return Flux.fromIterable(mappings)
+                .flatMap(toolMappingRepository::save);
     }
 
     private String normalizeBaseUrl(String baseUrl) {

@@ -19,10 +19,14 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -86,5 +90,57 @@ class McpSessionServiceTest {
         assertEquals("tool-a", session.getLastToolName());
         assertEquals(1L, session.getToolCallCount());
         assertEquals("req-9", session.getTransportHeaders().get("x-request-id"));
+    }
+
+    @Test
+    void recordToolCallShouldNotPersistBlockedHeadersFromTransportContext() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        @SuppressWarnings("unchecked")
+        RMapCache<String, String> sessionCache = mock(RMapCache.class);
+        doReturn(sessionCache).when(redissonClient).getMapCache("mcp:gateway:sessions:10");
+
+        McpSessionProperties properties = new McpSessionProperties();
+        properties.setTtl(Duration.ofMinutes(10));
+        properties.setAllowedPassthroughHeaders(List.of("X-Request-Id", "Authorization"));
+        properties.setBlockedPassthroughHeaders(List.of("Authorization"));
+
+        McpSessionService service = new McpSessionService(redissonClient, new ObjectMapper(), properties);
+        McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
+        when(exchange.getClientInfo()).thenReturn(new McpSchema.Implementation("tester", "1.0.0"));
+        when(exchange.getClientCapabilities()).thenReturn(mock(McpSchema.ClientCapabilities.class));
+        when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
+                McpTransportMetadataKeys.REQUEST_HEADERS, Map.of(
+                        "x-request-id", "req-10",
+                        "authorization", "secret-token"
+                )
+        )));
+
+        McpAgentSession session = service.recordToolCall(10L, "session-10", "tool-a", Map.of("id", 1), exchange);
+
+        assertEquals("req-10", session.getTransportHeaders().get("x-request-id"));
+        assertFalse(session.getTransportHeaders().containsKey("authorization"));
+    }
+
+    @Test
+    void recordToolCallShouldReturnTransientSessionWhenSessionIdMissing() {
+        RedissonClient redissonClient = mock(RedissonClient.class);
+        McpSessionProperties properties = new McpSessionProperties();
+        properties.setTtl(Duration.ofMinutes(10));
+
+        McpSessionService service = new McpSessionService(redissonClient, new ObjectMapper(), properties);
+        McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
+        when(exchange.getClientInfo()).thenReturn(new McpSchema.Implementation("tester", "1.0.0"));
+        when(exchange.getClientCapabilities()).thenReturn(mock(McpSchema.ClientCapabilities.class));
+        when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
+                McpTransportMetadataKeys.REQUEST_HEADERS, Map.of("x-request-id", "req-11")
+        )));
+
+        McpAgentSession session = assertDoesNotThrow(() -> service.recordToolCall(11L, null, "tool-a", Map.of("id", 1), exchange));
+
+        assertNotNull(session);
+        assertNull(session.getSessionId());
+        assertEquals("tool-a", session.getLastToolName());
+        assertEquals(1L, session.getToolCallCount());
+        verify(redissonClient, never()).getMapCache("mcp:gateway:sessions:11");
     }
 }

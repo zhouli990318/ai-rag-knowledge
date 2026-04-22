@@ -6,14 +6,6 @@ spring:
   main:
     web-application-type: reactive
 
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    properties:
-      hibernate:
-        "[default_schema]": mcp_gateway
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
   flyway:
     enabled: true
     locations: classpath:db/migration

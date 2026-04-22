@@ -5,45 +5,50 @@ import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
 import com.silver.ai.infrastructure.persistence.entity.KnowledgeBaseEntity;
-import com.silver.ai.infrastructure.persistence.jpa.JpaKnowledgeBaseRepository;
+import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcKnowledgeBaseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Repository
 @RequiredArgsConstructor
 @SuppressWarnings("null")
 public class KnowledgeBaseRepositoryAdapter implements KnowledgeBaseRepository {
 
-    private final JpaKnowledgeBaseRepository jpa;
+    private final R2dbcKnowledgeBaseRepository r2dbc;
 
     @Override
-    public KnowledgeBase save(KnowledgeBase kb) {
+    public Mono<KnowledgeBase> save(KnowledgeBase kb) {
         KnowledgeBaseEntity entity = toEntity(kb);
-        entity = jpa.save(entity);
-        return toDomain(entity);
+        LocalDateTime now = LocalDateTime.now();
+        if (entity.getId() == null) {
+            entity.setCreatedAt(now);
+        }
+        entity.setUpdatedAt(now);
+        return r2dbc.save(entity).map(this::toDomain);
     }
 
     @Override
-    public Optional<KnowledgeBase> findById(Long id) {
-        return jpa.findById(id).map(this::toDomain);
+    public Mono<KnowledgeBase> findById(Long id) {
+        return r2dbc.findById(id).map(this::toDomain);
     }
 
     @Override
-    public List<KnowledgeBase> findAll() {
-        return jpa.findAll().stream().map(this::toDomain).toList();
+    public Flux<KnowledgeBase> findAll() {
+        return r2dbc.findAll().map(this::toDomain);
     }
 
     @Override
-    public void deleteById(Long id) {
-        jpa.deleteById(id);
+    public Mono<Void> deleteById(Long id) {
+        return r2dbc.deleteById(id);
     }
 
     @Override
-    public boolean existsByName(String name) {
-        return jpa.existsByName(name);
+    public Mono<Boolean> existsByName(String name) {
+        return r2dbc.existsByName(name);
     }
 
     private KnowledgeBaseEntity toEntity(KnowledgeBase d) {

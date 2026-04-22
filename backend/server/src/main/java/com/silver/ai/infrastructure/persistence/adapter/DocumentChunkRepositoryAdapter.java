@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silver.ai.domain.knowledge.model.DocumentChunk;
 import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.infrastructure.persistence.entity.DocumentChunkEntity;
-import com.silver.ai.infrastructure.persistence.jpa.JpaDocumentChunkRepository;
+import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcDocumentChunkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -19,41 +21,45 @@ import java.util.Map;
 @SuppressWarnings("null")
 public class DocumentChunkRepositoryAdapter implements DocumentChunkRepository {
 
-    private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
-    };
+    private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {};
 
-    private final JpaDocumentChunkRepository jpa;
+    private final R2dbcDocumentChunkRepository r2dbc;
     private final ObjectMapper objectMapper;
 
     @Override
-    public void saveAll(List<DocumentChunk> chunks) {
+    public Mono<Void> saveAll(List<DocumentChunk> chunks) {
         if (chunks.isEmpty()) {
-            return;
+            return Mono.empty();
         }
-        jpa.saveAll(chunks.stream().map(this::toEntity).toList());
+        return Flux.fromIterable(chunks)
+                .map(this::toEntity)
+                .flatMap(r2dbc::save)
+                .then();
     }
 
     @Override
-    public List<DocumentChunk> findByDocumentId(Long documentId) {
-        return jpa.findByDocumentIdOrderByChunkIndexAsc(documentId).stream()
-                .map(this::toDomain)
-                .toList();
+    public Flux<DocumentChunk> findByDocumentId(Long documentId) {
+        return r2dbc.findByDocumentIdOrderByChunkIndexAsc(documentId)
+                .map(this::toDomain);
     }
 
     @Override
-    @Transactional
-    public void deleteByDocumentId(Long documentId) {
-        jpa.deleteByDocumentId(documentId);
+    public Mono<Void> deleteByDocumentId(Long documentId) {
+        return r2dbc.deleteByDocumentId(documentId);
     }
 
     private DocumentChunkEntity toEntity(DocumentChunk chunk) {
-        return DocumentChunkEntity.builder()
+        DocumentChunkEntity entity = DocumentChunkEntity.builder()
                 .id(chunk.getId())
                 .documentId(chunk.getDocumentId())
                 .chunkIndex(chunk.getChunkIndex())
                 .content(chunk.getContent())
                 .metadataJson(writeMetadata(chunk.getMetadata()))
                 .build();
+        if (entity.getCreatedAt() == null) {
+            entity.setCreatedAt(LocalDateTime.now());
+        }
+        return entity;
     }
 
     private DocumentChunk toDomain(DocumentChunkEntity entity) {

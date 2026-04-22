@@ -61,24 +61,34 @@ public class McpSessionService {
     public McpAgentSession recordToolCall(Long sourceId, String sessionId, String toolName,
                                           Map<String, Object> arguments, McpSyncServerExchange exchange) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        RMapCache<String, String> sessionMap = sessionMap(sourceId);
-        McpAgentSession session = readSession(sessionMap, sessionId)
-                .orElseGet(() -> McpAgentSession.builder()
-                        .sourceId(sourceId)
-                        .sessionId(sessionId)
-                        .createdAt(now)
-                        .build());
+        boolean persistentSession = sourceId != null && sessionId != null && !sessionId.isBlank();
+        RMapCache<String, String> sessionMap = persistentSession ? sessionMap(sourceId) : null;
+        McpAgentSession session = persistentSession
+            ? readSession(sessionMap, sessionId)
+            .orElseGet(() -> McpAgentSession.builder()
+                .sourceId(sourceId)
+                .sessionId(sessionId)
+                .createdAt(now)
+                .build())
+            : McpAgentSession.builder()
+                .sourceId(sourceId)
+                .sessionId(sessionId)
+                .createdAt(now)
+                .build();
 
-        Map<String, String> headers = extractHeaders(exchange.transportContext());
+        Map<String, String> headers = filterHeaders(extractHeaders(exchange.transportContext()));
         session.touch(now, headers);
+        var clientInfo = exchange.getClientInfo();
         session.initialize(
-                Optional.ofNullable(exchange.getClientInfo()).map(info -> info.name()).orElse(null),
-                Optional.ofNullable(exchange.getClientInfo()).map(info -> info.version()).orElse(null),
+                clientInfo != null ? clientInfo.name() : null,
+                clientInfo != null ? clientInfo.version() : null,
                 writeValue(exchange.getClientCapabilities()),
                 now
         );
         session.recordToolCall(toolName, writeValue(arguments == null ? Map.of() : arguments), now);
-        writeSession(sessionMap, session);
+        if (persistentSession) {
+            writeSession(sessionMap, session);
+        }
         return session;
     }
 

@@ -3,49 +3,48 @@ package com.silver.ai.mcpgateway.infrastructure.persistence.adapter;
 import com.silver.ai.mcpgateway.domain.model.ToolMapping;
 import com.silver.ai.mcpgateway.domain.port.ToolMappingRepository;
 import com.silver.ai.mcpgateway.infrastructure.persistence.entity.ToolMappingEntity;
-import com.silver.ai.mcpgateway.infrastructure.persistence.jpa.JpaToolMappingRepository;
+import com.silver.ai.mcpgateway.infrastructure.persistence.r2dbc.R2dbcToolMappingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Optional;
+import java.time.LocalDateTime;
 
 @Repository
 @RequiredArgsConstructor
 public class ToolMappingRepositoryAdapter implements ToolMappingRepository {
 
-    private final JpaToolMappingRepository jpa;
+    private final R2dbcToolMappingRepository r2dbc;
 
     @Override
-    public ToolMapping save(ToolMapping m) {
-        return toDomain(jpa.save(toEntity(m)));
+    public Mono<ToolMapping> save(ToolMapping m) {
+        return r2dbc.save(toEntity(m)).map(this::toDomain);
     }
 
     @Override
-    public Optional<ToolMapping> findById(Long id) {
-        return jpa.findById(id).map(this::toDomain);
+    public Mono<ToolMapping> findById(Long id) {
+        return r2dbc.findById(id).map(this::toDomain);
     }
 
     @Override
-    public List<ToolMapping> findByApiSourceId(Long apiSourceId) {
-        return jpa.findByApiSourceId(apiSourceId).stream().map(this::toDomain).toList();
+    public Flux<ToolMapping> findByApiSourceId(Long apiSourceId) {
+        return r2dbc.findByApiSourceId(apiSourceId).map(this::toDomain);
     }
 
     @Override
-    public List<ToolMapping> findByEnabled(boolean enabled) {
-        return jpa.findByEnabled(enabled).stream().map(this::toDomain).toList();
+    public Flux<ToolMapping> findByEnabled(boolean enabled) {
+        return r2dbc.findByEnabled(enabled).map(this::toDomain);
     }
 
     @Override
-    @Transactional
-    public void deleteByApiSourceId(Long apiSourceId) {
-        jpa.deleteByApiSourceId(apiSourceId);
+    public Mono<Void> deleteByApiSourceId(Long apiSourceId) {
+        return r2dbc.deleteByApiSourceId(apiSourceId);
     }
 
     @Override
-    public void deleteById(Long id) {
-        jpa.deleteById(id);
+    public Mono<Void> deleteById(Long id) {
+        return r2dbc.deleteById(id);
     }
 
     private ToolMappingEntity toEntity(ToolMapping d) {
@@ -61,6 +60,7 @@ public class ToolMappingRepositoryAdapter implements ToolMappingRepository {
                 .responseSchema(d.getResponseSchema())
                 .examplePayload(d.getExamplePayload())
                 .enabled(d.isEnabled())
+                .createdAt(d.getCreatedAt() != null ? d.getCreatedAt() : LocalDateTime.now())
                 .build();
     }
 

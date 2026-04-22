@@ -6,13 +6,15 @@ spring:
     virtual:
       enabled: true
 
-  datasource:
-    url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5442/ai_rag_platform}
+  r2dbc:
+    url: ${APP_R2DBC_URL:r2dbc:postgresql://localhost:5442/ai_rag_platform?schema=mcp_gateway}
     username: ${APP_DATASOURCE_USERNAME:postgres}
     password: ${APP_DATASOURCE_PASSWORD:123456}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 10
+
+  flyway:
+    url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5442/ai_rag_platform}
+    user: ${APP_DATASOURCE_USERNAME:postgres}
+    password: ${APP_DATASOURCE_PASSWORD:123456}
 
 logging:
   level:
