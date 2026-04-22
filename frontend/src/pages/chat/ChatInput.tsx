@@ -25,18 +25,18 @@ export default memo(function ChatInput({ value, onChange, onSend, streaming, dis
 
   return (
     <Box sx={{
-      px: 1.5, py: 1,
+      px: 1.5, pt: 1.5,
+      pb: 'max(12px, env(safe-area-inset-bottom, 12px))',
       borderTop: `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}`,
       backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(249,249,249,0.94)',
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
-      pb: 'env(safe-area-inset-bottom, 8px)',
     }}>
       <Box sx={{
         display: 'flex', alignItems: 'flex-end', gap: 1,
         backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : '#FFFFFF',
         border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-        borderRadius: '22px',
+        borderRadius: '18px',
         px: 1.5, py: 0.5,
         transition: 'border-color 200ms',
         '&:focus-within': {

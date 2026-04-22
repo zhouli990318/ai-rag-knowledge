@@ -1,4 +1,4 @@
-﻿import { useState, lazy, Suspense } from 'react';
+﻿import { useEffect, useState, lazy, Suspense } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, IconButton, Switch, Select, MenuItem,
@@ -65,6 +65,281 @@ function buildParameterSchema(rows: ParameterRow[]): string {
 
 const METHOD_COLORS: Record<string, string> = { GET: '#34C759', POST: '#007AFF', PUT: '#FF9500', DELETE: '#FF3B30', PATCH: '#AF52DE' };
 
+type SourceFormState = {
+  name: string;
+  description: string;
+  baseUrl: string;
+  authType: string;
+  authConfig: string;
+};
+
+type ToolUpdatePayload = {
+  toolName: string;
+  toolDescription: string;
+  httpMethod: string;
+  path: string;
+  parameterSchema: string;
+  responseSchema: string;
+  examplePayload: string;
+  enabled: boolean;
+};
+
+type CodeEditorComponent = typeof MonacoEditor;
+
+function CreateEditSourceDialog({
+  open,
+  initialSource,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  initialSource: McpApiSource | null;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (payload: SourceFormState) => void;
+}) {
+  const [form, setForm] = useState<SourceFormState>({
+    name: '',
+    description: '',
+    baseUrl: '',
+    authType: 'NONE',
+    authConfig: '',
+  });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (initialSource) {
+      setForm({
+        name: initialSource.name,
+        description: initialSource.description || '',
+        baseUrl: initialSource.baseUrl || '',
+        authType: initialSource.authType || 'NONE',
+        authConfig: '',
+      });
+      return;
+    }
+
+    setForm({ name: '', description: '', baseUrl: '', authType: 'NONE', authConfig: '' });
+  }, [initialSource, open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{initialSource ? '编辑 API 源' : '添加 API 源'}</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+        <TextField label="名称" required value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} />
+        <TextField label="描述" value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
+        <TextField label="Base URL" value={form.baseUrl} onChange={(e) => setForm((current) => ({ ...current, baseUrl: e.target.value }))} />
+        <FormControl>
+          <InputLabel>认证方式</InputLabel>
+          <Select value={form.authType} onChange={(e) => setForm((current) => ({ ...current, authType: String(e.target.value) }))} label="认证方式">
+            <MenuItem value="NONE">无</MenuItem>
+            <MenuItem value="API_KEY">API Key</MenuItem>
+            <MenuItem value="BEARER_TOKEN">Bearer Token</MenuItem>
+            <MenuItem value="BASIC_AUTH">Basic Auth</MenuItem>
+          </Select>
+        </FormControl>
+        {form.authType !== 'NONE' && (
+          <TextField label="认证配置" value={form.authConfig} onChange={(e) => setForm((current) => ({ ...current, authConfig: e.target.value }))} helperText="API Key 或 Token" />
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>取消</Button>
+        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 8 }}>
+          {initialSource ? '保存' : '创建'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function EditToolDialog({
+  open,
+  tool,
+  isDark,
+  EditorComponent,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  tool: McpToolMapping | null;
+  isDark: boolean;
+  EditorComponent: CodeEditorComponent;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (payload: ToolUpdatePayload) => void;
+}) {
+  const [localTool, setLocalTool] = useState<McpToolMapping | null>(tool);
+  const [parameterEditMode, setParameterEditMode] = useState<string | number>('table');
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setLocalTool(tool);
+    setParameterEditMode('table');
+  }, [open, tool]);
+
+  const updateParameterRows = (updater: (rows: ParameterRow[]) => ParameterRow[]) => {
+    setLocalTool((current) => {
+      if (!current) {
+        return current;
+      }
+      const next = updater(parseParameterRows(current.parameterSchema));
+      return { ...current, parameterSchema: buildParameterSchema(next) };
+    });
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>编辑工具</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+        <TextField label="工具名" value={localTool?.toolName || ''} onChange={(e) => setLocalTool((current) => current ? { ...current, toolName: e.target.value } : current)} />
+        <TextField label="描述" value={localTool?.toolDescription || ''} onChange={(e) => setLocalTool((current) => current ? { ...current, toolDescription: e.target.value } : current)} />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField label="HTTP 方法" value={localTool?.httpMethod || ''} onChange={(e) => setLocalTool((current) => current ? { ...current, httpMethod: e.target.value } : current)} />
+          <TextField label="路径" fullWidth value={localTool?.path || ''} onChange={(e) => setLocalTool((current) => current ? { ...current, path: e.target.value } : current)} />
+        </Box>
+
+        <Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography sx={{ fontSize: 15, fontWeight: 600 }}>参数定义</Typography>
+            <IOSSegmentedControl value={parameterEditMode} onChange={setParameterEditMode} options={[{ value: 'table', label: '表格' }, { value: 'json', label: 'JSON' }]} />
+          </Box>
+          {parameterEditMode === 'table' ? (
+            <Box sx={{
+              backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+              borderRadius: 2, overflow: 'hidden',
+            }}>
+              {parseParameterRows(localTool?.parameterSchema).map((row) => (
+                <Box key={row.key} sx={{
+                  display: 'flex', gap: 1, alignItems: 'center', px: 2, py: 1.25,
+                  borderBottom: `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
+                }}>
+                  <TextField size="small" placeholder="参数名" value={row.name} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, name: e.target.value } : item))} sx={{ flex: 1 }} />
+                  <Select size="small" value={row.type} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, type: String(e.target.value) } : item))} sx={{ width: 100 }}>
+                    {['string', 'number', 'integer', 'boolean', 'array', 'object'].map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
+                  </Select>
+                  <TextField size="small" placeholder="描述" value={row.description} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, description: e.target.value } : item))} sx={{ flex: 2 }} />
+                  <Switch size="small" checked={row.required} onChange={(_, value) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, required: value } : item))} />
+                  <IconButton size="small" color="error" onClick={() => updateParameterRows((rows) => rows.filter((item) => item.key !== row.key))}>
+                    <Delete sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Box>
+              ))}
+              <Box sx={{ p: 1.5 }}>
+                <Button size="small" startIcon={<Add />} onClick={() => updateParameterRows((rows) => [...rows, { key: `new-${Date.now()}`, name: '', type: 'string', description: '', required: false }])}>
+                  添加参数
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <EditorComponent value={localTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(value: string) => setLocalTool((current) => current ? { ...current, parameterSchema: value } : current)} height={200} isDark={isDark} />
+          )}
+        </Box>
+
+        <Box>
+          <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>响应 Schema</Typography>
+          <EditorComponent value={localTool?.responseSchema || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, responseSchema: value } : current)} height={160} isDark={isDark} />
+        </Box>
+
+        <Box>
+          <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>调用示例</Typography>
+          <EditorComponent value={localTool?.examplePayload || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, examplePayload: value } : current)} height={140} isDark={isDark} />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>取消</Button>
+        <Button
+          variant="contained"
+          onClick={() => localTool && onSubmit({
+            toolName: localTool.toolName,
+            toolDescription: localTool.toolDescription,
+            httpMethod: localTool.httpMethod,
+            path: localTool.path,
+            parameterSchema: localTool.parameterSchema || DEFAULT_PARAMETER_SCHEMA,
+            responseSchema: localTool.responseSchema || '{}',
+            examplePayload: localTool.examplePayload || '{}',
+            enabled: localTool.enabled,
+          })}
+          disabled={loading || !localTool}
+          sx={{ borderRadius: 8 }}
+        >
+          保存
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function TestToolDrawer({
+  open,
+  toolId,
+  isDark,
+  EditorComponent,
+  onClose,
+}: {
+  open: boolean;
+  toolId: number | null;
+  isDark: boolean;
+  EditorComponent: CodeEditorComponent;
+  onClose: () => void;
+}) {
+  const [args, setArgs] = useState('{}');
+  const [result, setResult] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setArgs('{}');
+    setResult('');
+  }, [open, toolId]);
+
+  const testToolMutation = useMutation({
+    mutationFn: (payload: { id: number; args: string }) => mcpGatewayApi.testTool(payload.id, payload.args),
+    onSuccess: (data) => setResult(typeof data === 'string' ? data : JSON.stringify(data, null, 2)),
+    onError: (error: any) => setResult('Error: ' + (error.message || 'Unknown')),
+  });
+
+  return (
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      PaperProps={{
+        sx: { width: { xs: '100%', md: 420 }, p: 2.5, borderRadius: '10px 0 0 10px' },
+      }}
+    >
+      <Typography sx={{ fontSize: 17, fontWeight: 600, mb: 2 }}>测试工具调用</Typography>
+      <EditorComponent value={args} onChange={setArgs} height={160} isDark={isDark} />
+      <Button
+        variant="contained"
+        startIcon={<PlayArrow />}
+        fullWidth
+        onClick={() => toolId && testToolMutation.mutate({ id: toolId, args })}
+        sx={{ mt: 2, borderRadius: 8 }}
+        disabled={testToolMutation.isPending || !toolId}
+      >
+        执行
+      </Button>
+      {result && (
+        <Box sx={{
+          mt: 2, p: 2.5, borderRadius: 2,
+          backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+          maxHeight: 300, overflow: 'auto',
+        }}>
+          <Typography sx={{ fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{result}</Typography>
+        </Box>
+      )}
+    </Drawer>
+  );
+}
+
 export default function McpPage() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -74,16 +349,12 @@ export default function McpPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<McpApiSource | null>(null);
-  const [testToolId, setTestToolId] = useState<number | null>(null);
-  const [testArgs, setTestArgs] = useState('{}');
-  const [testResult, setTestResult] = useState('');
+  const [testTool, setTestTool] = useState<McpToolMapping | null>(null);
   const [parseMode, setParseMode] = useState<string | number>('paste');
   const [specContent, setSpecContent] = useState('');
   const [specUrl, setSpecUrl] = useState('');
-  const [editingSourceId, setEditingSourceId] = useState<number | null>(null);
+  const [editingSource, setEditingSource] = useState<McpApiSource | null>(null);
   const [editingTool, setEditingTool] = useState<McpToolMapping | null>(null);
-  const [parameterEditMode, setParameterEditMode] = useState<string | number>('table');
-  const [form, setForm] = useState({ name: '', description: '', baseUrl: '', authType: 'NONE', authConfig: '' });
 
   const { data: sources = [], isLoading } = useQuery({ queryKey: ['mcp-sources'], queryFn: mcpGatewayApi.listSources });
   const { data: connectionInfo } = useQuery({
@@ -100,11 +371,21 @@ export default function McpPage() {
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => mcpGatewayApi.createSource(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mcp-sources'] }); setCreateOpen(false); enqueueSnackbar('创建成功', { variant: 'success' }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-sources'] });
+      setCreateOpen(false);
+      setEditingSource(null);
+      enqueueSnackbar('创建成功', { variant: 'success' });
+    },
   });
   const updateSourceMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => mcpGatewayApi.updateSource(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mcp-sources'] }); setCreateOpen(false); setEditingSourceId(null); enqueueSnackbar('更新成功', { variant: 'success' }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-sources'] });
+      setCreateOpen(false);
+      setEditingSource(null);
+      enqueueSnackbar('更新成功', { variant: 'success' });
+    },
     onError: () => enqueueSnackbar('更新失败', { variant: 'error' }),
   });
   const deleteMutation = useMutation({
@@ -121,34 +402,32 @@ export default function McpPage() {
     onSuccess: () => refetchTools(),
   });
   const updateToolMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => mcpGatewayApi.updateTool(editingTool!.id, data),
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => mcpGatewayApi.updateTool(id, data),
     onSuccess: () => { refetchTools(); setEditingTool(null); enqueueSnackbar('已更新', { variant: 'success' }); },
     onError: () => enqueueSnackbar('更新失败', { variant: 'error' }),
   });
-  const testToolMutation = useMutation({
-    mutationFn: ({ id, args }: { id: number; args: string }) => mcpGatewayApi.testTool(id, args),
-    onSuccess: (data) => setTestResult(typeof data === 'string' ? data : JSON.stringify(data, null, 2)),
-    onError: (e: any) => setTestResult('Error: ' + (e.message || 'Unknown')),
-  });
 
-  const resetSourceForm = () => { setForm({ name: '', description: '', baseUrl: '', authType: 'NONE', authConfig: '' }); setEditingSourceId(null); };
-  const openCreateDialog = () => { resetSourceForm(); setCreateOpen(true); };
-  const openEditSourceDialog = (s: McpApiSource) => {
-    setForm({ name: s.name, description: s.description || '', baseUrl: s.baseUrl || '', authType: s.authType || 'NONE', authConfig: '' });
-    setEditingSourceId(s.id); setCreateOpen(true);
+  const openCreateDialog = () => {
+    setEditingSource(null);
+    setCreateOpen(true);
   };
-  const handleSourceSubmit = () => {
-    const payload = { ...form, name: form.name.trim(), description: form.description.trim(), baseUrl: form.baseUrl.trim(), authConfig: form.authConfig.trim() };
-    if (editingSourceId !== null) { updateSourceMutation.mutate({ id: editingSourceId, data: payload }); return; }
-    createMutation.mutate(payload);
+  const openEditSourceDialog = (source: McpApiSource) => {
+    setEditingSource(source);
+    setCreateOpen(true);
   };
-
-  const updateParameterRows = (updater: (rows: ParameterRow[]) => ParameterRow[]) => {
-    setEditingTool((cur) => {
-      if (!cur) return cur;
-      const next = updater(parseParameterRows(cur.parameterSchema));
-      return { ...cur, parameterSchema: buildParameterSchema(next) };
-    });
+  const handleSourceSubmit = (payload: SourceFormState) => {
+    const normalizedPayload = {
+      ...payload,
+      name: payload.name.trim(),
+      description: payload.description.trim(),
+      baseUrl: payload.baseUrl.trim(),
+      authConfig: payload.authConfig.trim(),
+    };
+    if (editingSource) {
+      updateSourceMutation.mutate({ id: editingSource.id, data: normalizedPayload });
+      return;
+    }
+    createMutation.mutate(normalizedPayload);
   };
 
   const copyText = async (value: string, label: string) => {
@@ -159,11 +438,11 @@ export default function McpPage() {
   const CodeEditor = isMobile ? MobileTextarea : MonacoEditor;
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h5">MCP 网关</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 10 }}>添加 API 源</Button>
+        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 8 }}>添加 API 源</Button>
       </Box>
       {isLoading && <LinearProgress sx={{ mb: 2 }} />}
 
@@ -171,7 +450,7 @@ export default function McpPage() {
       {sources.length === 0 && !isLoading ? (
         <IOSEmptyState icon={<Api />} title="暂无 API 源" subtitle="添加 API 源来配置 MCP 工具映射" action={{ label: '添加 API 源', onClick: openCreateDialog }} />
       ) : (
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2.5 }}>
           {sources.map((s: McpApiSource) => {
             const isActive = selectedSource?.id === s.id;
             return (
@@ -180,7 +459,7 @@ export default function McpPage() {
                   onClick={() => setSelectedSource(s)}
                   sx={{
                     width: 140, textAlign: 'center', cursor: 'pointer',
-                    p: 2, borderRadius: 4,
+                    p: 2, borderRadius: 3,
                     backgroundColor: isActive ? (isDark ? 'rgba(0,122,255,0.15)' : 'rgba(0,122,255,0.08)') : 'transparent',
                     border: isActive ? '2px solid #007AFF' : '2px solid transparent',
                     transition: 'all 200ms',
@@ -188,7 +467,7 @@ export default function McpPage() {
                   }}
                 >
                   <Box sx={{
-                    width: 52, height: 52, borderRadius: 3, mx: 'auto', mb: 1,
+                    width: 52, height: 52, borderRadius: 2.5, mx: 'auto', mb: 1,
                     background: s.active ? 'linear-gradient(135deg, #007AFF, #5856D6)' : (isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)'),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
@@ -207,7 +486,7 @@ export default function McpPage() {
             onClick={openCreateDialog}
             sx={{
               width: 140, textAlign: 'center', cursor: 'pointer',
-              p: 2, borderRadius: 4,
+              p: 2, borderRadius: 3,
               border: `2px dashed ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               '&:hover': { borderColor: '#007AFF' },
@@ -224,7 +503,7 @@ export default function McpPage() {
       {selectedSource && (
         <Box sx={{
           backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-          borderRadius: 4, p: 3,
+          borderRadius: 3, p: 2.5,
           boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 2px 16px rgba(0,0,0,0.06)',
         }}>
           {/* Source header */}
@@ -243,7 +522,7 @@ export default function McpPage() {
           {connectionInfo && (
             <Box sx={{
               backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-              borderRadius: 3, p: 2, mb: 2.5,
+              borderRadius: 2, p: 2, mb: 2.5,
             }}>
               <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary', mb: 1 }}>
                 {connectionInfo.serverName} {connectionInfo.version}
@@ -275,15 +554,15 @@ export default function McpPage() {
             </Box>
             {parseMode === 'paste' ? (
               <Box>
-                <CodeEditor value={specContent} onChange={setSpecContent} height={180} />
-                <Button variant="outlined" startIcon={<Refresh />} onClick={() => parseMutation.mutate({ openApiSpec: specContent })} disabled={parseMutation.isPending} sx={{ mt: 1, borderRadius: 10 }}>
+                <CodeEditor value={specContent} onChange={setSpecContent} height={180} isDark={isDark} />
+                <Button variant="outlined" startIcon={<Refresh />} onClick={() => parseMutation.mutate({ openApiSpec: specContent })} disabled={parseMutation.isPending} sx={{ mt: 1, borderRadius: 8 }}>
                   解析
                 </Button>
               </Box>
             ) : (
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <TextField size="small" fullWidth value={specUrl} onChange={(e) => setSpecUrl(e.target.value)} placeholder="https://petstore.swagger.io/v2/swagger.json" />
-                <Button variant="outlined" onClick={() => parseMutation.mutate({ openApiUrl: specUrl })} disabled={parseMutation.isPending} sx={{ borderRadius: 10 }}>导入</Button>
+                <Button variant="outlined" onClick={() => parseMutation.mutate({ openApiUrl: specUrl })} disabled={parseMutation.isPending} sx={{ borderRadius: 8 }}>导入</Button>
               </Box>
             )}
           </Box>
@@ -294,7 +573,7 @@ export default function McpPage() {
           </Typography>
           <Box sx={{
             backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-            borderRadius: 3, overflow: 'hidden',
+            borderRadius: 2, overflow: 'hidden',
           }}>
             {tools.length === 0 ? (
               <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -304,7 +583,7 @@ export default function McpPage() {
               tools.map((t: McpToolMapping, i: number) => (
                 <Box key={t.id} sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
-                  px: 2, py: 1.25,
+                  px: 2, py: 1.5,
                   borderBottom: i < tools.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` : 'none',
                 }}>
                   {/* Method badge */}
@@ -329,8 +608,8 @@ export default function McpPage() {
                   {/* Toggle */}
                   <Switch checked={t.enabled} onChange={(_, v) => toggleToolMutation.mutate({ id: t.id, enabled: v })} />
                   {/* Actions */}
-                  <IconButton size="small" onClick={() => { setEditingTool(t); setParameterEditMode('table'); }}><Edit sx={{ fontSize: 18 }} /></IconButton>
-                  <IconButton size="small" onClick={() => { setTestToolId(t.id); setTestResult(''); }}><PlayArrow sx={{ fontSize: 18 }} /></IconButton>
+                  <IconButton size="small" onClick={() => setEditingTool(t)}><Edit sx={{ fontSize: 18 }} /></IconButton>
+                  <IconButton size="small" onClick={() => setTestTool(t)}><PlayArrow sx={{ fontSize: 18 }} /></IconButton>
                 </Box>
               ))
             )}
@@ -338,132 +617,34 @@ export default function McpPage() {
         </Box>
       )}
 
-      {/* Create/Edit Source Dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingSourceId !== null ? '编辑 API 源' : '添加 API 源'}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
-          <TextField label="名称" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <TextField label="描述" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <TextField label="Base URL" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
-          <FormControl>
-            <InputLabel>认证方式</InputLabel>
-            <Select value={form.authType} onChange={(e) => setForm({ ...form, authType: e.target.value })} label="认证方式">
-              <MenuItem value="NONE">无</MenuItem>
-              <MenuItem value="API_KEY">API Key</MenuItem>
-              <MenuItem value="BEARER_TOKEN">Bearer Token</MenuItem>
-              <MenuItem value="BASIC_AUTH">Basic Auth</MenuItem>
-            </Select>
-          </FormControl>
-          {form.authType !== 'NONE' && (
-            <TextField label="认证配置" value={form.authConfig} onChange={(e) => setForm({ ...form, authConfig: e.target.value })} helperText="API Key 或 Token" />
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setCreateOpen(false); resetSourceForm(); }}>取消</Button>
-          <Button variant="contained" onClick={handleSourceSubmit} disabled={createMutation.isPending || updateSourceMutation.isPending} sx={{ borderRadius: 10 }}>
-            {editingSourceId !== null ? '保存' : '创建'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Edit Tool Dialog */}
-      <Dialog open={editingTool !== null} onClose={() => setEditingTool(null)} maxWidth="md" fullWidth>
-        <DialogTitle>编辑工具</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
-          <TextField label="工具名" value={editingTool?.toolName || ''} onChange={(e) => setEditingTool((c) => c ? { ...c, toolName: e.target.value } : c)} />
-          <TextField label="描述" value={editingTool?.toolDescription || ''} onChange={(e) => setEditingTool((c) => c ? { ...c, toolDescription: e.target.value } : c)} />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField label="HTTP 方法" value={editingTool?.httpMethod || ''} onChange={(e) => setEditingTool((c) => c ? { ...c, httpMethod: e.target.value } : c)} />
-            <TextField label="路径" fullWidth value={editingTool?.path || ''} onChange={(e) => setEditingTool((c) => c ? { ...c, path: e.target.value } : c)} />
-          </Box>
-
-          {/* Parameters */}
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography sx={{ fontSize: 15, fontWeight: 600 }}>参数定义</Typography>
-              <IOSSegmentedControl value={parameterEditMode} onChange={setParameterEditMode} options={[{ value: 'table', label: '表格' }, { value: 'json', label: 'JSON' }]} />
-            </Box>
-            {parameterEditMode === 'table' ? (
-              <Box sx={{
-                backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-                borderRadius: 3, overflow: 'hidden',
-              }}>
-                {parseParameterRows(editingTool?.parameterSchema).map((row) => (
-                  <Box key={row.key} sx={{
-                    display: 'flex', gap: 1, alignItems: 'center', px: 2, py: 1,
-                    borderBottom: `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
-                  }}>
-                    <TextField size="small" placeholder="参数名" value={row.name} onChange={(e) => updateParameterRows((rows) => rows.map((r) => r.key === row.key ? { ...r, name: e.target.value } : r))} sx={{ flex: 1 }} />
-                    <Select size="small" value={row.type} onChange={(e) => updateParameterRows((rows) => rows.map((r) => r.key === row.key ? { ...r, type: e.target.value } : r))} sx={{ width: 100 }}>
-                      {['string', 'number', 'integer', 'boolean', 'array', 'object'].map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-                    </Select>
-                    <TextField size="small" placeholder="描述" value={row.description} onChange={(e) => updateParameterRows((rows) => rows.map((r) => r.key === row.key ? { ...r, description: e.target.value } : r))} sx={{ flex: 2 }} />
-                    <Switch size="small" checked={row.required} onChange={(_, v) => updateParameterRows((rows) => rows.map((r) => r.key === row.key ? { ...r, required: v } : r))} />
-                    <IconButton size="small" color="error" onClick={() => updateParameterRows((rows) => rows.filter((r) => r.key !== row.key))}>
-                      <Delete sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </Box>
-                ))}
-                <Box sx={{ p: 1.5 }}>
-                  <Button size="small" startIcon={<Add />} onClick={() => updateParameterRows((rows) => [...rows, { key: `new-${Date.now()}`, name: '', type: 'string', description: '', required: false }])}>
-                    添加参数
-                  </Button>
-                </Box>
-              </Box>
-            ) : (
-              <CodeEditor value={editingTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(v) => setEditingTool((c) => c ? { ...c, parameterSchema: v } : c)} height={200} />
-            )}
-          </Box>
-
-          {/* Response schema */}
-          <Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>响应 Schema</Typography>
-            <CodeEditor value={editingTool?.responseSchema || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, responseSchema: v } : c)} height={160} />
-          </Box>
-
-          {/* Example */}
-          <Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>调用示例</Typography>
-            <CodeEditor value={editingTool?.examplePayload || '{}'} onChange={(v) => setEditingTool((c) => c ? { ...c, examplePayload: v } : c)} height={140} />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditingTool(null)}>取消</Button>
-          <Button variant="contained" onClick={() => editingTool && updateToolMutation.mutate({
-            toolName: editingTool.toolName, toolDescription: editingTool.toolDescription,
-            httpMethod: editingTool.httpMethod, path: editingTool.path,
-            parameterSchema: editingTool.parameterSchema, responseSchema: editingTool.responseSchema,
-            examplePayload: editingTool.examplePayload, enabled: editingTool.enabled,
-          })} disabled={updateToolMutation.isPending} sx={{ borderRadius: 10 }}>保存</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Test Tool — side drawer */}
-      <Drawer
-        anchor="right"
-        open={testToolId !== null}
-        onClose={() => setTestToolId(null)}
-        PaperProps={{
-          sx: { width: { xs: '100%', md: 420 }, p: 3, borderRadius: '16px 0 0 16px' },
+      <CreateEditSourceDialog
+        open={createOpen}
+        initialSource={editingSource}
+        loading={createMutation.isPending || updateSourceMutation.isPending}
+        onClose={() => {
+          setCreateOpen(false);
+          setEditingSource(null);
         }}
-      >
-        <Typography sx={{ fontSize: 17, fontWeight: 600, mb: 2 }}>测试工具调用</Typography>
-        <CodeEditor value={testArgs} onChange={setTestArgs} height={160} />
-        <Button variant="contained" startIcon={<PlayArrow />} fullWidth
-          onClick={() => testToolId && testToolMutation.mutate({ id: testToolId, args: testArgs })}
-          sx={{ mt: 2, borderRadius: 10 }}>
-          执行
-        </Button>
-        {testResult && (
-          <Box sx={{
-            mt: 2, p: 2, borderRadius: 3,
-            backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-            maxHeight: 300, overflow: 'auto',
-          }}>
-            <Typography sx={{ fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{testResult}</Typography>
-          </Box>
-        )}
-      </Drawer>
+        onSubmit={handleSourceSubmit}
+      />
+
+      <EditToolDialog
+        open={editingTool !== null}
+        tool={editingTool}
+        isDark={isDark}
+        EditorComponent={CodeEditor}
+        loading={updateToolMutation.isPending}
+        onClose={() => setEditingTool(null)}
+        onSubmit={(payload) => editingTool && updateToolMutation.mutate({ id: editingTool.id, data: payload })}
+      />
+
+      <TestToolDrawer
+        open={testTool !== null}
+        toolId={testTool?.id || null}
+        isDark={isDark}
+        EditorComponent={CodeEditor}
+        onClose={() => setTestTool(null)}
+      />
     </Box>
   );
 }

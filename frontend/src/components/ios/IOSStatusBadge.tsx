@@ -33,7 +33,7 @@ export default function IOSStatusBadge({ label, status = 'default', dot = false 
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center',
-      px: 1, py: 0.25, borderRadius: 10,
+      px: 1, py: 0.25, borderRadius: 1.5,
       backgroundColor: `${color}18`,
     }}>
       <Typography sx={{ fontSize: 12, fontWeight: 600, color }}>{label}</Typography>

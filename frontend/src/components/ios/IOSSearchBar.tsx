@@ -37,7 +37,7 @@ export default function IOSSearchBar({ value, onChange, onSearch, placeholder = 
         flex: 1,
         display: 'flex', alignItems: 'center', gap: 0.75,
         backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
-        borderRadius: 2.5,
+        borderRadius: 2,
         px: 1.25, py: 0.75,
         transition: 'all 200ms cubic-bezier(0.25,0.46,0.45,0.94)',
       }}>

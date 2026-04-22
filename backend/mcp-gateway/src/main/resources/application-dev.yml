@@ -1,0 +1,26 @@
+server:
+  port: 8092
+
+spring:
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${APP_DATASOURCE_URL:jdbc:postgresql://localhost:5442/ai_rag_platform}
+    username: ${APP_DATASOURCE_USERNAME:postgres}
+    password: ${APP_DATASOURCE_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+
+logging:
+  level:
+    "[com.silver.ai.mcpgateway]": DEBUG
+
+redis:
+  sdk:
+    config:
+      host: ${APP_REDIS_HOST:localhost}
+      port: ${APP_REDIS_PORT:6379}
+      password: ${APP_REDIS_PASSWORD:}

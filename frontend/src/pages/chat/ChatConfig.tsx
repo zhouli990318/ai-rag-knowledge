@@ -39,7 +39,7 @@ export default memo(function ChatConfig({
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
       borderBottom: `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}`,
-      borderRadius: expanded ? '16px 16px 0 0' : 0,
+      borderRadius: expanded ? '10px 10px 0 0' : 0,
     }}>
       {/* Collapsed bar */}
       <Box

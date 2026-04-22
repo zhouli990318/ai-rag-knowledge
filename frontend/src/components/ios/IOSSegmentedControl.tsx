@@ -14,7 +14,7 @@ export default function IOSSegmentedControl({ value, onChange, options }: IOSSeg
     <Box sx={{
       display: 'inline-flex',
       backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
-      borderRadius: '9px',
+      borderRadius: '6px',
       padding: '2px',
       gap: '2px',
     }}>
@@ -26,7 +26,7 @@ export default function IOSSegmentedControl({ value, onChange, options }: IOSSeg
             onClick={() => onChange(opt.value)}
             sx={{
               px: 2, py: 0.5,
-              borderRadius: '7px',
+              borderRadius: '4px',
               fontSize: 13, fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 200ms cubic-bezier(0.25,0.46,0.45,0.94)',

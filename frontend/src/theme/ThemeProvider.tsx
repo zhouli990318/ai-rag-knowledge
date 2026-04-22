@@ -49,7 +49,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
           overline: { fontSize: 11, fontWeight: 400, letterSpacing: 0.07, textTransform: 'uppercase' },
           button: { textTransform: 'none', fontWeight: 600, fontSize: 17, letterSpacing: -0.41 },
         },
-        shape: { borderRadius: 14 },
+        shape: { borderRadius: 8 },
         transitions: {
           easing: { easeInOut: iosEasing, easeOut: iosEasing, easeIn: iosEasing, sharp: iosEasing },
           duration: { shortest: 150, shorter: 200, short: 250, standard: 300, complex: 375, enteringScreen: 300, leavingScreen: 250 },
@@ -67,7 +67,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
           MuiButton: {
             styleOverrides: {
               root: {
-                borderRadius: 12, padding: '10px 20px', boxShadow: 'none',
+                borderRadius: 8, padding: '10px 20px', boxShadow: 'none',
                 transition: `all 200ms ${iosEasing}`,
                 '&:hover': { boxShadow: 'none' },
                 '&:active': { transform: 'scale(0.97)', opacity: 0.85 },
@@ -86,23 +86,23 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
               root: {
                 backgroundImage: 'none',
                 boxShadow: isDark ? '0 2px 16px rgba(0,0,0,0.4)' : '0 1px 10px rgba(0,0,0,0.06)',
-                borderRadius: 16, transition: `all 300ms ${iosEasing}`,
+                borderRadius: 12, transition: `all 300ms ${iosEasing}`,
               },
             },
           },
-          MuiPaper: { styleOverrides: { root: { backgroundImage: 'none', borderRadius: 16 } } },
+          MuiPaper: { styleOverrides: { root: { backgroundImage: 'none', borderRadius: 12 } } },
           MuiDialog: {
             styleOverrides: {
               paper: {
-                borderRadius: 20, backgroundImage: 'none',
+                borderRadius: 14, backgroundImage: 'none',
                 backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF',
                 boxShadow: isDark ? '0 20px 60px rgba(0,0,0,0.6)' : '0 20px 60px rgba(0,0,0,0.15)',
               },
             },
           },
-          MuiDialogTitle: { styleOverrides: { root: { fontSize: 17, fontWeight: 600, textAlign: 'center', padding: '20px 24px 8px' } } },
+          MuiDialogTitle: { styleOverrides: { root: { fontSize: 17, fontWeight: 600, textAlign: 'center', padding: '16px 24px 8px' } } },
           MuiDialogContent: { styleOverrides: { root: { padding: '16px 24px' } } },
-          MuiDialogActions: { styleOverrides: { root: { padding: '8px 24px 20px', gap: 8 } } },
+          MuiDialogActions: { styleOverrides: { root: { padding: '8px 24px 16px', gap: 8 } } },
           MuiDrawer: {
             styleOverrides: {
               paper: {
@@ -126,7 +126,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
             styleOverrides: {
               root: {
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 12,
+                  borderRadius: 8,
                   backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
                   '& fieldset': { borderColor: 'transparent' },
                   '&:hover fieldset': { borderColor: 'transparent' },
@@ -135,11 +135,11 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
               },
             },
           },
-          MuiSelect: { styleOverrides: { root: { borderRadius: 12 } } },
+          MuiSelect: { styleOverrides: { root: { borderRadius: 8 } } },
           MuiOutlinedInput: {
             styleOverrides: {
               root: {
-                borderRadius: 12,
+                borderRadius: 8,
                 backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
                 '& fieldset': { borderColor: 'transparent' },
                 '&:hover fieldset': { borderColor: 'transparent' },
@@ -149,7 +149,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
           },
           MuiChip: {
             styleOverrides: {
-              root: { borderRadius: 20, fontWeight: 500, fontSize: 13 },
+              root: { borderRadius: 12, fontWeight: 500, fontSize: 13 },
               sizeSmall: { height: 24, fontSize: 12 },
             },
           },
@@ -176,7 +176,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
           MuiListItemButton: {
             styleOverrides: {
               root: {
-                borderRadius: 10, transition: `all 200ms ${iosEasing}`,
+                borderRadius: 6, transition: `all 200ms ${iosEasing}`,
                 '&.Mui-selected': { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,122,255,0.08)' },
                 '&:active': { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)' },
               },
@@ -204,7 +204,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
               root: {
                 minHeight: 32,
                 backgroundColor: isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)',
-                borderRadius: 9, padding: 2,
+                borderRadius: 6, padding: 2,
               },
               indicator: { display: 'none' },
             },
@@ -212,7 +212,7 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
           MuiTab: {
             styleOverrides: {
               root: {
-                minHeight: 28, borderRadius: 7, textTransform: 'none',
+                minHeight: 28, borderRadius: 5, textTransform: 'none',
                 fontSize: 13, fontWeight: 600, padding: '4px 12px',
                 transition: `all 200ms ${iosEasing}`,
                 '&.Mui-selected': {

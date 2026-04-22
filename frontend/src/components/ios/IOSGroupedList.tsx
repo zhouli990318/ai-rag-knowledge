@@ -20,7 +20,7 @@ export default function IOSGroupedList({ header, footer, items, children }: IOSG
   const isDark = theme.palette.mode === 'dark';
 
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box sx={{ mb: 2.5 }}>
       {header && (
         <Typography sx={{
           fontSize: 13, fontWeight: 400, color: 'text.secondary',
@@ -32,7 +32,7 @@ export default function IOSGroupedList({ header, footer, items, children }: IOSG
       )}
       <Box sx={{
         backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-        borderRadius: 2.5,
+        borderRadius: 2,
         overflow: 'hidden',
       }}>
         {items ? items.map((item, i) => (

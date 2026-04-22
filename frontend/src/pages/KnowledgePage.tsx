@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, IconButton, Grid, LinearProgress,
@@ -36,6 +36,86 @@ function statusType(s: string) {
   switch (s) { case 'INDEXED': return 'success' as const; case 'PROCESSING': return 'warning' as const; case 'FAILED': return 'error' as const; default: return 'default' as const; }
 }
 
+type KnowledgeFormState = {
+  name: string;
+  description: string;
+  chunkSize: number;
+  chunkOverlap: number;
+};
+
+function CreateKnowledgeBaseDialog({
+  open,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (payload: KnowledgeFormState) => void;
+}) {
+  const [form, setForm] = useState<KnowledgeFormState>({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setForm({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 });
+  }, [open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>新建知识库</DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+        <TextField label="名称" required value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} />
+        <TextField label="描述" multiline rows={2} value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField type="number" label="分块大小" value={form.chunkSize} onChange={(e) => setForm((current) => ({ ...current, chunkSize: Number(e.target.value) }))} />
+          <TextField type="number" label="分块重叠" value={form.chunkOverlap} onChange={(e) => setForm((current) => ({ ...current, chunkOverlap: Number(e.target.value) }))} />
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>取消</Button>
+        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 8 }}>创建</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function GitImportDialog({
+  open,
+  loading,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (gitUrl: string) => void;
+}) {
+  const [gitUrl, setGitUrl] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setGitUrl('');
+  }, [open]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Git 仓库导入</DialogTitle>
+      <DialogContent sx={{ pt: '16px !important' }}>
+        <TextField fullWidth label="Git 仓库 URL" value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} placeholder="https://github.com/..." />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>取消</Button>
+        <Button variant="contained" onClick={() => onSubmit(gitUrl)} disabled={loading} sx={{ borderRadius: 8 }}>导入</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function KnowledgePage() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -46,11 +126,9 @@ export default function KnowledgePage() {
   const [selectedKb, setSelectedKb] = useState<KnowledgeBase | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [gitUrl, setGitUrl] = useState('');
   const [gitOpen, setGitOpen] = useState(false);
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [actionSheetKb, setActionSheetKb] = useState<KnowledgeBase | null>(null);
-  const [form, setForm] = useState({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 });
 
   const { data: kbs = [], isLoading } = useQuery({ queryKey: ['knowledgeBases'], queryFn: knowledgeApi.list });
   const { data: documents = [], refetch: refetchDocs } = useQuery({
@@ -101,17 +179,24 @@ export default function KnowledgePage() {
     setSearchResults(results);
   };
 
-  const handleCreate = () => {
-    if (!form.name.trim()) { enqueueSnackbar('请输入名称', { variant: 'warning' }); return; }
-    createMutation.mutate({ name: form.name.trim(), description: form.description.trim(), chunkSize: form.chunkSize, chunkOverlap: form.chunkOverlap });
+  const handleCreate = (payload: KnowledgeFormState) => {
+    if (!payload.name.trim()) { enqueueSnackbar('请输入名称', { variant: 'warning' }); return; }
+    createMutation.mutate({
+      name: payload.name.trim(),
+      description: payload.description.trim(),
+      chunkSize: payload.chunkSize,
+      chunkOverlap: payload.chunkOverlap,
+    });
   };
 
+  const openCreateDialog = () => setCreateOpen(true);
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h5">知识库</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={() => { setForm({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 }); setCreateOpen(true); }} sx={{ borderRadius: 10 }}>
+        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 8 }}>
           新建
         </Button>
       </Box>
@@ -120,9 +205,9 @@ export default function KnowledgePage() {
 
       {/* KB Cards */}
       {kbs.length === 0 && !isLoading ? (
-        <IOSEmptyState icon={<FolderOpen />} title="暂无知识库" subtitle="创建知识库来管理文档和向量检索" action={{ label: '新建知识库', onClick: () => setCreateOpen(true) }} />
+        <IOSEmptyState icon={<FolderOpen />} title="暂无知识库" subtitle="创建知识库来管理文档和向量检索" action={{ label: '新建知识库', onClick: openCreateDialog }} />
       ) : (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid container spacing={2} sx={{ mb: 2.5 }}>
           {kbs.map((kb: KnowledgeBase) => {
             const isActive = selectedKb?.id === kb.id;
             return (
@@ -133,7 +218,7 @@ export default function KnowledgePage() {
                     onContextMenu={(e) => { e.preventDefault(); setActionSheetKb(kb); }}
                     sx={{
                       cursor: 'pointer',
-                      borderRadius: 4,
+                      borderRadius: 3,
                       overflow: 'hidden',
                       border: isActive ? `2px solid #007AFF` : `2px solid transparent`,
                       backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
@@ -183,7 +268,7 @@ export default function KnowledgePage() {
           >
             <Box sx={{
               backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-              borderRadius: 4, p: 3,
+              borderRadius: 3, p: 2.5,
               boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 2px 16px rgba(0,0,0,0.06)',
             }}>
               {/* Detail header */}
@@ -193,8 +278,8 @@ export default function KnowledgePage() {
                   <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{selectedKb.description}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button size="small" variant="outlined" startIcon={<GitHub />} onClick={() => setGitOpen(true)} sx={{ borderRadius: 10 }}>Git 导入</Button>
-                  <Button size="small" variant="outlined" color="secondary" startIcon={<Autorenew />} onClick={() => setRebuildOpen(true)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 10 }}>重建向量</Button>
+                  <Button size="small" variant="outlined" startIcon={<GitHub />} onClick={() => setGitOpen(true)} sx={{ borderRadius: 8 }}>Git 导入</Button>
+                  <Button size="small" variant="outlined" color="secondary" startIcon={<Autorenew />} onClick={() => setRebuildOpen(true)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 8 }}>重建向量</Button>
                   <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(selectedKb.id)}><Delete /></IconButton>
                 </Box>
               </Box>
@@ -202,7 +287,7 @@ export default function KnowledgePage() {
               {/* Upload zone */}
               <Box {...getRootProps()} sx={{
                 border: `2px dashed ${isDragActive ? '#007AFF' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)')}`,
-                borderRadius: 3, p: 4, textAlign: 'center', mb: 2.5, cursor: 'pointer',
+                borderRadius: 2, p: 4, textAlign: 'center', mb: 2.5, cursor: 'pointer',
                 backgroundColor: isDragActive ? (isDark ? 'rgba(0,122,255,0.1)' : 'rgba(0,122,255,0.04)') : 'transparent',
                 transition: 'all 200ms',
               }}>
@@ -223,7 +308,7 @@ export default function KnowledgePage() {
               {searchResults.length > 0 && (
                 <Box sx={{
                   backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-                  borderRadius: 3, p: 2, mb: 2.5, maxHeight: 240, overflow: 'auto',
+                  borderRadius: 2, p: 2, mb: 2.5, maxHeight: 240, overflow: 'auto',
                 }}>
                   {searchResults.map((r, i) => (
                     <Box key={i} sx={{
@@ -243,7 +328,7 @@ export default function KnowledgePage() {
               </Typography>
               <Box sx={{
                 backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
-                borderRadius: 3, overflow: 'hidden',
+                borderRadius: 2, overflow: 'hidden',
               }}>
                 {documents.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -253,7 +338,7 @@ export default function KnowledgePage() {
                   documents.map((d: KbDocument, i: number) => (
                     <Box key={d.id} sx={{
                       display: 'flex', alignItems: 'center', gap: 1.5,
-                      px: 2, py: 1.25,
+                      px: 2, py: 1.5,
                       borderBottom: i < documents.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` : 'none',
                     }}>
                       <Description sx={{ fontSize: 20, color: 'text.secondary' }} />
@@ -289,34 +374,14 @@ export default function KnowledgePage() {
         ]}
       />
 
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>新建知识库</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
-          <TextField label="名称" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <TextField label="描述" multiline rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField type="number" label="分块大小" value={form.chunkSize} onChange={(e) => setForm({ ...form, chunkSize: Number(e.target.value) })} />
-            <TextField type="number" label="分块重叠" value={form.chunkOverlap} onChange={(e) => setForm({ ...form, chunkOverlap: Number(e.target.value) })} />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>取消</Button>
-          <Button variant="contained" onClick={handleCreate} sx={{ borderRadius: 10 }}>创建</Button>
-        </DialogActions>
-      </Dialog>
+      <CreateKnowledgeBaseDialog open={createOpen} loading={createMutation.isPending} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} />
 
-      {/* Git import dialog */}
-      <Dialog open={gitOpen} onClose={() => setGitOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Git 仓库导入</DialogTitle>
-        <DialogContent sx={{ pt: '16px !important' }}>
-          <TextField fullWidth label="Git 仓库 URL" value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} placeholder="https://github.com/..." />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setGitOpen(false)}>取消</Button>
-          <Button variant="contained" onClick={() => gitImportMutation.mutate(gitUrl)} sx={{ borderRadius: 10 }}>导入</Button>
-        </DialogActions>
-      </Dialog>
+      <GitImportDialog
+        open={gitOpen}
+        loading={gitImportMutation.isPending}
+        onClose={() => setGitOpen(false)}
+        onSubmit={(gitRepoUrl) => gitImportMutation.mutate(gitRepoUrl)}
+      />
 
       {/* Rebuild confirm */}
       <Dialog open={rebuildOpen} onClose={() => !rebuildMutation.isPending && setRebuildOpen(false)} maxWidth="xs" fullWidth>
@@ -328,7 +393,7 @@ export default function KnowledgePage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRebuildOpen(false)} disabled={rebuildMutation.isPending}>取消</Button>
-          <Button variant="contained" color="secondary" onClick={() => selectedKb && rebuildMutation.mutate(selectedKb.id)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 10 }}>
+          <Button variant="contained" color="secondary" onClick={() => selectedKb && rebuildMutation.mutate(selectedKb.id)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 8 }}>
             开始重建
           </Button>
         </DialogActions>

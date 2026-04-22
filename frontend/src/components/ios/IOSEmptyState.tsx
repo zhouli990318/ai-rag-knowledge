@@ -27,7 +27,7 @@ export default function IOSEmptyState({ icon, title, subtitle, action }: IOSEmpt
         <Button
           variant="contained"
           onClick={action.onClick}
-          sx={{ mt: 3, borderRadius: 10, px: 3 }}
+          sx={{ mt: 3, borderRadius: 2, px: 3 }}
         >
           {action.label}
         </Button>

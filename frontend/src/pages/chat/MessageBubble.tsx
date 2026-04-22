@@ -29,7 +29,7 @@ export default memo(function MessageBubble({ role, content, isStreaming, showTim
           maxWidth: { xs: '88%', md: '72%' },
           minWidth: 40,
           px: 2, py: 1.25,
-          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
           backgroundColor: isUser
             ? '#007AFF'
             : (isDark ? '#26252A' : '#E9E9EB'),

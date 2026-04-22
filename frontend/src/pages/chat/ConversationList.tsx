@@ -35,8 +35,8 @@ const ConversationItem = memo(function ConversationItem({
       onClick={() => onSelect(conversation.id)}
       sx={{
         display: 'flex', alignItems: 'flex-start',
-        px: 1.5, py: 1.25, mb: 0.25,
-        borderRadius: 2.5, cursor: 'pointer', position: 'relative',
+        px: 1.5, py: 1.5, mb: 0.25,
+        borderRadius: 2, cursor: 'pointer', position: 'relative',
         backgroundColor: isActive
           ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,122,255,0.08)')
           : 'transparent',

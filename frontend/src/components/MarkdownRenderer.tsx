@@ -54,7 +54,7 @@ export default memo(function MarkdownRenderer({ content }: Props) {
             style={oneDark}
             language={match[1]}
             PreTag="div"
-            customStyle={{ borderRadius: 12, fontSize: 13, margin: '8px 0' }}
+            customStyle={{ borderRadius: 8, fontSize: 13, margin: '8px 0' }}
           >
             {code}
           </SyntaxHighlighter>
@@ -62,7 +62,7 @@ export default memo(function MarkdownRenderer({ content }: Props) {
           <code
             style={{
               background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
-              borderRadius: 6,
+              borderRadius: 4,
               padding: '2px 6px',
               fontSize: '0.875em',
             }}

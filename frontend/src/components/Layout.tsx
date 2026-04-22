@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Typography, IconButton, useTheme, useMediaQuery,
@@ -9,7 +8,6 @@ import {
   Settings as SettingsIcon, DarkMode, LightMode,
 } from '@mui/icons-material';
 import { useThemeStore } from '../stores/themeStore';
-import { motion, AnimatePresence } from 'framer-motion';
 
 const navItems = [
   { label: '对话', path: '/chat', icon: <ChatIcon /> },
@@ -24,7 +22,6 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { mode, toggle: toggleMode } = useThemeStore();
-  const [hovered, setHovered] = useState(false);
 
   const currentIndex = navItems.findIndex((n) => location.pathname.startsWith(n.path));
 
@@ -54,36 +51,20 @@ export default function Layout() {
     );
   }
 
-  // Desktop: macOS-style sidebar
-  const sidebarWidth = hovered ? 220 : 72;
-
+  // Desktop: fixed sidebar
   return (
     <Box sx={{ display: 'flex', height: '100dvh' }}>
-      <motion.div
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        animate={{ width: sidebarWidth }}
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-        style={{
-          flexShrink: 0, overflow: 'hidden',
+      <Box
+        sx={{
+          width: 200, flexShrink: 0, overflow: 'hidden',
           borderRight: `0.5px solid ${theme.palette.divider}`,
           background: theme.palette.mode === 'dark' ? 'rgba(28,28,30,0.85)' : 'rgba(242,242,247,0.85)',
           backdropFilter: 'blur(40px)',
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <Box sx={{ pt: 3, pb: 2, px: hovered ? 2 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <AnimatePresence mode="wait">
-            {hovered ? (
-              <motion.div key="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>AI RAG</Typography>
-              </motion.div>
-            ) : (
-              <motion.div key="dot" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'primary.main' }} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <Box sx={{ pt: 3, pb: 2, px: 2, display: 'flex', alignItems: 'center' }}>
+          <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>AI RAG</Typography>
         </Box>
 
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, px: 1, pt: 1 }}>
@@ -95,9 +76,9 @@ export default function Layout() {
                 onClick={() => navigate(n.path)}
                 sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
-                  px: hovered ? 1.5 : 0, py: 1.2,
-                  justifyContent: hovered ? 'flex-start' : 'center',
-                  borderRadius: 2.5, cursor: 'pointer',
+                  px: 1.5, py: 1.2,
+                  justifyContent: 'flex-start',
+                  borderRadius: 2, cursor: 'pointer',
                   position: 'relative',
                   bgcolor: active
                     ? theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,122,255,0.08)'
@@ -116,18 +97,9 @@ export default function Layout() {
                   }} />
                 )}
                 {n.icon}
-                <AnimatePresence>
-                  {hovered && (
-                    <motion.span
-                      initial={{ opacity: 0, width: 0 }}
-                      animate={{ opacity: 1, width: 'auto' }}
-                      exit={{ opacity: 0, width: 0 }}
-                      style={{ whiteSpace: 'nowrap', fontSize: 15, fontWeight: active ? 600 : 400 }}
-                    >
-                      {n.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+                <span style={{ whiteSpace: 'nowrap', fontSize: 15, fontWeight: active ? 600 : 400 }}>
+                  {n.label}
+                </span>
               </Box>
             );
           })}
@@ -138,7 +110,7 @@ export default function Layout() {
             {mode === 'dark' ? <LightMode fontSize="small" /> : <DarkMode fontSize="small" />}
           </IconButton>
         </Box>
-      </motion.div>
+      </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         <Outlet />

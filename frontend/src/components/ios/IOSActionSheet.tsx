@@ -60,7 +60,7 @@ export default function IOSActionSheet({ open, onClose, title, message, actions,
               backgroundColor: bgColor,
               backdropFilter: 'blur(40px)',
               WebkitBackdropFilter: 'blur(40px)',
-              borderRadius: '14px',
+              borderRadius: '10px',
               overflow: 'hidden',
             }}>
               {(title || message) && (
@@ -99,13 +99,13 @@ export default function IOSActionSheet({ open, onClose, title, message, actions,
               backgroundColor: bgColor,
               backdropFilter: 'blur(40px)',
               WebkitBackdropFilter: 'blur(40px)',
-              borderRadius: '14px',
+              borderRadius: '10px',
               mb: 1,
             }}>
               <Button
                 fullWidth
                 onClick={onClose}
-                sx={{ py: 1.5, fontSize: 20, fontWeight: 600, color: '#007AFF', borderRadius: '14px' }}
+                sx={{ py: 1.5, fontSize: 20, fontWeight: 600, color: '#007AFF', borderRadius: '10px' }}
               >
                 取消
               </Button>
