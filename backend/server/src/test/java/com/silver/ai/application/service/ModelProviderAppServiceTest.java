@@ -9,6 +9,9 @@ import com.silver.ai.infrastructure.ai.EmbeddingModelRegistry;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.util.CryptoUtil;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -18,6 +21,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class ModelProviderAppServiceTest {
@@ -58,16 +62,34 @@ class ModelProviderAppServiceTest {
     }
 
     @Test
-    void testConnectionShouldWrapSuccessfulResponse() {
+        void testConnectionShouldBypassRoutingPortAndWrapSuccessfulResponse() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
+        ChatModelRegistry chatModelRegistry = mock(ChatModelRegistry.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, chatModelPort,
-                mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        when(chatModelPort.chat(any(), any(), any(), any())).thenReturn("OK");
+            chatModelRegistry, mock(EmbeddingModelRegistry.class));
+        ModelProvider provider = ModelProvider.builder()
+            .id(2L)
+            .name("provider-a")
+            .providerType(ProviderType.OPENAI)
+            .enabled(true)
+            .defaultModel("gpt-4.1")
+            .build();
+        ChatModel chatModel = mock(ChatModel.class);
+        ChatResponse response = mock(ChatResponse.class, RETURNS_DEEP_STUBS);
+
+        when(repository.findById(2L)).thenReturn(Mono.just(provider));
+        when(repository.save(any(ModelProvider.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        when(chatModelRegistry.getWithModel(eq(provider), eq("gpt-4.1"))).thenReturn(chatModel);
+        when(response.getResult().getOutput().getText()).thenReturn("OK");
+        when(chatModel.call(any(Prompt.class))).thenReturn(response);
 
         String result = service.testConnection(2L).block();
 
         assertEquals("\u8fde\u63a5\u6210\u529f: OK", result);
+        verify(chatModelPort, never()).chat(any(), any(), any(), any());
+        verify(repository).save(provider);
+        assertEquals(ModelProvider.HealthStatus.HEALTHY, provider.getHealthStatus());
     }
 
     @Test

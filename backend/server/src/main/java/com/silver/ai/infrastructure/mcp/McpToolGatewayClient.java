@@ -69,6 +69,29 @@ public class McpToolGatewayClient {
         }
     }
 
+    /**
+     * 获取所有可用于工具注入的 MCP 源：active=true 且 healthStatus != UNREACHABLE。
+     * 失败时返回空列表，不中断对话流程。
+     */
+    public List<Long> listActiveSourceIds() {
+        try {
+            Response<McpGatewayResponse<List<ApiSourceLite>>> response = api.listSources().execute();
+            if (!response.isSuccessful() || response.body() == null || response.body().data() == null) {
+                log.warn("Failed to list MCP sources: HTTP {}", response.code());
+                return Collections.emptyList();
+            }
+            return response.body().data().stream()
+                    .filter(s -> Boolean.TRUE.equals(s.active()))
+                    .filter(s -> !"UNREACHABLE".equalsIgnoreCase(s.healthStatus()))
+                    .map(ApiSourceLite::id)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        } catch (IOException ex) {
+            log.warn("List active MCP sources failed: {}", ex.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
     public String invokeTool(Long toolId, String arguments) {
         try {
             Response<McpGatewayResponse<String>> response =

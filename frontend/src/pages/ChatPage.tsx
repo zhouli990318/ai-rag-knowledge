@@ -1,15 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Box, useTheme, useMediaQuery } from '@mui/material';
+import { Box } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '../api/chatApi';
-import { mcpGatewayApi } from '../api/mcpApi';
-import { providerApi } from '../api/providerApi';
-import { knowledgeApi } from '../api/knowledgeApi';
 import { useChatStore } from '../stores/chatStore';
-import { ChatMessage, Conversation, KnowledgeBase, McpApiSource, Provider } from '../api/types';
+import { useChatConfigStore } from '../stores/chatConfigStore';
+import { ChatMessage, Conversation } from '../api/types';
 import { useSnackbar } from 'notistack';
 import ConversationList from './chat/ConversationList';
-import ChatConfig from './chat/ChatConfig';
 import ChatInput from './chat/ChatInput';
 import MessageArea from './chat/MessageArea';
 
@@ -21,46 +18,49 @@ type DisplayMessage = Pick<ChatMessage, 'role' | 'content'> & {
 export default function ChatPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const isDark = theme.palette.mode === 'dark';
 
   const { activeConversationId, setActiveConversation } = useChatStore();
+  const { selectedProvider, selectedKb, setSelectedProvider, setSelectedKb, resetConfig, toolMode, selectedMcpServers } = useChatConfigStore();
+
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState('');
-  const [selectedProvider, setSelectedProvider] = useState<number>(0);
-  const [selectedKb, setSelectedKb] = useState<number>(0);
-  const [selectedMcpServers, setSelectedMcpServers] = useState<number[]>([]);
   const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
-  const [showList, setShowList] = useState(true); // mobile: toggle list vs chat
   const abortControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const rafRef = useRef(0);
 
   // Cleanup stream on unmount
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
+      cancelAnimationFrame(rafRef.current);
       abortControllerRef.current?.abort();
     };
   }, []);
 
+  // Abort stream and clear state when switching conversations
+  useEffect(() => {
+    abortControllerRef.current?.abort();
+    setStreaming(false);
+    setStreamContent('');
+    setOptimisticMessages([]);
+  }, [activeConversationId]);
+
   const { data: conversations = [], isLoading: convsLoading } = useQuery({ queryKey: ['conversations'], queryFn: chatApi.getConversations });
-  const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
-  const { data: kbs = [] } = useQuery({ queryKey: ['knowledgeBases'], queryFn: knowledgeApi.list });
-  const { data: mcpSources = [] } = useQuery({ queryKey: ['mcp-sources'], queryFn: mcpGatewayApi.listSources });
   const { data: activeConv } = useQuery({
     queryKey: ['conversation', activeConversationId],
     queryFn: () => chatApi.getConversation(activeConversationId!),
     enabled: !!activeConversationId,
   });
 
-  const enabledProviders = useMemo(() => providers.filter((p: Provider) => p.enabled), [providers]);
-  const activeMcpSources = useMemo(() => mcpSources.filter((s: McpApiSource) => s.active), [mcpSources]);
-
+  // Sync config from active conversation
   useEffect(() => {
-    if (enabledProviders.length > 0 && !selectedProvider) {
-      setSelectedProvider(enabledProviders[0].id);
-    }
-  }, [enabledProviders.length, enabledProviders, selectedProvider]);
+    if (!activeConv) return;
+    if (activeConv.providerId) setSelectedProvider(activeConv.providerId);
+    setSelectedKb(activeConv.knowledgeBaseId ?? 0);
+  }, [activeConv?.id, setSelectedProvider, setSelectedKb]);
 
   useEffect(() => {
     if (!streaming && activeConv?.messages?.length) {
@@ -68,14 +68,6 @@ export default function ChatPage() {
       if (streamContent) setStreamContent('');
     }
   }, [activeConv?.messages, streaming, streamContent]);
-
-  useEffect(() => {
-    if (!activeConv) return;
-    if (activeConv.providerId) setSelectedProvider(activeConv.providerId);
-    setSelectedKb(activeConv.knowledgeBaseId ?? 0);
-    setSelectedMcpServers(activeConv.mcpServerIds ?? []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConv?.id, activeConv?.providerId, activeConv?.knowledgeBaseId]);
 
   const deleteMutation = useMutation({
     mutationFn: chatApi.deleteConversation,
@@ -92,20 +84,23 @@ export default function ChatPage() {
   const resetDraft = useCallback(() => {
     setOptimisticMessages([]);
     setStreamContent('');
-    setSelectedKb(0);
-    setSelectedMcpServers([]);
+    resetConfig();
     setActiveConversation(null);
-  }, [setActiveConversation]);
+  }, [setActiveConversation, resetConfig]);
 
   const handleSend = async () => {
-    if (!input.trim() || !selectedProvider || streaming) return;
+    if (streaming) return;
+    if (!input.trim()) return;
+    if (!selectedProvider) {
+      enqueueSnackbar('请先在右侧配置中选择一个已启用的模型', { variant: 'warning' });
+      return;
+    }
     const message = input.trim();
+    const localMsgId = `local-user-${Date.now()}`;
     setInput('');
     setStreaming(true);
     setStreamContent('');
-    setOptimisticMessages((cur) => [...cur, { id: `local-user-${Date.now()}`, role: 'USER', content: message }]);
-
-    if (isMobile) setShowList(false);
+    setOptimisticMessages((cur) => [...cur, { id: localMsgId, role: 'USER', content: message }]);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -117,7 +112,8 @@ export default function ChatPage() {
         knowledgeBaseId: selectedKb || undefined,
         message,
         systemPrompt: selectedKb > 0 ? '请优先根据知识库内容回答。' : undefined,
-        mcpServerIds: selectedMcpServers,
+        toolMode,
+        mcpServerIds: toolMode === 'SPECIFIC' ? selectedMcpServers : undefined,
       }, controller.signal);
 
       if (!res.ok) throw new Error('Stream failed');
@@ -125,36 +121,51 @@ export default function ChatPage() {
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
-      let rafId = 0;
       let pendingUpdate = false;
+      let buffer = '';
 
       const flushContent = () => {
-        setStreamContent(fullContent);
+        if (mountedRef.current) setStreamContent(fullContent);
         pendingUpdate = false;
+      };
+
+      // 解析单个 SSE data 行：仅去除协议分隔符，不裁剪内容空白
+      const parseDataLine = (line: string): string | null => {
+        if (!line.startsWith('data:')) return null;
+        // SSE 规范允许 "data:xxx" 或 "data: xxx"，仅移除一个可选前导空格
+        let content = line.slice(5);
+        if (content.startsWith(' ')) content = content.slice(1);
+        return content;
       };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = line.slice(5).trim();
-            if (data === '[DONE]') continue;
-            fullContent += data;
-            if (!pendingUpdate) {
-              pendingUpdate = true;
-              rafId = requestAnimationFrame(flushContent);
-            }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n');
+        buffer = parts.pop() || '';
+        for (const line of parts) {
+          // 跳过事件分隔空行和其他 SSE 字段（event:、id:、retry:）
+          if (line === '' || line.startsWith(':')) continue;
+          const data = parseDataLine(line);
+          if (data === null) continue;
+          if (data === '[DONE]') continue;
+          fullContent += data;
+          if (!pendingUpdate) {
+            pendingUpdate = true;
+            rafRef.current = requestAnimationFrame(flushContent);
           }
         }
       }
-      cancelAnimationFrame(rafId);
-      setStreamContent(fullContent);
+      // process remaining buffer
+      const tailData = parseDataLine(buffer);
+      if (tailData !== null && tailData !== '[DONE]') {
+        fullContent += tailData;
+      }
+      cancelAnimationFrame(rafRef.current);
+      if (mountedRef.current) setStreamContent(fullContent);
 
       if (!activeConversationId) {
-        // New conversation created by backend during streaming — fetch and link
         await queryClient.refetchQueries({ queryKey: ['conversations'] });
         const updatedConvs = queryClient.getQueryData<Conversation[]>(['conversations']);
         if (updatedConvs && updatedConvs.length > 0) {
@@ -166,7 +177,7 @@ export default function ChatPage() {
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        setOptimisticMessages((cur) => cur.filter((m) => m.content !== message || m.role !== 'USER'));
+        setOptimisticMessages((cur) => cur.filter((m) => m.id !== localMsgId));
         setStreamContent('');
         enqueueSnackbar(e.message || '发送失败', { variant: 'error' });
       }
@@ -183,8 +194,7 @@ export default function ChatPage() {
 
   const handleSelectConversation = useCallback((id: number) => {
     setActiveConversation(id);
-    if (isMobile) setShowList(false);
-  }, [setActiveConversation, isMobile]);
+  }, [setActiveConversation]);
 
   const handleDelete = useCallback((id: number) => deleteMutation.mutate(id), [deleteMutation]);
 
@@ -193,78 +203,23 @@ export default function ChatPage() {
     [activeConv?.messages, optimisticMessages],
   );
 
-  // ---------- MOBILE ----------
-  if (isMobile) {
-    if (showList) {
-      return (
-        <Box sx={{ height: '100%' }}>
-          <ConversationList
-            conversations={conversations}
-            activeId={activeConversationId}
-            onSelect={handleSelectConversation}
-            onDelete={handleDelete}
-            onNew={() => { resetDraft(); setShowList(false); }}
-            isLoading={convsLoading}
-          />
-        </Box>
-      );
-    }
-
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {/* Back button */}
-        <Box
-          onClick={() => setShowList(true)}
-          sx={{
-            px: 1, py: 0.75, cursor: 'pointer', display: 'flex', alignItems: 'center',
-            color: '#007AFF', fontSize: 17,
-            '&:active': { opacity: 0.6 },
-          }}
-        >
-          ‹ 对话列表
-        </Box>
-        <ChatConfig
-          selectedProvider={selectedProvider} setSelectedProvider={setSelectedProvider}
-          selectedKb={selectedKb} setSelectedKb={setSelectedKb}
-          selectedMcpServers={selectedMcpServers} setSelectedMcpServers={setSelectedMcpServers}
-          providers={enabledProviders} kbs={kbs} mcpSources={activeMcpSources}
-        />
-        <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} />
-        <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
-      </Box>
-    );
-  }
-
-  // ---------- DESKTOP ----------
   return (
-    <Box sx={{ display: 'flex', height: '100%' }}>
-      {/* Left panel */}
-      <Box sx={{
-        width: 280, flexShrink: 0,
-        borderRight: `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-        backgroundColor: isDark ? 'rgba(28,28,30,0.4)' : 'rgba(242,242,247,0.5)',
-      }}>
-        <ConversationList
-          conversations={conversations}
-          activeId={activeConversationId}
-          onSelect={handleSelectConversation}
-          onDelete={handleDelete}
-          onNew={resetDraft}
-          isLoading={convsLoading}
-        />
-      </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Top conversation tabs */}
+      <ConversationList
+        conversations={conversations}
+        activeId={activeConversationId}
+        onSelect={handleSelectConversation}
+        onDelete={handleDelete}
+        onNew={resetDraft}
+        isLoading={convsLoading}
+      />
 
-      {/* Right panel - chat */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <ChatConfig
-          selectedProvider={selectedProvider} setSelectedProvider={setSelectedProvider}
-          selectedKb={selectedKb} setSelectedKb={setSelectedKb}
-          selectedMcpServers={selectedMcpServers} setSelectedMcpServers={setSelectedMcpServers}
-          providers={enabledProviders} kbs={kbs} mcpSources={activeMcpSources}
-        />
-        <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} onNewChat={resetDraft} />
-        <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
-      </Box>
+      {/* Message area */}
+      <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
+
+      {/* Input */}
+      <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
     </Box>
   );
 }

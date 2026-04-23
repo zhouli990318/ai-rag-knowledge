@@ -28,8 +28,13 @@ public class McpToolCallbackService {
             new ParameterizedTypeReference<>() {
             };
 
+    private static final long ACTIVE_CACHE_TTL_MS = 30_000L;
+
     private final McpToolGatewayClient mcpToolGatewayClient;
     private final ObjectMapper objectMapper;
+
+    private volatile List<ToolCallback> cachedActiveCallbacks = Collections.emptyList();
+    private volatile long cachedActiveAt = 0L;
 
     public List<ToolCallback> getToolCallbacks(List<Long> sourceIds) {
         if (sourceIds == null || sourceIds.isEmpty()) {
@@ -43,6 +48,29 @@ public class McpToolCallbackService {
                 .filter(McpToolDefinition::enabled)
                 .map(this::createToolCallback)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 全局工具注入：汇总所有 active 且健康的 MCP 源工具。
+     * 带 30s 内存缓存，避免每轮对话都拉 Gateway。
+     */
+    public List<ToolCallback> getAllActiveToolCallbacks() {
+        long now = System.currentTimeMillis();
+        if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
+            return cachedActiveCallbacks;
+        }
+        synchronized (this) {
+            if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
+                return cachedActiveCallbacks;
+            }
+            List<Long> sourceIds = mcpToolGatewayClient.listActiveSourceIds();
+            List<ToolCallback> callbacks = getToolCallbacks(sourceIds);
+            cachedActiveCallbacks = callbacks;
+            cachedActiveAt = now;
+            log.debug("Refreshed global MCP tool cache: {} tools from {} sources",
+                    callbacks.size(), sourceIds.size());
+            return callbacks;
+        }
     }
 
     private Stream<McpToolDefinition> loadToolsSafely(Long sourceId) {

@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, IconButton, Switch, Select, MenuItem,
-  FormControl, InputLabel, LinearProgress, useTheme,
+  DialogActions, TextField, IconButton, Select, MenuItem,
+  FormControl, InputLabel, LinearProgress,
 } from '@mui/material';
 import { Add, Delete, CheckCircle, Edit, ChevronRight, Dns } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { providerApi } from '../api/providerApi';
 import { Provider, ProviderType } from '../api/types';
 import { useSnackbar } from 'notistack';
-import { IOSEmptyState, IOSStatusBadge } from '../components/ios';
+import { InkEmptyState, InkSwitch } from '../components/ink';
 import { motion } from 'framer-motion';
+import { ink, serifFont, radius } from '../theme/ThemeProvider';
 
 // Brand colors for provider types
 const providerColors: Record<string, string> = {
@@ -120,7 +121,7 @@ function ProviderDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 8 }}>
+        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 4 }}>
           {initialProvider ? '保存' : '创建'}
         </Button>
       </DialogActions>
@@ -129,8 +130,6 @@ function ProviderDialog({
 }
 
 export default function SettingsPage() {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -195,40 +194,46 @@ export default function SettingsPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+    <Box sx={{ p: { xs: 2, md: 2.5 }, pt: { xs: 7, md: 7 } }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography variant="h5">AI 供应商</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 8 }}>添加</Button>
+        <Typography variant="h5" sx={{ fontFamily: serifFont, color: ink.black }}>AI 供应商</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: radius.sm }}>添加</Button>
       </Box>
 
       {isLoading && <LinearProgress sx={{ mb: 2 }} />}
 
-      {/* Providers list — iOS Settings style */}
+      {/* Providers list */}
       {providers.length === 0 && !isLoading ? (
-        <IOSEmptyState icon={<Dns />} title="暂无供应商" subtitle="添加 AI 供应商来开始对话" action={{ label: '添加供应商', onClick: openCreateDialog }} />
+        <InkEmptyState icon={<Dns />} title="暂无供应商" subtitle="添加 AI 供应商来开始对话" action={{ label: '添加供应商', onClick: openCreateDialog }} />
       ) : (
         <Box sx={{
-          backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-          borderRadius: 3, overflow: 'hidden',
-          boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.05)',
+          backgroundColor: ink.glassBg,
+          backdropFilter: 'blur(12px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+          borderRadius: `${radius.md + 2}px`,
+          overflow: 'hidden',
+          border: `1px solid ${ink.glassBorder}`,
+          boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
         }}>
           {providers.map((p: Provider, i: number) => {
-            const brandColor = providerColors[p.providerType] || '#007AFF';
+            const brandColor = providerColors[p.providerType] || ink.gray;
             return (
               <motion.div key={p.id} whileTap={{ scale: 0.98 }}>
                 <Box sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
                   px: 2, py: 1.5,
-                  borderBottom: i < providers.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` : 'none',
+                  borderBottom: i < providers.length - 1 ? `0.5px solid ${ink.glassBorder}` : 'none',
                   cursor: 'pointer',
-                  '&:active': { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)' },
+                  transition: 'background-color 150ms ease-in-out',
+                  '&:hover': { backgroundColor: 'rgba(74,74,74,0.02)' },
+                  '&:active': { backgroundColor: 'rgba(74,74,74,0.04)' },
                 }}
                 onClick={() => openEditDialog(p)}
                 >
                   {/* Brand icon */}
                   <Box sx={{
-                    width: 36, height: 36, borderRadius: 2, flexShrink: 0,
+                    width: 36, height: 36, borderRadius: radius.sm, flexShrink: 0,
                     background: `linear-gradient(135deg, ${brandColor}, ${brandColor}BB)`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
@@ -239,8 +244,8 @@ export default function SettingsPage() {
 
                   {/* Info */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 17, fontWeight: 500 }}>{p.name}</Typography>
-                    <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+                    <Typography sx={{ fontSize: 15.5, fontWeight: 500, color: ink.black }}>{p.name}</Typography>
+                    <Typography sx={{ fontSize: 13, color: ink.lightGray }}>
                       {p.defaultModel || p.providerType}
                       {p.baseUrl && (() => { try { return ` · ${new URL(p.baseUrl).host}`; } catch { return ''; } })()}
                     </Typography>
@@ -248,18 +253,18 @@ export default function SettingsPage() {
 
                   {/* Actions */}
                   <IconButton size="small" onClick={(e) => { e.stopPropagation(); testMutation.mutate(p.id); }}
-                    sx={{ color: testMutation.isPending ? 'text.secondary' : '#34C759' }}>
+                    sx={{ color: testMutation.isPending ? ink.lightGray : ink.teal }}>
                     <CheckCircle sx={{ fontSize: 20 }} />
                   </IconButton>
 
-                  <Switch
+                  <InkSwitch
                     checked={p.enabled}
                     onChange={(e) => { e.stopPropagation(); toggleMutation.mutate(p.id); }}
                     onClick={(e) => e.stopPropagation()}
                   />
 
                   <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(p.id); }}
-                    sx={{ color: 'text.secondary', '&:hover': { color: '#FF3B30' } }}>
+                    sx={{ color: ink.lightGray, '&:hover': { color: ink.cinnabar } }}>
                     <Delete sx={{ fontSize: 18 }} />
                   </IconButton>
                 </Box>

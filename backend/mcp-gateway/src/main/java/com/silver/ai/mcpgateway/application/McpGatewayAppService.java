@@ -80,6 +80,22 @@ public class McpGatewayAppService {
         return apiSourceRepository.findAll();
     }
 
+    /**
+     * 切换源的 active 状态。
+     */
+    public Mono<ApiSource> toggleApiSourceActive(Long id) {
+        return apiSourceRepository.findById(id)
+                .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND)))
+                .flatMap(source -> {
+                    if (source.isActive()) {
+                        source.deactivate();
+                    } else {
+                        source.activate();
+                    }
+                    return apiSourceRepository.save(source);
+                });
+    }
+
     @Transactional
     public Mono<Void> deleteApiSource(Long id) {
         return toolMappingRepository.deleteByApiSourceId(id)

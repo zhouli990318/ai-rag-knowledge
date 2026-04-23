@@ -30,7 +30,8 @@ public class ChatController {
                         request.getMessage(),
                         request.getKnowledgeBaseId(),
                         request.getSystemPrompt(),
-                        request.getMcpServerIds()
+                        request.getMcpServerIds(),
+                        request.getToolMode()
                 )
                 .map(text -> ServerSentEvent.<String>builder().data(text).build())
                 .concatWith(Flux.just(ServerSentEvent.<String>builder()
@@ -46,7 +47,8 @@ public class ChatController {
                         request.getMessage(),
                         request.getKnowledgeBaseId(),
                         request.getSystemPrompt(),
-                        request.getMcpServerIds()
+                        request.getMcpServerIds(),
+                        request.getToolMode()
                 )
                 .map(text -> text + "\n");
     }
@@ -60,7 +62,8 @@ public class ChatController {
                 request.getMessage(),
                 request.getKnowledgeBaseId(),
                 request.getSystemPrompt(),
-                request.getMcpServerIds()
+                request.getMcpServerIds(),
+                request.getToolMode()
         ).map(ApiResponse::ok);
     }
 
@@ -77,5 +80,10 @@ public class ChatController {
     @DeleteMapping("/conversations/{id}")
     public Mono<ApiResponse<Void>> deleteConversation(@PathVariable Long id) {
         return chatAppService.deleteConversation(id).then(Mono.fromCallable(ApiResponse::ok));
+    }
+
+    @GetMapping("/conversations/{id}/suggestions")
+    public Mono<ApiResponse<List<String>>> getSuggestions(@PathVariable Long id) {
+        return chatAppService.generateSuggestions(id).map(ApiResponse::ok);
     }
 }

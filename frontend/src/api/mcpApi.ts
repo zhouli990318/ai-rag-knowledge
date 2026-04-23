@@ -1,5 +1,5 @@
 import { mcpApi } from './client';
-import { ApiResponse, McpApiSource, McpConnectionInfo, McpToolMapping } from './types';
+import { ApiResponse, McpApiSource, McpConnectionInfo, McpToolMapping, SourceHealth } from './types';
 
 const BASE = '/v1/mcp';
 
@@ -11,9 +11,12 @@ export const mcpGatewayApi = {
   createSource: (data: Record<string, unknown>) => mcpApi.post<ApiResponse<McpApiSource>>(`${BASE}/sources`, data).then((r) => r.data.data),
   updateSource: (id: number, data: Record<string, unknown>) => mcpApi.put<ApiResponse<McpApiSource>>(`${BASE}/sources/${id}`, data).then((r) => r.data.data),
   deleteSource: (id: number) => mcpApi.delete(`${BASE}/sources/${id}`),
+  toggleSourceActive: (id: number) => mcpApi.patch<ApiResponse<McpApiSource>>(`${BASE}/sources/${id}/toggle-active`).then((r) => r.data.data),
   parseSpec: (id: number, data: { openApiSpec?: string; openApiUrl?: string }) =>
     mcpApi.post<ApiResponse<McpToolMapping[]>>(`${BASE}/sources/${id}/parse`, data).then((r) => r.data.data),
   getTools: (id: number) => mcpApi.get<ApiResponse<McpToolMapping[]>>(`${BASE}/sources/${id}/tools`).then((r) => r.data.data),
   updateTool: (id: number, data: Record<string, unknown>) => mcpApi.put<ApiResponse<McpToolMapping>>(`${BASE}/tools/${id}`, data).then((r) => r.data.data),
   testTool: (id: number, args: string) => mcpApi.post<ApiResponse<string>>(`${BASE}/tools/${id}/test`, { arguments: args }).then((r) => r.data.data),
+  listSourcesHealth: () => mcpApi.get<ApiResponse<SourceHealth[]>>(`${BASE}/sources/health`).then((r) => r.data.data),
+  triggerHealthCheck: (id: number) => mcpApi.post<ApiResponse<SourceHealth>>(`${BASE}/sources/${id}/health-check`).then((r) => r.data.data),
 };

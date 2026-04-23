@@ -12,6 +12,7 @@ import com.silver.ai.shared.util.CryptoUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -105,12 +106,30 @@ public class ModelProviderAppService {
     }
 
     public Mono<String> testConnection(Long id) {
-        return Mono.fromCallable(() -> {
-            String response = chatModelPort.chat(id, null,
-                    List.of(new UserMessage("Hello, reply with 'OK' only.")), List.of());
-            return "连接成功: " + response;
-        }).subscribeOn(Schedulers.boundedElastic())
-        .onErrorMap(e -> new BusinessException(ErrorCode.PROVIDER_CONNECTION_FAILED, e.getMessage()));
+        return getProvider(id).flatMap(provider ->
+                Mono.fromCallable(() -> {
+                            long startTime = System.currentTimeMillis();
+                            var chatModel = chatModelRegistry.getWithModel(provider, provider.getDefaultModel());
+                            var response = chatModel.call(new Prompt(List.of(new UserMessage("Hello, reply with 'OK' only."))));
+                            long duration = System.currentTimeMillis() - startTime;
+                            return new ConnectionProbeResult(response.getResult().getOutput().getText(), duration);
+                        })
+                        .subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(result -> {
+                            provider.markHealthy(result.firstTokenMs());
+                            return providerRepository.save(provider)
+                                    .thenReturn("连接成功: " + result.response());
+                        })
+                        .onErrorResume(error -> {
+                            provider.markUnhealthy();
+                            return providerRepository.save(provider)
+                                    .then(Mono.error(new BusinessException(
+                                            ErrorCode.PROVIDER_CONNECTION_FAILED,
+                                            error.getMessage(),
+                                            error
+                                    )));
+                        })
+        );
     }
 
     public List<Map<String, Object>> getProviderTypes() {
@@ -124,5 +143,8 @@ public class ModelProviderAppService {
                         "supportsEmbedding", pt.supportsEmbedding()
                 ))
                 .toList();
+    }
+
+    private record ConnectionProbeResult(String response, long firstTokenMs) {
     }
 }

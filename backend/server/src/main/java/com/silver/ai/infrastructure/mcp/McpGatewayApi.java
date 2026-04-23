@@ -13,6 +13,9 @@ import java.util.List;
  */
 public interface McpGatewayApi {
 
+    @GET("sources")
+    Call<McpGatewayResponse<List<ApiSourceLite>>> listSources();
+
     @GET("sources/{sourceId}/tools")
     Call<McpGatewayResponse<List<McpToolDefinition>>> listTools(@Path("sourceId") Long sourceId);
 

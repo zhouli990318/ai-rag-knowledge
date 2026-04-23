@@ -5,7 +5,6 @@ const BASE = '/api/v1/providers';
 
 export const providerApi = {
   list: () => api.get<ApiResponse<Provider[]>>(BASE).then((r) => r.data.data),
-  get: (id: number) => api.get<ApiResponse<Provider>>(`${BASE}/${id}`).then((r) => r.data.data),
   create: (data: Record<string, unknown>) => api.post<ApiResponse<Provider>>(BASE, data).then((r) => r.data.data),
   update: (id: number, data: Record<string, unknown>) => api.put<ApiResponse<Provider>>(`${BASE}/${id}`, data).then((r) => r.data.data),
   delete: (id: number) => api.delete(`${BASE}/${id}`),

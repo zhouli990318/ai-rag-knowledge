@@ -3,6 +3,7 @@ package com.silver.ai.mcpgateway;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(excludeName = {
     "org.springframework.ai.mcp.server.autoconfigure.McpServerSseWebFluxAutoConfiguration",
@@ -12,6 +13,7 @@ import org.springframework.context.annotation.ComponentScan;
     "org.springframework.ai.mcp.server.common.autoconfigure.ToolCallbackConverterAutoConfiguration",
     "org.springframework.ai.mcp.server.common.autoconfigure.StatelessToolCallbackConverterAutoConfiguration"
 })
+@EnableScheduling
 @ComponentScan(basePackages = {"com.silver.ai.mcpgateway", "com.silver.ai.shared"})
 public class McpGatewayApplication {
 

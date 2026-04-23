@@ -42,6 +42,24 @@ public class ModelProviderEntity {
     @Builder.Default
     private boolean enabled = true;
 
+    @Column("health_status")
+    @Builder.Default
+    private String healthStatus = "UNKNOWN";
+
+    @Column("last_health_check_at")
+    private LocalDateTime lastHealthCheckAt;
+
+    @Column("health_fail_count")
+    @Builder.Default
+    private int healthFailCount = 0;
+
+    @Column("avg_first_token_ms")
+    @Builder.Default
+    private long avgFirstTokenMs = 0;
+
+    @Builder.Default
+    private int priority = 0;
+
     @Column("created_at")
     private LocalDateTime createdAt;
 

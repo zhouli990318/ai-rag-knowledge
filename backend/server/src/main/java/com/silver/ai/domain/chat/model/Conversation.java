@@ -27,10 +27,27 @@ public class Conversation {
     @Builder.Default
     private List<Long> mcpServerIds = new ArrayList<>();
     @Builder.Default
+    private ToolMode toolMode = ToolMode.AUTO;
+    @Builder.Default
     private List<ChatMessage> messages = new ArrayList<>();
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime updatedAt;
+
+    // ── 记忆摘要 ──
+    private String summary;
+    private LocalDateTime summaryUpdatedAt;
+
+    // ── 最近意图 ──
+    private String lastIntentDomain;
+    private String lastIntentCategory;
+    private String lastIntentTopic;
+
+    // ── 建议问题缓存快照 ──
+    @Builder.Default
+    private List<String> suggestions = new ArrayList<>();
+    private Integer suggestionVersion;
+    private LocalDateTime suggestionUpdatedAt;
 
     public void addMessage(MessageRole role, String content) {
         ChatMessage message = ChatMessage.builder()
@@ -72,6 +89,11 @@ public class Conversation {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public void updateToolMode(ToolMode mode) {
+        this.toolMode = mode == null ? ToolMode.AUTO : mode;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public boolean isRagEnabled() {
         return knowledgeBaseId != null;
     }
@@ -80,6 +102,41 @@ public class Conversation {
         this.providerId = providerId;
         this.model = model;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 更新记忆摘要 */
+    public void updateSummary(String summary) {
+        this.summary = summary;
+        this.summaryUpdatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 记录最近识别的意图 */
+    public void recordIntent(IntentResult intent) {
+        if (intent != null) {
+            this.lastIntentDomain = intent.getDomain();
+            this.lastIntentCategory = intent.getCategory();
+            this.lastIntentTopic = intent.getTopic();
+            this.updatedAt = LocalDateTime.now();
+        }
+    }
+
+    /** 是否需要摘要压缩 */
+    public boolean needsSummaryCompression(int threshold) {
+        return messages.size() > threshold;
+    }
+
+    public boolean hasSuggestionsForVersion(int version) {
+        return suggestionVersion != null
+                && suggestionVersion == version
+                && suggestions != null
+                && !suggestions.isEmpty();
+    }
+
+    public void updateSuggestions(List<String> suggestions, int version) {
+        this.suggestions = suggestions == null ? new ArrayList<>() : new ArrayList<>(suggestions);
+        this.suggestionVersion = version;
+        this.suggestionUpdatedAt = LocalDateTime.now();
     }
 
     private List<Long> normalizeMcpServerIds(List<Long> sourceIds) {

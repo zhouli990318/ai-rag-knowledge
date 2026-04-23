@@ -32,6 +32,22 @@ public class ModelProvider {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // ── 健康状态与路由 ──
+    @Builder.Default
+    private HealthStatus healthStatus = HealthStatus.UNKNOWN;
+    private LocalDateTime lastHealthCheckAt;
+    @Builder.Default
+    private int healthFailCount = 0;
+    @Builder.Default
+    private long avgFirstTokenMs = 0;
+    /** 路由优先级，数值越小越优先 */
+    @Builder.Default
+    private int priority = 0;
+
+    public enum HealthStatus {
+        HEALTHY, UNHEALTHY, UNKNOWN
+    }
+
     public void enable() {
         this.enabled = true;
         this.updatedAt = LocalDateTime.now();
@@ -66,5 +82,27 @@ public class ModelProvider {
         if (!enabled) {
             throw new BusinessException(ErrorCode.PROVIDER_DISABLED, name);
         }
+    }
+
+    /** 标记健康 */
+    public void markHealthy(long firstTokenMs) {
+        this.healthStatus = HealthStatus.HEALTHY;
+        this.lastHealthCheckAt = LocalDateTime.now();
+        this.healthFailCount = 0;
+        this.avgFirstTokenMs = firstTokenMs;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 标记不健康 */
+    public void markUnhealthy() {
+        this.healthStatus = HealthStatus.UNHEALTHY;
+        this.lastHealthCheckAt = LocalDateTime.now();
+        this.healthFailCount++;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    /** 是否可用（启用 + 健康） */
+    public boolean isAvailable() {
+        return enabled && healthStatus != HealthStatus.UNHEALTHY;
     }
 }

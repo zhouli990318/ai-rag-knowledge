@@ -26,9 +26,20 @@ public class KnowledgeBaseRepositoryAdapter implements KnowledgeBaseRepository {
         LocalDateTime now = LocalDateTime.now();
         if (entity.getId() == null) {
             entity.setCreatedAt(now);
+            entity.setUpdatedAt(now);
+            return r2dbc.save(entity).map(this::toDomain);
         }
         entity.setUpdatedAt(now);
-        return r2dbc.save(entity).map(this::toDomain);
+        return r2dbc.findById(entity.getId())
+                .flatMap(existing -> {
+                    entity.setCreatedAt(existing.getCreatedAt());
+                    return r2dbc.save(entity);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    entity.setCreatedAt(now);
+                    return r2dbc.save(entity);
+                }))
+                .map(this::toDomain);
     }
 
     @Override

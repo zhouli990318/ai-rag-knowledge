@@ -25,9 +25,21 @@ public class ModelProviderRepositoryAdapter implements ModelProviderRepository {
         LocalDateTime now = LocalDateTime.now();
         if (entity.getId() == null) {
             entity.setCreatedAt(now);
+            entity.setUpdatedAt(now);
+            return r2dbc.save(entity).map(this::toDomain);
         }
+        // 更新时先读取原记录保留 createdAt
         entity.setUpdatedAt(now);
-        return r2dbc.save(entity).map(this::toDomain);
+        return r2dbc.findById(entity.getId())
+                .flatMap(existing -> {
+                    entity.setCreatedAt(existing.getCreatedAt());
+                    return r2dbc.save(entity);
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    entity.setCreatedAt(now);
+                    return r2dbc.save(entity);
+                }))
+                .map(this::toDomain);
     }
 
     @Override
@@ -71,10 +83,21 @@ public class ModelProviderRepositoryAdapter implements ModelProviderRepository {
                 .embeddingModel(d.getEmbeddingModel())
                 .embeddingDimensions(d.getEmbeddingDimensions())
                 .enabled(d.isEnabled())
+                .healthStatus(d.getHealthStatus() != null ? d.getHealthStatus().name() : "UNKNOWN")
+                .lastHealthCheckAt(d.getLastHealthCheckAt())
+                .healthFailCount(d.getHealthFailCount())
+                .avgFirstTokenMs(d.getAvgFirstTokenMs())
+                .priority(d.getPriority())
                 .build();
     }
 
     private ModelProvider toDomain(ModelProviderEntity e) {
+        ModelProvider.HealthStatus hs;
+        try {
+            hs = ModelProvider.HealthStatus.valueOf(e.getHealthStatus());
+        } catch (Exception ex) {
+            hs = ModelProvider.HealthStatus.UNKNOWN;
+        }
         return ModelProvider.builder()
                 .id(e.getId())
                 .name(e.getName())
@@ -85,6 +108,11 @@ public class ModelProviderRepositoryAdapter implements ModelProviderRepository {
                 .embeddingModel(e.getEmbeddingModel())
                 .embeddingDimensions(e.getEmbeddingDimensions())
                 .enabled(e.isEnabled())
+                .healthStatus(hs)
+                .lastHealthCheckAt(e.getLastHealthCheckAt())
+                .healthFailCount(e.getHealthFailCount())
+                .avgFirstTokenMs(e.getAvgFirstTokenMs())
+                .priority(e.getPriority())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

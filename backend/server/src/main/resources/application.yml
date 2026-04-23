@@ -7,3 +7,20 @@ spring:
 app:
   mcp-gateway:
     base-url: ${APP_MCP_GATEWAY_BASE_URL:http://localhost:8092/api/v1/mcp}
+  orchestrator:
+    intent-enabled: true
+    intent-confidence-threshold: 0.6
+    rewrite-enabled: true
+    rewrite-context-rounds: 5
+    multi-path-retrieval-enabled: true
+    rerank-top-k: 5
+    memory-full-rounds: 10
+    memory-max-chars: 12000
+    memory-summary-threshold: 20
+    model-fallback-enabled: true
+    model-max-retries: 2
+    health-check-interval-minutes: 5
+    tool-auto-execute-threshold: 0.8
+    tool-fallback-enabled: true
+    trace-enabled: true
+    trace-sample-rate: 1.0

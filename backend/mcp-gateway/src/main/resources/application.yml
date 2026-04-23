@@ -22,6 +22,14 @@ app:
   mcp:
     sse-path: ${APP_MCP_SSE_PATH:/sse}
     streamable-http-path: ${APP_MCP_STREAMABLE_HTTP_PATH:/mcp/message}
+    health:
+      enabled: ${APP_MCP_HEALTH_ENABLED:true}
+      check-interval: ${APP_MCP_HEALTH_INTERVAL:PT60S}
+      probe-timeout: ${APP_MCP_HEALTH_TIMEOUT:PT5S}
+      slow-threshold: ${APP_MCP_HEALTH_SLOW:PT3S}
+      max-consecutive-failures: ${APP_MCP_HEALTH_MAX_FAILURES:5}
+      auto-deactivate-on-max-failures: ${APP_MCP_HEALTH_AUTO_DEACTIVATE:true}
+      probe-concurrency: ${APP_MCP_HEALTH_CONCURRENCY:5}
     session:
       ttl: ${APP_MCP_SESSION_TTL:PT30M}
       cleanup-interval: ${APP_MCP_SESSION_CLEANUP_INTERVAL:PT5M}

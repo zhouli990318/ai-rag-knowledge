@@ -55,6 +55,11 @@ public class ApiSourceRepositoryAdapter implements ApiSourceRepository {
                 .authType(d.getAuthType())
                 .authConfig(d.getAuthConfig())
                 .active(d.isActive())
+                .healthStatus(d.getHealthStatus())
+                .lastHealthCheckAt(d.getLastHealthCheckAt())
+                .lastHealthyAt(d.getLastHealthyAt())
+                .consecutiveFailures(d.getConsecutiveFailures())
+                .lastErrorMessage(d.getLastErrorMessage())
                 .createdAt(d.getCreatedAt() != null ? d.getCreatedAt() : now)
                 .updatedAt(now)
                 .build();
@@ -72,6 +77,11 @@ public class ApiSourceRepositoryAdapter implements ApiSourceRepository {
                 .authConfig(e.getAuthConfig())
                 .active(e.isActive())
                 .toolMappings(new ArrayList<>())
+                .healthStatus(e.getHealthStatus())
+                .lastHealthCheckAt(e.getLastHealthCheckAt())
+                .lastHealthyAt(e.getLastHealthyAt())
+                .consecutiveFailures(e.getConsecutiveFailures())
+                .lastErrorMessage(e.getLastErrorMessage())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

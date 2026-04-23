@@ -28,6 +28,32 @@ public class ConversationEntity {
     @Column("knowledge_base_id")
     private Long knowledgeBaseId;
 
+    private String summary;
+
+    @Column("summary_updated_at")
+    private LocalDateTime summaryUpdatedAt;
+
+    @Column("last_intent_domain")
+    private String lastIntentDomain;
+
+    @Column("last_intent_category")
+    private String lastIntentCategory;
+
+    @Column("last_intent_topic")
+    private String lastIntentTopic;
+
+    @Column("suggestion_json")
+    private String suggestionJson;
+
+    @Column("suggestion_version")
+    private Integer suggestionVersion;
+
+    @Column("suggestion_updated_at")
+    private LocalDateTime suggestionUpdatedAt;
+
+    @Column("tool_mode")
+    private String toolMode;
+
     @Column("created_at")
     private LocalDateTime createdAt;
 

@@ -1,6 +1,7 @@
 package com.silver.ai.mcpgateway.infrastructure.persistence.entity;
 
 import com.silver.ai.mcpgateway.domain.model.AuthType;
+import com.silver.ai.mcpgateway.domain.model.HealthStatus;
 import com.silver.ai.mcpgateway.domain.model.ProtocolType;
 import lombok.*;
 import org.springframework.data.annotation.Id;
@@ -39,6 +40,23 @@ public class ApiSourceEntity {
 
     @Builder.Default
     private boolean active = true;
+
+    @Column("health_status")
+    @Builder.Default
+    private HealthStatus healthStatus = HealthStatus.UNKNOWN;
+
+    @Column("last_health_check_at")
+    private LocalDateTime lastHealthCheckAt;
+
+    @Column("last_healthy_at")
+    private LocalDateTime lastHealthyAt;
+
+    @Column("consecutive_failures")
+    @Builder.Default
+    private int consecutiveFailures = 0;
+
+    @Column("last_error_message")
+    private String lastErrorMessage;
 
     @Column("created_at")
     private LocalDateTime createdAt;

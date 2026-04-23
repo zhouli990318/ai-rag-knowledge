@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, IconButton, Grid, LinearProgress,
-  useTheme, Slide, Skeleton,
 } from '@mui/material';
 import {
   Add, Delete, Upload, GitHub, Autorenew, Search,
@@ -13,19 +12,19 @@ import { knowledgeApi } from '../api/knowledgeApi';
 import { KnowledgeBase, KbDocument, SearchResult } from '../api/types';
 import { useSnackbar } from 'notistack';
 import { useDropzone } from 'react-dropzone';
-import { IOSStatusBadge, IOSSearchBar, IOSActionSheet, IOSEmptyState } from '../components/ios';
+import { InkBadge, InkSearchBar, InkActionSheet, InkEmptyState } from '../components/ink';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Generate a gradient from KB name
 function nameGradient(name: string): string {
   const gradients = [
-    'linear-gradient(135deg, #007AFF, #5856D6)',
-    'linear-gradient(135deg, #FF9500, #FF2D55)',
-    'linear-gradient(135deg, #34C759, #5AC8FA)',
-    'linear-gradient(135deg, #AF52DE, #FF2D55)',
-    'linear-gradient(135deg, #5AC8FA, #007AFF)',
-    'linear-gradient(135deg, #FF2D55, #FF9500)',
-    'linear-gradient(135deg, #5856D6, #AF52DE)',
+    'linear-gradient(135deg, #4A4A4A, #2C2C2C)',
+    'linear-gradient(135deg, #C84B31, #A03B26)',
+    'linear-gradient(135deg, #5B7065, #4A5D53)',
+    'linear-gradient(135deg, #8B8B8B, #6B6B6B)',
+    'linear-gradient(135deg, #5B7065, #3D4D43)',
+    'linear-gradient(135deg, #C84B31, #8B3522)',
+    'linear-gradient(135deg, #4A4A4A, #6B6B6B)',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -76,7 +75,7 @@ function CreateKnowledgeBaseDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 8 }}>创建</Button>
+        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 4 }}>创建</Button>
       </DialogActions>
     </Dialog>
   );
@@ -110,15 +109,13 @@ function GitImportDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(gitUrl)} disabled={loading} sx={{ borderRadius: 8 }}>导入</Button>
+        <Button variant="contained" onClick={() => onSubmit(gitUrl)} disabled={loading} sx={{ borderRadius: 4 }}>导入</Button>
       </DialogActions>
     </Dialog>
   );
 }
 
 export default function KnowledgePage() {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
@@ -200,11 +197,15 @@ export default function KnowledgePage() {
   const openCreateDialog = () => setCreateOpen(true);
 
   return (
-    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+    <Box sx={{ p: { xs: 2, md: 2.5 }, pt: { xs: 7, md: 7 } }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography variant="h5">知识库</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 8 }}>
+        <Typography variant="h5" sx={{ fontFamily: '"Noto Serif SC", serif' }}>知识库</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{
+          borderRadius: 4,
+          backgroundImage: 'linear-gradient(135deg, #4A4A4A, #3A3A3A)',
+          '&:hover': { backgroundImage: 'linear-gradient(135deg, #C84B31, #A83D27)' },
+        }}>
           新建
         </Button>
       </Box>
@@ -213,7 +214,7 @@ export default function KnowledgePage() {
 
       {/* KB Cards */}
       {kbs.length === 0 && !isLoading ? (
-        <IOSEmptyState icon={<FolderOpen />} title="暂无知识库" subtitle="创建知识库来管理文档和向量检索" action={{ label: '新建知识库', onClick: openCreateDialog }} />
+        <InkEmptyState icon={<FolderOpen />} title="暂无知识库" subtitle="创建知识库来管理文档和向量检索" action={{ label: '新建知识库', onClick: openCreateDialog }} />
       ) : (
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           {kbs.map((kb: KnowledgeBase) => {
@@ -226,15 +227,17 @@ export default function KnowledgePage() {
                     onContextMenu={(e) => { e.preventDefault(); setActionSheetKb(kb); }}
                     sx={{
                       cursor: 'pointer',
-                      borderRadius: 3,
+                      borderRadius: 4,
                       overflow: 'hidden',
-                      border: isActive ? `2px solid #007AFF` : `2px solid transparent`,
-                      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                      border: isActive ? '1.5px solid rgba(200,75,49,0.5)' : '1px solid rgba(224,221,216,0.45)',
+                      backgroundColor: 'rgba(255,255,255,0.72)',
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
                       boxShadow: isActive
-                        ? (isDark ? '0 0 20px rgba(0,122,255,0.3)' : '0 0 20px rgba(0,122,255,0.15)')
-                        : (isDark ? '0 2px 12px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.06)'),
+                        ? '0 4px 20px rgba(200,75,49,0.12), 0 0 0 1px rgba(200,75,49,0.08)'
+                        : '0 2px 12px rgba(0,0,0,0.04)',
                       transition: 'all 300ms cubic-bezier(0.25,0.46,0.45,0.94)',
-                      '&:hover': { transform: 'translateY(-2px)' },
+                      '&:hover': { transform: 'translateY(-3px)', borderColor: 'rgba(224,221,216,0.8)', boxShadow: '0 6px 24px rgba(0,0,0,0.08)' },
                     }}
                   >
                     {/* Gradient top */}
@@ -253,8 +256,8 @@ export default function KnowledgePage() {
                         {kb.description || '暂无描述'}
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <IOSStatusBadge label={`${kb.documentCount} 文档`} status="info" />
-                        <IOSStatusBadge label={kb.active ? '活跃' : '停用'} status={kb.active ? 'success' : 'default'} />
+                        <InkBadge label={`${kb.documentCount} 文档`} status="info" />
+                        <InkBadge label={kb.active ? '活跃' : '停用'} status={kb.active ? 'success' : 'default'} />
                       </Box>
                     </Box>
                   </Box>
@@ -275,9 +278,12 @@ export default function KnowledgePage() {
             transition={{ duration: 0.25 }}
           >
             <Box sx={{
-              backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-              borderRadius: 3, p: 2.5,
-              boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 2px 16px rgba(0,0,0,0.06)',
+              backgroundColor: 'rgba(255,255,255,0.72)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              borderRadius: 4, p: 2.5,
+              border: '1px solid rgba(224,221,216,0.5)',
+              boxShadow: '0 2px 16px rgba(0,0,0,0.04)',
             }}>
               {/* Detail header */}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
@@ -286,22 +292,22 @@ export default function KnowledgePage() {
                   <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{selectedKb.description}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button size="small" variant="outlined" startIcon={<GitHub />} onClick={() => setGitOpen(true)} sx={{ borderRadius: 8 }}>Git 导入</Button>
-                  <Button size="small" variant="outlined" color="secondary" startIcon={<Autorenew />} onClick={() => setRebuildOpen(true)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 8 }}>重建向量</Button>
+                  <Button size="small" variant="outlined" startIcon={<GitHub />} onClick={() => setGitOpen(true)} sx={{ borderRadius: 4 }}>Git 导入</Button>
+                  <Button size="small" variant="outlined" color="secondary" startIcon={<Autorenew />} onClick={() => setRebuildOpen(true)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 4 }}>重建向量</Button>
                   <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(selectedKb.id)}><Delete /></IconButton>
                 </Box>
               </Box>
 
               {/* Upload zone */}
               <Box {...getRootProps()} sx={{
-                border: `2px dashed ${isDragActive ? '#007AFF' : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)')}`,
+                border: `2px dashed ${isDragActive ? '#C84B31' : '#E0DDD8'}`,
                 borderRadius: 2, p: 4, textAlign: 'center', mb: 2.5, cursor: 'pointer',
-                backgroundColor: isDragActive ? (isDark ? 'rgba(0,122,255,0.1)' : 'rgba(0,122,255,0.04)') : 'transparent',
+                backgroundColor: isDragActive ? 'rgba(200,75,49,0.04)' : 'transparent',
                 transition: 'all 200ms',
               }}>
                 <input {...getInputProps()} />
-                <Upload sx={{ fontSize: 36, color: isDragActive ? '#007AFF' : 'text.disabled', mb: 0.5 }} />
-                <Typography sx={{ fontSize: 15, color: isDragActive ? '#007AFF' : 'text.secondary' }}>
+                <Upload sx={{ fontSize: 36, color: isDragActive ? '#C84B31' : 'text.disabled', mb: 0.5 }} />
+                <Typography sx={{ fontSize: 15, color: isDragActive ? '#C84B31' : 'text.secondary' }}>
                   拖拽文件到此处或点击上传
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>支持 PDF, TXT, MD, DOCX</Typography>
@@ -311,17 +317,18 @@ export default function KnowledgePage() {
 
               {/* Search */}
               <Box sx={{ mb: 2.5 }}>
-                <IOSSearchBar value={searchQuery} onChange={setSearchQuery} onSearch={handleSearch} placeholder="搜索知识库内容..." />
+                <InkSearchBar value={searchQuery} onChange={setSearchQuery} onSearch={handleSearch} placeholder="搜索知识库内容..." />
               </Box>
               {searchResults.length > 0 && (
                 <Box sx={{
-                  backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+                  backgroundColor: 'rgba(245,243,238,0.6)',
                   borderRadius: 2, p: 2, mb: 2.5, maxHeight: 240, overflow: 'auto',
+                  border: '1px solid #E0DDD8',
                 }}>
                   {searchResults.map((r, i) => (
                     <Box key={i} sx={{
                       py: 1.5,
-                      borderBottom: i < searchResults.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'}` : 'none',
+                      borderBottom: i < searchResults.length - 1 ? '0.5px solid #E0DDD8' : 'none',
                     }}>
                       <Typography sx={{ fontSize: 14, mb: 0.5, lineHeight: 1.4 }}>{r.content}</Typography>
                       <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{JSON.stringify(r.metadata)}</Typography>
@@ -335,8 +342,9 @@ export default function KnowledgePage() {
                 文档 ({documents.length})
               </Typography>
               <Box sx={{
-                backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+                backgroundColor: 'rgba(245,243,238,0.6)',
                 borderRadius: 2, overflow: 'hidden',
+                border: '1px solid #E0DDD8',
               }}>
                 {documents.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -347,7 +355,7 @@ export default function KnowledgePage() {
                     <Box key={d.id} sx={{
                       display: 'flex', alignItems: 'center', gap: 1.5,
                       px: 2, py: 1.5,
-                      borderBottom: i < documents.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` : 'none',
+                      borderBottom: i < documents.length - 1 ? '0.5px solid #E0DDD8' : 'none',
                     }}>
                       <Description sx={{ fontSize: 20, color: 'text.secondary' }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -358,8 +366,8 @@ export default function KnowledgePage() {
                           {d.fileType} · {(d.fileSize / 1024).toFixed(1)} KB · {d.chunkCount} 分块
                         </Typography>
                       </Box>
-                      <IOSStatusBadge label={d.status} status={statusType(d.status)} dot />
-                      <IconButton size="small" onClick={() => deleteDocMutation.mutate(d.id)} sx={{ color: 'text.secondary', '&:hover': { color: '#FF3B30' } }}>
+                      <InkBadge label={d.status} status={statusType(d.status)} dot />
+                      <IconButton size="small" onClick={() => deleteDocMutation.mutate(d.id)} sx={{ color: 'text.secondary', '&:hover': { color: '#C84B31' } }}>
                         <Delete sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Box>
@@ -372,7 +380,7 @@ export default function KnowledgePage() {
       </AnimatePresence>
 
       {/* Action sheet for long-press on card */}
-      <IOSActionSheet
+      <InkActionSheet
         open={!!actionSheetKb}
         onClose={() => setActionSheetKb(null)}
         title={actionSheetKb?.name}
@@ -401,7 +409,7 @@ export default function KnowledgePage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRebuildOpen(false)} disabled={rebuildMutation.isPending}>取消</Button>
-          <Button variant="contained" color="secondary" onClick={() => selectedKb && rebuildMutation.mutate(selectedKb.id)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 8 }}>
+          <Button variant="contained" color="secondary" onClick={() => selectedKb && rebuildMutation.mutate(selectedKb.id)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 4 }}>
             开始重建
           </Button>
         </DialogActions>

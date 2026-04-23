@@ -11,6 +11,7 @@ export interface StreamChatRequest {
   message: string;
   systemPrompt?: string;
   mcpServerIds?: number[];
+  toolMode?: 'OFF' | 'AUTO' | 'SPECIFIC';
 }
 
 export const chatApi = {
@@ -34,4 +35,16 @@ export const chatApi = {
 
   deleteConversation: (id: number) =>
     api.delete(`${BASE}/conversations/${id}`),
+
+  getSuggestions: (id: number) =>
+    api.get<ApiResponse<string[]>>(`${BASE}/conversations/${id}/suggestions`).then((r) => {
+      const payload = r.data?.data as unknown;
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+      if (payload && typeof payload === 'object' && Array.isArray((payload as { data?: unknown }).data)) {
+        return (payload as { data: string[] }).data;
+      }
+      return [];
+    }),
 };

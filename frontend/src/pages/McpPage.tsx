@@ -1,8 +1,8 @@
 ﻿import { useEffect, useState, lazy, Suspense } from 'react';
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, IconButton, Switch, Select, MenuItem,
-  FormControl, InputLabel, LinearProgress, useTheme, useMediaQuery,
+  DialogActions, TextField, IconButton, Select, MenuItem,
+  FormControl, InputLabel, LinearProgress, useMediaQuery,
   Tooltip, Drawer, CircularProgress,
 } from '@mui/material';
 import {
@@ -13,16 +13,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mcpGatewayApi } from '../api/mcpApi';
 import { McpApiSource, McpToolMapping } from '../api/types';
 import { useSnackbar } from 'notistack';
-import { IOSSegmentedControl, IOSStatusBadge, IOSEmptyState } from '../components/ios';
+import { InkSegmentedControl, InkBadge, InkEmptyState, InkSwitch } from '../components/ink';
 import { motion } from 'framer-motion';
 
 const LazyEditor = lazy(() => import('@monaco-editor/react'));
 
-function MonacoEditor({ value, onChange, height = 180, isDark = false }: { value: string; onChange: (v: string) => void; height?: number; isDark?: boolean }) {
+function MonacoEditor({ value, onChange, height = 180 }: { value: string; onChange: (v: string) => void; height?: number; isDark?: boolean }) {
   return (
-    <Box sx={{ height, borderRadius: 3, overflow: 'hidden', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}` }}>
+    <Box sx={{ height, borderRadius: 3, overflow: 'hidden', border: '1px solid #E0DDD8' }}>
       <Suspense fallback={<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}><CircularProgress size={24} /></Box>}>
-        <LazyEditor height="100%" defaultLanguage="json" value={value} onChange={(v) => onChange(v || '')} theme={isDark ? 'vs-dark' : 'light'} options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
+        <LazyEditor height="100%" defaultLanguage="json" value={value} onChange={(v) => onChange(v || '')} theme="light" options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
       </Suspense>
     </Box>
   );
@@ -63,7 +63,7 @@ function buildParameterSchema(rows: ParameterRow[]): string {
   return JSON.stringify({ type: 'object', properties, required }, null, 2);
 }
 
-const METHOD_COLORS: Record<string, string> = { GET: '#34C759', POST: '#007AFF', PUT: '#FF9500', DELETE: '#FF3B30', PATCH: '#AF52DE' };
+const METHOD_COLORS: Record<string, string> = { GET: '#5B7065', POST: '#4A4A4A', PUT: '#C89B3C', DELETE: '#C84B31', PATCH: '#8B8B8B' };
 
 type SourceFormState = {
   name: string;
@@ -148,7 +148,7 @@ function CreateEditSourceDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 8 }}>
+        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 4 }}>
           {initialSource ? '保存' : '创建'}
         </Button>
       </DialogActions>
@@ -159,7 +159,6 @@ function CreateEditSourceDialog({
 function EditToolDialog({
   open,
   tool,
-  isDark,
   EditorComponent,
   loading,
   onClose,
@@ -167,7 +166,6 @@ function EditToolDialog({
 }: {
   open: boolean;
   tool: McpToolMapping | null;
-  isDark: boolean;
   EditorComponent: CodeEditorComponent;
   loading: boolean;
   onClose: () => void;
@@ -208,24 +206,25 @@ function EditToolDialog({
         <Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
             <Typography sx={{ fontSize: 15, fontWeight: 600 }}>参数定义</Typography>
-            <IOSSegmentedControl value={parameterEditMode} onChange={setParameterEditMode} options={[{ value: 'table', label: '表格' }, { value: 'json', label: 'JSON' }]} />
+            <InkSegmentedControl value={parameterEditMode} onChange={setParameterEditMode} options={[{ value: 'table', label: '表格' }, { value: 'json', label: 'JSON' }]} />
           </Box>
           {parameterEditMode === 'table' ? (
             <Box sx={{
-              backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+              backgroundColor: 'rgba(245,243,238,0.6)',
               borderRadius: 2, overflow: 'hidden',
+              border: '1px solid #E0DDD8',
             }}>
               {parseParameterRows(localTool?.parameterSchema).map((row) => (
                 <Box key={row.key} sx={{
                   display: 'flex', gap: 1, alignItems: 'center', px: 2, py: 1.25,
-                  borderBottom: `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
+                  borderBottom: `0.5px solid #E0DDD8`,
                 }}>
                   <TextField size="small" placeholder="参数名" value={row.name} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, name: e.target.value } : item))} sx={{ flex: 1 }} />
                   <Select size="small" value={row.type} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, type: String(e.target.value) } : item))} sx={{ width: 100 }}>
                     {['string', 'number', 'integer', 'boolean', 'array', 'object'].map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
                   </Select>
                   <TextField size="small" placeholder="描述" value={row.description} onChange={(e) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, description: e.target.value } : item))} sx={{ flex: 2 }} />
-                  <Switch size="small" checked={row.required} onChange={(_, value) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, required: value } : item))} />
+                  <InkSwitch size="small" checked={row.required} onChange={(_, value) => updateParameterRows((rows) => rows.map((item) => item.key === row.key ? { ...item, required: value } : item))} />
                   <IconButton size="small" color="error" onClick={() => updateParameterRows((rows) => rows.filter((item) => item.key !== row.key))}>
                     <Delete sx={{ fontSize: 16 }} />
                   </IconButton>
@@ -238,18 +237,18 @@ function EditToolDialog({
               </Box>
             </Box>
           ) : (
-            <EditorComponent value={localTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(value: string) => setLocalTool((current) => current ? { ...current, parameterSchema: value } : current)} height={200} isDark={isDark} />
+            <EditorComponent value={localTool?.parameterSchema || DEFAULT_PARAMETER_SCHEMA} onChange={(value: string) => setLocalTool((current) => current ? { ...current, parameterSchema: value } : current)} height={200} />
           )}
         </Box>
 
         <Box>
           <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>响应 Schema</Typography>
-          <EditorComponent value={localTool?.responseSchema || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, responseSchema: value } : current)} height={160} isDark={isDark} />
+          <EditorComponent value={localTool?.responseSchema || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, responseSchema: value } : current)} height={160} />
         </Box>
 
         <Box>
           <Typography sx={{ fontSize: 15, fontWeight: 600, mb: 1 }}>调用示例</Typography>
-          <EditorComponent value={localTool?.examplePayload || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, examplePayload: value } : current)} height={140} isDark={isDark} />
+          <EditorComponent value={localTool?.examplePayload || '{}'} onChange={(value: string) => setLocalTool((current) => current ? { ...current, examplePayload: value } : current)} height={140} />
         </Box>
       </DialogContent>
       <DialogActions>
@@ -267,7 +266,7 @@ function EditToolDialog({
             enabled: localTool.enabled,
           })}
           disabled={loading || !localTool}
-          sx={{ borderRadius: 8 }}
+          sx={{ borderRadius: 4 }}
         >
           保存
         </Button>
@@ -279,13 +278,11 @@ function EditToolDialog({
 function TestToolDrawer({
   open,
   toolId,
-  isDark,
   EditorComponent,
   onClose,
 }: {
   open: boolean;
   toolId: number | null;
-  isDark: boolean;
   EditorComponent: CodeEditorComponent;
   onClose: () => void;
 }) {
@@ -312,17 +309,17 @@ function TestToolDrawer({
       open={open}
       onClose={onClose}
       PaperProps={{
-        sx: { width: { xs: '100%', md: 420 }, p: 2.5, borderRadius: '10px 0 0 10px' },
+        sx: { width: { xs: '100%', md: 420 }, p: 2.5, borderRadius: '4px 0 0 4px' },
       }}
     >
       <Typography sx={{ fontSize: 17, fontWeight: 600, mb: 2 }}>测试工具调用</Typography>
-      <EditorComponent value={args} onChange={setArgs} height={160} isDark={isDark} />
+      <EditorComponent value={args} onChange={setArgs} height={160} />
       <Button
         variant="contained"
         startIcon={<PlayArrow />}
         fullWidth
         onClick={() => toolId && testToolMutation.mutate({ id: toolId, args })}
-        sx={{ mt: 2, borderRadius: 8 }}
+        sx={{ mt: 2, borderRadius: 4 }}
         disabled={testToolMutation.isPending || !toolId}
       >
         执行
@@ -330,7 +327,8 @@ function TestToolDrawer({
       {result && (
         <Box sx={{
           mt: 2, p: 2.5, borderRadius: 2,
-          backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+          backgroundColor: 'rgba(245,243,238,0.6)',
+          border: '1px solid #E0DDD8',
           maxHeight: 300, overflow: 'auto',
         }}>
           <Typography sx={{ fontSize: 13, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{result}</Typography>
@@ -341,9 +339,7 @@ function TestToolDrawer({
 }
 
 export default function McpPage() {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery('(max-width:899px)');
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
@@ -409,6 +405,29 @@ export default function McpPage() {
     onSuccess: () => { refetchTools(); setEditingTool(null); enqueueSnackbar('已更新', { variant: 'success' }); },
     onError: () => enqueueSnackbar('更新失败', { variant: 'error' }),
   });
+  const toggleSourceMutation = useMutation({
+    mutationFn: mcpGatewayApi.toggleSourceActive,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-sources'] });
+      queryClient.invalidateQueries({ queryKey: ['mcp-health'] });
+      enqueueSnackbar('源状态已切换', { variant: 'success' });
+    },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '操作失败', { variant: 'error' }),
+  });
+  const healthCheckMutation = useMutation({
+    mutationFn: mcpGatewayApi.triggerHealthCheck,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mcp-health'] });
+      enqueueSnackbar('健康检查已完成', { variant: 'success' });
+    },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '检查失败', { variant: 'error' }),
+  });
+  const { data: sourceHealth = [] } = useQuery({
+    queryKey: ['mcp-health'],
+    queryFn: mcpGatewayApi.listSourcesHealth,
+    refetchInterval: 30000,
+  });
+  const healthMap = new Map(sourceHealth.map((h) => [h.id, h]));
 
   const openCreateDialog = () => {
     setEditingSource(null);
@@ -441,21 +460,33 @@ export default function McpPage() {
   const CodeEditor = isMobile ? MobileTextarea : MonacoEditor;
 
   return (
-    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+    <Box sx={{ p: { xs: 2, md: 2.5 }, pt: { xs: 7, md: 7 } }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h5">MCP 网关</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 8 }}>添加 API 源</Button>
+        <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: 4 }}>添加 API 源</Button>
       </Box>
       {isLoading && <LinearProgress sx={{ mb: 2 }} />}
 
       {/* Source grid — macOS System Preferences style */}
       {sources.length === 0 && !isLoading ? (
-        <IOSEmptyState icon={<Api />} title="暂无 API 源" subtitle="添加 API 源来配置 MCP 工具映射" action={{ label: '添加 API 源', onClick: openCreateDialog }} />
+        <InkEmptyState icon={<Api />} title="暂无 API 源" subtitle="添加 API 源来配置 MCP 工具映射" action={{ label: '添加 API 源', onClick: openCreateDialog }} />
       ) : (
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 2.5 }}>
           {sources.map((s: McpApiSource) => {
             const isActive = selectedSource?.id === s.id;
+            const health = healthMap.get(s.id);
+            const status = health?.healthStatus ?? 'UNKNOWN';
+            const healthLabel =
+              !s.active ? '停用' :
+              status === 'HEALTHY' ? '健康' :
+              status === 'DEGRADED' ? '缓慢' :
+              status === 'UNREACHABLE' ? '不可达' : '未知';
+            const healthBadgeStatus: 'success' | 'warning' | 'error' | 'default' =
+              !s.active ? 'default' :
+              status === 'HEALTHY' ? 'success' :
+              status === 'DEGRADED' ? 'warning' :
+              status === 'UNREACHABLE' ? 'error' : 'default';
             return (
               <motion.div key={s.id} whileTap={{ scale: 0.97 }}>
                 <Box
@@ -463,15 +494,24 @@ export default function McpPage() {
                   sx={{
                     width: 140, textAlign: 'center', cursor: 'pointer',
                     p: 2, borderRadius: 3,
-                    backgroundColor: isActive ? (isDark ? 'rgba(0,122,255,0.15)' : 'rgba(0,122,255,0.08)') : 'transparent',
-                    border: isActive ? '2px solid #007AFF' : '2px solid transparent',
+                    backgroundColor: isActive ? 'rgba(200,75,49,0.08)' : 'transparent',
+                    border: isActive ? '2px solid #C84B31' : '2px solid transparent',
                     transition: 'all 200ms',
-                    '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)' },
+                    position: 'relative',
+                    '&:hover': { backgroundColor: 'rgba(0,0,0,0.02)' },
                   }}
                 >
+                  {/* 源级启停 Switch */}
+                  <InkSwitch
+                    size="small"
+                    checked={s.active}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggleSourceMutation.mutate(s.id)}
+                    sx={{ position: 'absolute', top: 4, right: 4 }}
+                  />
                   <Box sx={{
                     width: 52, height: 52, borderRadius: 2.5, mx: 'auto', mb: 1,
-                    background: s.active ? 'linear-gradient(135deg, #007AFF, #5856D6)' : (isDark ? 'rgba(118,118,128,0.24)' : 'rgba(118,118,128,0.12)'),
+                    background: s.active ? 'linear-gradient(135deg, #4A4A4A, #2C2C2C)' : 'rgba(118,118,128,0.12)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
                     <Api sx={{ fontSize: 24, color: s.active ? '#fff' : 'text.secondary' }} />
@@ -479,7 +519,7 @@ export default function McpPage() {
                   <Typography sx={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {s.name}
                   </Typography>
-                  <IOSStatusBadge label={s.active ? '活跃' : '停用'} status={s.active ? 'success' : 'default'} />
+                  <InkBadge label={healthLabel} status={healthBadgeStatus} dot />
                 </Box>
               </motion.div>
             );
@@ -490,9 +530,9 @@ export default function McpPage() {
             sx={{
               width: 140, textAlign: 'center', cursor: 'pointer',
               p: 2, borderRadius: 3,
-              border: `2px dashed ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)'}`,
+              border: '2px dashed #E0DDD8',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              '&:hover': { borderColor: '#007AFF' },
+              '&:hover': { borderColor: '#C84B31' },
               transition: 'border-color 200ms',
             }}
           >
@@ -505,9 +545,10 @@ export default function McpPage() {
       {/* Selected source detail */}
       {selectedSource && (
         <Box sx={{
-          backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+          backgroundColor: '#FFFFFF',
           borderRadius: 3, p: 2.5,
-          boxShadow: isDark ? '0 4px 24px rgba(0,0,0,0.4)' : '0 2px 16px rgba(0,0,0,0.06)',
+          border: '1px solid #E0DDD8',
+          boxShadow: '0 2px 16px rgba(0,0,0,0.06)',
         }}>
           {/* Source header */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -524,8 +565,9 @@ export default function McpPage() {
           {/* Connection info */}
           {connectionInfo && (
             <Box sx={{
-              backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+              backgroundColor: 'rgba(245,243,238,0.6)',
               borderRadius: 2, p: 2, mb: 2.5,
+              border: '1px solid #E0DDD8',
             }}>
               <Typography sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary', mb: 1 }}>
                 {connectionInfo.serverName} {connectionInfo.version}
@@ -553,19 +595,19 @@ export default function McpPage() {
           <Box sx={{ mb: 2.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
               <Typography sx={{ fontSize: 15, fontWeight: 600 }}>解析 OpenAPI</Typography>
-              <IOSSegmentedControl value={parseMode} onChange={setParseMode} options={[{ value: 'paste', label: '粘贴 Spec' }, { value: 'url', label: 'URL 导入' }]} />
+              <InkSegmentedControl value={parseMode} onChange={setParseMode} options={[{ value: 'paste', label: '粘贴 Spec' }, { value: 'url', label: 'URL 导入' }]} />
             </Box>
             {parseMode === 'paste' ? (
               <Box>
-                <CodeEditor value={specContent} onChange={setSpecContent} height={180} isDark={isDark} />
-                <Button variant="outlined" startIcon={<Refresh />} onClick={() => parseMutation.mutate({ openApiSpec: specContent })} disabled={parseMutation.isPending} sx={{ mt: 1, borderRadius: 8 }}>
+                <CodeEditor value={specContent} onChange={setSpecContent} height={180} />
+                <Button variant="outlined" startIcon={<Refresh />} onClick={() => parseMutation.mutate({ openApiSpec: specContent })} disabled={parseMutation.isPending} sx={{ mt: 1, borderRadius: 4 }}>
                   解析
                 </Button>
               </Box>
             ) : (
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <TextField size="small" fullWidth value={specUrl} onChange={(e) => setSpecUrl(e.target.value)} placeholder="https://petstore.swagger.io/v2/swagger.json" />
-                <Button variant="outlined" onClick={() => parseMutation.mutate({ openApiUrl: specUrl })} disabled={parseMutation.isPending} sx={{ borderRadius: 8 }}>导入</Button>
+                <Button variant="outlined" onClick={() => parseMutation.mutate({ openApiUrl: specUrl })} disabled={parseMutation.isPending} sx={{ borderRadius: 4 }}>导入</Button>
               </Box>
             )}
           </Box>
@@ -575,8 +617,9 @@ export default function McpPage() {
             工具 ({tools.length})
           </Typography>
           <Box sx={{
-            backgroundColor: isDark ? 'rgba(118,118,128,0.12)' : 'rgba(118,118,128,0.06)',
+            backgroundColor: 'rgba(245,243,238,0.6)',
             borderRadius: 2, overflow: 'hidden',
+            border: '1px solid #E0DDD8',
           }}>
             {tools.length === 0 ? (
               <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -587,15 +630,15 @@ export default function McpPage() {
                 <Box key={t.id} sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
                   px: 2, py: 1.5,
-                  borderBottom: i < tools.length - 1 ? `0.5px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` : 'none',
+                  borderBottom: i < tools.length - 1 ? '0.5px solid #E0DDD8' : 'none',
                 }}>
                   {/* Method badge */}
                   <Box sx={{
                     px: 0.75, py: 0.25, borderRadius: 1,
-                    backgroundColor: `${METHOD_COLORS[t.httpMethod] || '#007AFF'}18`,
+                    backgroundColor: `${METHOD_COLORS[t.httpMethod] || '#4A4A4A'}18`,
                     flexShrink: 0,
                   }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace', color: METHOD_COLORS[t.httpMethod] || '#007AFF' }}>
+                    <Typography sx={{ fontSize: 10, fontWeight: 700, fontFamily: 'monospace', color: METHOD_COLORS[t.httpMethod] || '#4A4A4A' }}>
                       {t.httpMethod}
                     </Typography>
                   </Box>
@@ -609,7 +652,7 @@ export default function McpPage() {
                     </Typography>
                   </Box>
                   {/* Toggle */}
-                  <Switch checked={t.enabled} onChange={(_, v) => toggleToolMutation.mutate({ id: t.id, enabled: v })} />
+                  <InkSwitch checked={t.enabled} onChange={(_, v) => toggleToolMutation.mutate({ id: t.id, enabled: v })} />
                   {/* Actions */}
                   <IconButton size="small" onClick={() => setEditingTool(t)}><Edit sx={{ fontSize: 18 }} /></IconButton>
                   <IconButton size="small" onClick={() => setTestTool(t)}><PlayArrow sx={{ fontSize: 18 }} /></IconButton>
@@ -634,7 +677,6 @@ export default function McpPage() {
       <EditToolDialog
         open={editingTool !== null}
         tool={editingTool}
-        isDark={isDark}
         EditorComponent={CodeEditor}
         loading={updateToolMutation.isPending}
         onClose={() => setEditingTool(null)}
@@ -644,7 +686,6 @@ export default function McpPage() {
       <TestToolDrawer
         open={testTool !== null}
         toolId={testTool?.id || null}
-        isDark={isDark}
         EditorComponent={CodeEditor}
         onClose={() => setTestTool(null)}
       />

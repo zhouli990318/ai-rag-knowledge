@@ -1,7 +1,10 @@
 package com.silver.ai.infrastructure.persistence.adapter;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silver.ai.domain.chat.model.ChatMessage;
 import com.silver.ai.domain.chat.model.Conversation;
+import com.silver.ai.domain.chat.model.ToolMode;
 import com.silver.ai.domain.chat.port.ConversationRepository;
 import com.silver.ai.infrastructure.persistence.entity.ChatMessageEntity;
 import com.silver.ai.infrastructure.persistence.entity.ConversationEntity;
@@ -25,6 +28,7 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
     private final R2dbcConversationRepository conversationRepo;
     private final R2dbcChatMessageRepository messageRepo;
     private final DatabaseClient databaseClient;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Mono<Conversation> save(Conversation conv) {
@@ -118,6 +122,15 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .providerId(d.getProviderId())
                 .model(d.getModel())
                 .knowledgeBaseId(d.getKnowledgeBaseId())
+                .summary(d.getSummary())
+                .summaryUpdatedAt(d.getSummaryUpdatedAt())
+                .lastIntentDomain(d.getLastIntentDomain())
+                .lastIntentCategory(d.getLastIntentCategory())
+                .lastIntentTopic(d.getLastIntentTopic())
+                .suggestionJson(serializeSuggestions(d.getSuggestions()))
+                .suggestionVersion(d.getSuggestionVersion())
+                .suggestionUpdatedAt(d.getSuggestionUpdatedAt())
+                .toolMode(d.getToolMode() == null ? ToolMode.AUTO.name() : d.getToolMode().name())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();
@@ -153,6 +166,15 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .knowledgeBaseId(e.getKnowledgeBaseId())
                 .mcpServerIds(new ArrayList<>(mcpServerIds))
                 .messages(new ArrayList<>(messages))
+                .summary(e.getSummary())
+                .summaryUpdatedAt(e.getSummaryUpdatedAt())
+                .lastIntentDomain(e.getLastIntentDomain())
+                .lastIntentCategory(e.getLastIntentCategory())
+                .lastIntentTopic(e.getLastIntentTopic())
+                .suggestions(new ArrayList<>(deserializeSuggestions(e.getSuggestionJson())))
+                .suggestionVersion(e.getSuggestionVersion())
+                .suggestionUpdatedAt(e.getSuggestionUpdatedAt())
+                .toolMode(ToolMode.fromString(e.getToolMode()))
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();
@@ -167,8 +189,41 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .knowledgeBaseId(e.getKnowledgeBaseId())
                 .mcpServerIds(new ArrayList<>())
                 .messages(new ArrayList<>())
+                .summary(e.getSummary())
+                .lastIntentDomain(e.getLastIntentDomain())
+                .lastIntentCategory(e.getLastIntentCategory())
+                .lastIntentTopic(e.getLastIntentTopic())
+                .suggestions(new ArrayList<>(deserializeSuggestions(e.getSuggestionJson())))
+                .suggestionVersion(e.getSuggestionVersion())
+                .suggestionUpdatedAt(e.getSuggestionUpdatedAt())
+                .toolMode(ToolMode.fromString(e.getToolMode()))
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();
+    }
+
+    private String serializeSuggestions(List<String> suggestions) {
+        if (suggestions == null || suggestions.isEmpty()) {
+            return null;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(suggestions);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private List<String> deserializeSuggestions(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+
+        try {
+            List<String> list = objectMapper.readValue(raw, new TypeReference<>() {});
+            return list == null ? List.of() : list;
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 }

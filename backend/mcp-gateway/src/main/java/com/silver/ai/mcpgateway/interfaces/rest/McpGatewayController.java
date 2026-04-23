@@ -3,8 +3,10 @@ package com.silver.ai.mcpgateway.interfaces.rest;
 import com.silver.ai.mcpgateway.application.McpGatewayAppService;
 import com.silver.ai.mcpgateway.domain.model.ApiSource;
 import com.silver.ai.mcpgateway.domain.model.ToolMapping;
+import com.silver.ai.mcpgateway.infrastructure.health.McpHealthCheckScheduler;
 import com.silver.ai.mcpgateway.infrastructure.mcp.SourceScopedMcpServerRegistry;
 import com.silver.ai.mcpgateway.interfaces.dto.ApiSourceRequest;
+import com.silver.ai.mcpgateway.interfaces.dto.SourceHealthDto;
 import com.silver.ai.mcpgateway.interfaces.dto.ToolInvokeRequest;
 import com.silver.ai.mcpgateway.interfaces.dto.ToolMappingUpdateRequest;
 import com.silver.ai.shared.result.ApiResponse;
@@ -27,6 +29,7 @@ public class McpGatewayController {
 
     private final McpGatewayAppService mcpService;
     private final SourceScopedMcpServerRegistry sourceScopedMcpServerRegistry;
+    private final McpHealthCheckScheduler healthCheckScheduler;
 
     @Value("${spring.ai.mcp.server.name:mcp-gateway}")
     private String serverName;
@@ -48,8 +51,7 @@ public class McpGatewayController {
         return mcpService.createApiSource(
                         req.getName(), req.getDescription(), req.getBaseUrl(),
                         req.getAuthType(), req.getAuthConfig(), req.getOpenApiSpec())
-                .doOnNext(this::refreshRegistrySafely)
-                .map(ApiResponse::ok);
+                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(source)));
     }
 
     @GetMapping("/sources/{id}")
@@ -87,15 +89,44 @@ public class McpGatewayController {
         return mcpService.updateApiSource(id,
                         req.getName(), req.getDescription(), req.getBaseUrl(),
                         req.getAuthType(), req.getAuthConfig())
-                .doOnNext(this::refreshRegistrySafely)
-                .map(ApiResponse::ok);
+                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(source)));
     }
 
     @DeleteMapping("/sources/{id}")
     public Mono<ApiResponse<Void>> deleteSource(@PathVariable Long id) {
         return mcpService.deleteApiSource(id)
-                .doOnSuccess(v -> removeFromRegistrySafely(id))
+                .then(removeFromRegistrySafely(id))
                 .then(Mono.fromCallable(ApiResponse::ok));
+    }
+
+    // ===== Active Toggle =====
+
+    @PatchMapping("/sources/{id}/toggle-active")
+    public Mono<ApiResponse<ApiSource>> toggleActive(@PathVariable Long id) {
+        return mcpService.toggleApiSourceActive(id)
+                .flatMap(source -> {
+                    Mono<Void> refreshTask = source.isActive()
+                            ? refreshRegistrySafely(source)
+                            : removeFromRegistrySafely(id);
+                    return refreshTask.thenReturn(ApiResponse.ok(source));
+                });
+    }
+
+    // ===== Health =====
+
+    @GetMapping("/sources/health")
+    public Mono<ApiResponse<List<SourceHealthDto>>> listSourcesHealth() {
+        return mcpService.listApiSources()
+                .map(SourceHealthDto::from)
+                .collectList()
+                .map(ApiResponse::ok);
+    }
+
+    @PostMapping("/sources/{id}/health-check")
+    public Mono<ApiResponse<SourceHealthDto>> triggerHealthCheck(@PathVariable Long id) {
+        return healthCheckScheduler.probeOnce(id)
+                .map(SourceHealthDto::from)
+                .map(ApiResponse::ok);
     }
 
     // ===== Parse =====
@@ -111,13 +142,8 @@ public class McpGatewayController {
         return tools
                 .flatMap(result ->
                         mcpService.getApiSource(id)
-                                .doOnNext(source -> {
-                                    try {
-                                        sourceScopedMcpServerRegistry.refreshSource(source);
-                                    } catch (RuntimeException ex) {
-                                        log.warn("Failed to refresh MCP server registry for source {} after parse", id, ex);
-                                    }
-                                })
+                                .flatMap(source -> refreshRegistrySafely(source,
+                                        "Failed to refresh MCP server registry for source {} after parse", id))
                                 .thenReturn(ApiResponse.ok(result))
                 );
     }
@@ -140,7 +166,7 @@ public class McpGatewayController {
                         req.getEnabled())
                 .flatMap(mapping ->
                         mcpService.getApiSource(mapping.getApiSourceId())
-                                .doOnNext(this::refreshRegistrySafely)
+                    .flatMap(this::refreshRegistrySafely)
                                 .thenReturn(ApiResponse.ok(mapping))
                 );
     }
@@ -151,21 +177,26 @@ public class McpGatewayController {
                 .map(ApiResponse::ok);
     }
 
-    private void refreshRegistrySafely(ApiSource source) {
-        try {
-            sourceScopedMcpServerRegistry.refreshSource(source);
-        } catch (RuntimeException ex) {
-            log.warn("Failed to refresh MCP server registry for source {}, will self-heal on next request",
-                    source.getId(), ex);
-        }
+    private Mono<Void> refreshRegistrySafely(ApiSource source) {
+        return refreshRegistrySafely(source,
+                "Failed to refresh MCP server registry for source {}, will self-heal on next request",
+                source.getId());
     }
 
-    private void removeFromRegistrySafely(Long sourceId) {
-        try {
-            sourceScopedMcpServerRegistry.removeSource(sourceId);
-        } catch (RuntimeException ex) {
-            log.warn("Failed to remove source {} from MCP server registry", sourceId, ex);
-        }
+    private Mono<Void> refreshRegistrySafely(ApiSource source, String message, Long sourceId) {
+        return sourceScopedMcpServerRegistry.refreshSourceAsync(source)
+                .onErrorResume(ex -> {
+                    log.warn(message, sourceId, ex);
+                    return Mono.empty();
+                });
+    }
+
+    private Mono<Void> removeFromRegistrySafely(Long sourceId) {
+        return sourceScopedMcpServerRegistry.removeSourceAsync(sourceId)
+                .onErrorResume(ex -> {
+                    log.warn("Failed to remove source {} from MCP server registry", sourceId, ex);
+                    return Mono.empty();
+                });
     }
 
     private String buildBaseUrl(ServerHttpRequest request) {

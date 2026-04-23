@@ -20,14 +20,15 @@ public class RedisConfig {
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         Config config = new Config();
+        if (password != null && !password.isBlank()) {
+            config.setPassword(password);
+        }
         String address = "redis://" + host + ":" + port;
-        var serverConfig = config.useSingleServer()
+        config.useSingleServer()
                 .setAddress(address)
                 .setConnectionMinimumIdleSize(5)
                 .setConnectionPoolSize(20);
-        if (password != null && !password.isBlank()) {
-            serverConfig.setPassword(password);
-        }
+        
         return Redisson.create(config);
     }
 }

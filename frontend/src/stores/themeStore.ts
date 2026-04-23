@@ -1,17 +1,9 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface ThemeState {
-  mode: 'light' | 'dark';
-  toggle: () => void;
+  mode: 'light';
 }
 
-export const useThemeStore = create<ThemeState>()(
-  persist(
-    (set) => ({
-      mode: 'dark',
-      toggle: () => set((s) => ({ mode: s.mode === 'dark' ? 'light' : 'dark' })),
-    }),
-    { name: 'theme-mode' },
-  ),
-);
+export const useThemeStore = create<ThemeState>()(() => ({
+  mode: 'light' as const,
+}));

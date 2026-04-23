@@ -17,4 +17,6 @@ public class ChatRequest {
     private String message;
     private Long knowledgeBaseId;
     private List<Long> mcpServerIds;
+    /** 工具模式：OFF | AUTO | SPECIFIC（默认 AUTO） */
+    private String toolMode;
 }

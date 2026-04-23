@@ -1,5 +1,6 @@
 package com.silver.ai.infrastructure.ai;
 
+import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.Conversation;
 import com.silver.ai.domain.chat.model.MessageRole;
 import org.junit.jupiter.api.Test;
@@ -12,10 +13,12 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.mockito.Mockito.mock;
 
 class ChatMemoryManagerTest {
 
-    private final ChatMemoryManager manager = new ChatMemoryManager();
+    private final ChatMemoryManager manager = new ChatMemoryManager(
+            new ChatOrchestratorConfig(), mock(PromptTemplateEngine.class));
 
     @Test
     void buildMessagesShouldAddSystemPromptAndMapRoles() {

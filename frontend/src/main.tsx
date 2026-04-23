@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SnackbarProvider } from 'notistack';
 import App from './App';
 import ThemeProvider from './theme/ThemeProvider';
+import './styles/global.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

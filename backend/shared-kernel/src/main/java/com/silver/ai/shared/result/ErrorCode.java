@@ -38,7 +38,22 @@ public enum ErrorCode {
     MCP_SOURCE_NOT_FOUND(44001, "MCP API源不存在"),
     MCP_PARSE_FAILED(44002, "OpenAPI规范解析失败"),
     MCP_TOOL_INVOCATION_FAILED(44003, "MCP工具调用失败"),
-    MCP_TOOL_NOT_FOUND(44004, "MCP工具不存在");
+    MCP_TOOL_NOT_FOUND(44004, "MCP工具不存在"),
+
+    // 意图识别
+    INTENT_CLASSIFICATION_FAILED(45001, "意图识别失败"),
+    INTENT_CLARIFICATION_NEEDED(45002, "需要进一步澄清"),
+
+    // 模型路由
+    PROVIDER_NOT_AVAILABLE(41005, "无可用AI提供商"),
+    MODEL_HEALTH_CHECK_FAILED(41006, "模型健康检查失败"),
+
+    // ETL
+    ETL_TASK_NOT_FOUND(46001, "入库任务不存在"),
+    ETL_STAGE_FAILED(46002, "入库阶段执行失败"),
+
+    // 追踪
+    TRACE_NOT_FOUND(47001, "链路追踪记录不存在");
 
     private final int code;
     private final String message;

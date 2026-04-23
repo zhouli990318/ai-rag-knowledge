@@ -1,18 +1,7 @@
-import { Box, Typography, IconButton, Skeleton, useTheme } from '@mui/material';
-import { Add, Delete } from '@mui/icons-material';
+import { Box, Typography, IconButton, Skeleton } from '@mui/material';
+import { Add, Close } from '@mui/icons-material';
 import { Conversation } from '../../api/types';
-import IOSSearchBar from '../../components/ios/IOSSearchBar';
-import { memo, useState, useMemo, useCallback } from 'react';
-
-function formatTime(dateStr?: string) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  }
-  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-}
+import { memo, useCallback } from 'react';
 
 interface Props {
   conversations: Conversation[];
@@ -23,121 +12,90 @@ interface Props {
   isLoading?: boolean;
 }
 
-const ConversationItem = memo(function ConversationItem({
-  conversation, isActive, isDark, onSelect, onDelete,
-}: {
-  conversation: Conversation; isActive: boolean; isDark: boolean;
-  onSelect: (id: number) => void; onDelete: (id: number) => void;
-}) {
-  const lastMsg = conversation.messages?.[conversation.messages.length - 1];
+export default memo(function ConversationList({ conversations, activeId, onSelect, onDelete, onNew, isLoading }: Props) {
+  const handleDelete = useCallback((e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    onDelete(id);
+  }, [onDelete]);
+
   return (
-    <Box
-      onClick={() => onSelect(conversation.id)}
-      sx={{
-        display: 'flex', alignItems: 'flex-start',
-        px: 1.5, py: 1.5, mb: 0.25,
-        borderRadius: 2, cursor: 'pointer', position: 'relative',
-        backgroundColor: isActive
-          ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,122,255,0.08)')
-          : 'transparent',
-        transition: 'background-color 200ms',
-        '&:active': { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
-        '&:hover .delete-btn': { opacity: 1 },
-      }}
-    >
-      {isActive && (
-        <Box sx={{
-          position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-          width: 3, height: 20, borderRadius: 2, backgroundColor: '#007AFF',
-        }} />
-      )}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.25 }}>
-          <Typography sx={{
-            fontSize: 15, fontWeight: isActive ? 600 : 500,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            flex: 1, mr: 1,
-          }}>
-            {conversation.title || '新对话'}
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: 'text.secondary', flexShrink: 0 }}>
-            {formatTime(conversation.createdAt)}
-          </Typography>
-        </Box>
-        <Typography sx={{
-          fontSize: 13, color: 'text.secondary',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {lastMsg?.content?.slice(0, 60) || '暂无消息'}
-        </Typography>
-      </Box>
+    <Box sx={{
+      display: 'flex', alignItems: 'center',
+      px: 1.5, minHeight: 48,
+      gap: 0.5,
+    }}>
+      {/* New conversation button - 毛玻璃风格 */}
       <IconButton
-        className="delete-btn" size="small"
-        onClick={(e) => { e.stopPropagation(); onDelete(conversation.id); }}
+        onClick={onNew}
+        size="small"
         sx={{
-          opacity: 0, ml: 0.5, mt: 0.25, transition: 'opacity 150ms',
-          color: 'text.secondary', '&:hover': { color: '#FF3B30' },
+          width: 28, height: 28, flexShrink: 0,
+          bgcolor: 'rgba(74,74,74,0.08)', color: '#4A4A4A',
+          borderRadius: '4px',
+          transition: 'all 180ms ease-in-out',
+          '&:hover': { bgcolor: '#C84B31', color: '#FFFFFF' },
+          '&:active': { transform: 'scale(0.9)' },
         }}
       >
-        <Delete sx={{ fontSize: 16 }} />
+        <Add sx={{ fontSize: 16 }} />
       </IconButton>
-    </Box>
-  );
-});
 
-export default memo(function ConversationList({ conversations, activeId, onSelect, onDelete, onNew, isLoading }: Props) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const [search, setSearch] = useState('');
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return conversations;
-    const q = search.toLowerCase();
-    return conversations.filter((c) => c.title?.toLowerCase().includes(q));
-  }, [conversations, search]);
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Box sx={{ flex: 1 }}>
-          <IOSSearchBar value={search} onChange={setSearch} placeholder="搜索对话" />
-        </Box>
-        <IconButton
-          onClick={onNew}
-          sx={{
-            width: 32, height: 32,
-            backgroundColor: '#007AFF',
-            color: '#fff',
-            '&:hover': { backgroundColor: '#0071E3' },
-            '&:active': { transform: 'scale(0.9)' },
-          }}
-          size="small"
-        >
-          <Add sx={{ fontSize: 18 }} />
-        </IconButton>
-      </Box>
-
-      {/* List */}
-      <Box sx={{ flex: 1, overflow: 'auto', px: 1 }}>
+      {/* Horizontal scrollable tabs */}
+      <Box sx={{
+        display: 'flex', alignItems: 'center', gap: 0.35,
+        flex: 1, overflow: 'auto', minWidth: 0,
+        /* hide scrollbar */
+        '&::-webkit-scrollbar': { display: 'none' },
+        scrollbarWidth: 'none',
+      }}>
         {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <Box key={i} sx={{ px: 1.5, py: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              <Skeleton variant="text" width="60%" height={18} />
-              <Skeleton variant="text" width="90%" height={14} />
-            </Box>
+          Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} variant="rounded" width={100} height={30} sx={{ flexShrink: 0, borderRadius: '4px' }} />
           ))
         ) : (
-          filtered.map((c) => (
-            <ConversationItem
-              key={c.id}
-              conversation={c}
-              isActive={c.id === activeId}
-              isDark={isDark}
-              onSelect={onSelect}
-              onDelete={onDelete}
-            />
-          ))
+          conversations.map((c) => {
+            const isActive = c.id === activeId;
+            return (
+              <Box
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 0.5,
+                  px: 1.3, py: 0.55,
+                  borderRadius: '4px', cursor: 'pointer',
+                  flexShrink: 0, maxWidth: 160,
+                  bgcolor: isActive ? 'rgba(200,75,49,0.07)' : 'transparent',
+                  border: `1px solid ${isActive ? 'rgba(200,75,49,0.18)' : 'transparent'}`,
+                  transition: 'all 180ms ease-in-out',
+                  '&:hover': {
+                    bgcolor: isActive ? 'rgba(200,75,49,0.09)' : 'rgba(74,74,74,0.04)',
+                    borderColor: isActive ? 'rgba(200,75,49,0.22)' : 'rgba(224,221,216,0.3)',
+                  },
+                }}
+              >
+                <Typography sx={{
+                  fontSize: 13, fontWeight: isActive ? 600 : 400,
+                  color: isActive ? '#C84B31' : '#8B8B8B',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  fontFamily: '"Noto Sans SC", sans-serif',
+                }}>
+                  {c.title || '新对话'}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleDelete(e, c.id)}
+                  sx={{
+                    p: 0, width: 15, height: 15, opacity: 0,
+                    color: '#B0ADA6', transition: 'opacity 100ms',
+                    '.MuiBox-root:hover > &': { opacity: 1 },
+                    '&:hover': { color: '#C84B31' },
+                  }}
+                >
+                  <Close sx={{ fontSize: 11 }} />
+                </IconButton>
+              </Box>
+            );
+          })
         )}
       </Box>
     </Box>

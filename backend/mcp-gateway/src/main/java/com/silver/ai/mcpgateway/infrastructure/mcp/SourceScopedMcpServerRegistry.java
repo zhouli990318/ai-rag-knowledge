@@ -117,6 +117,12 @@ public class SourceScopedMcpServerRegistry {
         }
     }
 
+    public Mono<Void> refreshSourceAsync(ApiSource source) {
+        return Mono.fromRunnable(() -> refreshSource(source))
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
+    }
+
     public void removeSource(Long sourceId) {
         long stamp = stampedLock.writeLock();
         try {
@@ -124,6 +130,12 @@ public class SourceScopedMcpServerRegistry {
         } finally {
             stampedLock.unlockWrite(stamp);
         }
+    }
+
+    public Mono<Void> removeSourceAsync(Long sourceId) {
+        return Mono.fromRunnable(() -> removeSource(sourceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
     }
 
     private void refreshSourceInternal(ApiSource source) {

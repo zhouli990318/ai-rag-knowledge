@@ -36,6 +36,13 @@ public class ApiSource {
     private boolean active = true;
     @Builder.Default
     private List<ToolMapping> toolMappings = new ArrayList<>();
+    @Builder.Default
+    private HealthStatus healthStatus = HealthStatus.UNKNOWN;
+    private LocalDateTime lastHealthCheckAt;
+    private LocalDateTime lastHealthyAt;
+    @Builder.Default
+    private int consecutiveFailures = 0;
+    private String lastErrorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -47,6 +54,35 @@ public class ApiSource {
     public void deactivate() {
         this.active = false;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public void markHealthy() {
+        LocalDateTime now = LocalDateTime.now();
+        this.healthStatus = HealthStatus.HEALTHY;
+        this.lastHealthCheckAt = now;
+        this.lastHealthyAt = now;
+        this.consecutiveFailures = 0;
+        this.lastErrorMessage = null;
+        this.updatedAt = now;
+    }
+
+    public void markDegraded(String reason) {
+        LocalDateTime now = LocalDateTime.now();
+        this.healthStatus = HealthStatus.DEGRADED;
+        this.lastHealthCheckAt = now;
+        this.lastHealthyAt = now;
+        this.consecutiveFailures = 0;
+        this.lastErrorMessage = reason;
+        this.updatedAt = now;
+    }
+
+    public void markUnreachable(String errorMessage) {
+        LocalDateTime now = LocalDateTime.now();
+        this.healthStatus = HealthStatus.UNREACHABLE;
+        this.lastHealthCheckAt = now;
+        this.consecutiveFailures = this.consecutiveFailures + 1;
+        this.lastErrorMessage = errorMessage;
+        this.updatedAt = now;
     }
 
     public void updateSpec(String openApiSpec) {
