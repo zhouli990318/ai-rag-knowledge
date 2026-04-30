@@ -52,14 +52,10 @@ public class KnowledgeBaseAppService {
     // ===== Knowledge Base CRUD =====
 
     public Mono<KnowledgeBase> createKnowledgeBase(String name, String description) {
-        return knowledgeBaseRepository.existsByName(name)
-                .flatMap(exists -> {
-                    if (exists) {
-                        return Mono.error(new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "知识库名称已存在: " + name));
-                    }
-                    KnowledgeBase kb = KnowledgeBase.builder().name(name).description(description).build();
-                    return knowledgeBaseRepository.save(kb);
-                });
+        KnowledgeBase kb = KnowledgeBase.builder().name(name).description(description).build();
+        return knowledgeBaseRepository.save(kb)
+                .onErrorMap(org.springframework.dao.DuplicateKeyException.class,
+                        e -> new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "知识库名称已存在: " + name));
     }
 
     public Mono<KnowledgeBase> updateKnowledgeBase(Long id, String name, String description,

@@ -5,6 +5,7 @@ import com.silver.ai.domain.chat.port.QueryRewriterPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -21,22 +22,14 @@ public class QueryPlanningDomainService {
 
     /**
      * 对用户查询进行重写和拆分。
-     *
-     * @param originalQuery      原始查询
-     * @param conversationContext 近几轮对话
-     * @return 重写 + 拆分后的查询列表
      */
-    public QueryPlan plan(String originalQuery, List<String> conversationContext) {
-        // 1. 重写（指代消解）
-        String rewritten = queryRewriter.rewrite(originalQuery,
+    public Mono<QueryPlan> plan(String originalQuery, List<String> conversationContext) {
+        return queryRewriter.rewrite(originalQuery,
                 conversationContext.stream()
                         .limit(config.getRewriteContextRounds() * 2L)
-                        .toList());
-
-        // 2. 子问题拆分
-        List<String> subQueries = queryRewriter.decompose(rewritten);
-
-        return new QueryPlan(originalQuery, rewritten, subQueries);
+                        .toList())
+                .flatMap(rewritten -> queryRewriter.decompose(rewritten)
+                        .map(subQueries -> new QueryPlan(originalQuery, rewritten, subQueries)));
     }
 
     /**

@@ -4,80 +4,68 @@ import com.silver.ai.mcpgateway.domain.port.HttpClientPort;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.util.UriComponentsBuilder;
 
-import java.io.IOException;
+import java.net.URI;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
 public class OkHttpClientAdapter implements HttpClientPort {
 
-    private final OkHttpClient client;
+    private final WebClient webClient;
 
-    public OkHttpClientAdapter() {
-        this.client = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build();
+    public OkHttpClientAdapter(WebClient.Builder webClientBuilder) {
+        this.webClient = webClientBuilder.clone().build();
     }
 
     @Override
     public String execute(String method, String url, Map<String, String> headers,
                           Map<String, String> queryParams, String body) {
         try {
-            HttpUrl parsedUrl = HttpUrl.parse(url);
-            if (parsedUrl == null) {
-                throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED, "非法请求URL: " + url);
-            }
-
-            HttpUrl.Builder urlBuilder = parsedUrl.newBuilder();
+            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(url);
             if (queryParams != null) {
-                queryParams.forEach(urlBuilder::addQueryParameter);
+                queryParams.forEach(uriBuilder::queryParam);
             }
+            URI uri = uriBuilder.build().toUri();
 
-            Request.Builder requestBuilder = new Request.Builder().url(urlBuilder.build());
+            HttpMethod httpMethod = HttpMethod.valueOf(method.toUpperCase());
+
+            WebClient.RequestBodySpec requestSpec = webClient.method(httpMethod).uri(uri);
 
             if (headers != null) {
-                headers.forEach(requestBuilder::addHeader);
+                requestSpec = requestSpec.headers(h -> headers.forEach(h::set));
             }
 
-            RequestBody requestBody = null;
-            if (body != null) {
-                requestBody = RequestBody.create(body, MediaType.parse("application/json"));
+            WebClient.ResponseSpec responseSpec;
+            if (body != null && needsBody(httpMethod)) {
+                responseSpec = requestSpec.contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(body)
+                        .retrieve();
+            } else {
+                responseSpec = requestSpec.retrieve();
             }
 
-            switch (method.toUpperCase()) {
-                case "GET" -> requestBuilder.get();
-                case "POST" -> requestBuilder.post(requestBody != null ? requestBody : RequestBody.create("", null));
-                case "PUT" -> requestBuilder.put(requestBody != null ? requestBody : RequestBody.create("", null));
-                case "DELETE" -> {
-                    if (requestBody != null) requestBuilder.delete(requestBody);
-                    else requestBuilder.delete();
-                }
-                case "PATCH" -> requestBuilder.patch(requestBody != null ? requestBody : RequestBody.create("", null));
-                default -> throw new IllegalArgumentException("Unsupported HTTP method: " + method);
-            }
-
-            try (Response response = client.newCall(requestBuilder.build()).execute()) {
-                ResponseBody responseBody = response.body();
-                String responseStr = responseBody != null ? responseBody.string() : "";
-
-                if (!response.isSuccessful()) {
-                    log.warn("HTTP request failed: {} {} -> {} {}", method, url, response.code(), responseStr);
-                    throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED,
-                            "HTTP " + response.code() + ": " + responseStr);
-                }
-
-                return responseStr;
-            }
+            return responseSpec.bodyToMono(String.class)
+                    .defaultIfEmpty("")
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.warn("HTTP request failed: {} {} -> {} {}", method, url, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED,
+                    "HTTP " + e.getStatusCode().value() + ": " + e.getResponseBodyAsString());
         } catch (BusinessException e) {
             throw e;
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED, "HTTP request failed: " + e.getMessage(), e);
         }
+    }
+
+    private boolean needsBody(HttpMethod method) {
+        return method == HttpMethod.POST || method == HttpMethod.PUT || method == HttpMethod.PATCH;
     }
 }

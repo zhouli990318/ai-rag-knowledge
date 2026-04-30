@@ -10,7 +10,7 @@ import {
   Api, CheckCircle,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { mcpGatewayApi } from '../api/mcpApi';
+import { mcpGatewayApi, toolIndexApi } from '../api/mcpApi';
 import { McpApiSource, McpToolMapping } from '../api/types';
 import { useSnackbar } from 'notistack';
 import { InkSegmentedControl, InkBadge, InkEmptyState, InkSwitch } from '../components/ink';
@@ -365,6 +365,7 @@ export default function McpPage() {
   });
 
   // Mutations
+  const triggerReindex = () => { toolIndexApi.reindex().catch(() => {}); };
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => mcpGatewayApi.createSource(data),
     onSuccess: () => {
@@ -372,6 +373,7 @@ export default function McpPage() {
       setCreateOpen(false);
       setEditingSource(null);
       enqueueSnackbar('创建成功', { variant: 'success' });
+      triggerReindex();
     },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '创建失败', { variant: 'error' }),
   });
@@ -382,27 +384,28 @@ export default function McpPage() {
       setCreateOpen(false);
       setEditingSource(null);
       enqueueSnackbar('更新成功', { variant: 'success' });
+      triggerReindex();
     },
     onError: () => enqueueSnackbar('更新失败', { variant: 'error' }),
   });
   const deleteMutation = useMutation({
     mutationFn: mcpGatewayApi.deleteSource,
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mcp-sources'] }); setSelectedSource(null); enqueueSnackbar('删除成功', { variant: 'success' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['mcp-sources'] }); setSelectedSource(null); enqueueSnackbar('删除成功', { variant: 'success' }); triggerReindex(); },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '删除失败', { variant: 'error' }),
   });
   const parseMutation = useMutation({
     mutationFn: (data: { openApiSpec?: string; openApiUrl?: string }) => mcpGatewayApi.parseSpec(selectedSource!.id, data),
-    onSuccess: () => { refetchTools(); enqueueSnackbar('解析完成', { variant: 'success' }); },
+    onSuccess: () => { refetchTools(); enqueueSnackbar('解析完成', { variant: 'success' }); triggerReindex(); },
     onError: () => enqueueSnackbar('解析失败', { variant: 'error' }),
   });
   const toggleToolMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) => mcpGatewayApi.updateTool(id, { enabled }),
-    onSuccess: () => { refetchTools(); enqueueSnackbar('工具状态已更新', { variant: 'success' }); },
+    onSuccess: () => { refetchTools(); enqueueSnackbar('工具状态已更新', { variant: 'success' }); triggerReindex(); },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '操作失败', { variant: 'error' }),
   });
   const updateToolMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => mcpGatewayApi.updateTool(id, data),
-    onSuccess: () => { refetchTools(); setEditingTool(null); enqueueSnackbar('已更新', { variant: 'success' }); },
+    onSuccess: () => { refetchTools(); setEditingTool(null); enqueueSnackbar('已更新', { variant: 'success' }); triggerReindex(); },
     onError: () => enqueueSnackbar('更新失败', { variant: 'error' }),
   });
   const toggleSourceMutation = useMutation({
@@ -411,6 +414,7 @@ export default function McpPage() {
       queryClient.invalidateQueries({ queryKey: ['mcp-sources'] });
       queryClient.invalidateQueries({ queryKey: ['mcp-health'] });
       enqueueSnackbar('源状态已切换', { variant: 'success' });
+      triggerReindex();
     },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '操作失败', { variant: 'error' }),
   });

@@ -17,6 +17,8 @@ import org.springframework.ai.zhipuai.ZhiPuAiEmbeddingOptions;
 import org.springframework.ai.zhipuai.api.ZhiPuAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,7 +30,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class EmbeddingModelRegistry {
 
-    @Value("${app.crypto.secret-key:SpringAiRagPlatform2024}")
+    private final WebClient.Builder webClientBuilder;
+    private final RestClient.Builder restClientBuilder;
+
+    @Value("${app.crypto.secret-key}")
     private String cryptoSecretKey;
 
     private final ConcurrentHashMap<String, EmbeddingModel> cache = new ConcurrentHashMap<>();
@@ -51,18 +56,32 @@ public class EmbeddingModelRegistry {
 
         return switch (provider.getProviderType()) {
             case OLLAMA -> {
-                OllamaApi api = new OllamaApi.Builder().baseUrl(baseUrl).build();
+                OllamaApi api = new OllamaApi.Builder()
+                        .baseUrl(baseUrl)
+                        .webClientBuilder(webClientBuilder.clone())
+                        .restClientBuilder(restClientBuilder.clone())
+                        .build();
                 yield OllamaEmbeddingModel.builder()
                         .ollamaApi(api)
                     .defaultOptions(OllamaEmbeddingOptions.builder().model(model).build())
                         .build();
             }
             case OPENAI, DEEPSEEK, DASHSCOPE, QIANFAN, MOONSHOT -> {
-                OpenAiApi api = OpenAiApi.builder().baseUrl(baseUrl).apiKey(apiKey).build();
+                OpenAiApi api = OpenAiApi.builder()
+                        .baseUrl(baseUrl)
+                        .apiKey(apiKey)
+                        .webClientBuilder(webClientBuilder.clone())
+                        .restClientBuilder(restClientBuilder.clone())
+                        .build();
                 yield new OpenAiEmbeddingModel(api, MetadataMode.EMBED, OpenAiEmbeddingOptions.builder().model(model).build());
             }
             case ZHIPUAI -> {
-                ZhiPuAiApi api = ZhiPuAiApi.builder().apiKey(apiKey).baseUrl(baseUrl).build();
+                ZhiPuAiApi api = ZhiPuAiApi.builder()
+                        .apiKey(apiKey)
+                        .baseUrl(baseUrl)
+                        .webClientBuilder(webClientBuilder.clone())
+                        .restClientBuilder(restClientBuilder.clone())
+                        .build();
                 yield new ZhiPuAiEmbeddingModel(api, MetadataMode.EMBED, ZhiPuAiEmbeddingOptions.builder().model(model).build());
             }
             case ANTHROPIC -> throw new UnsupportedOperationException("Anthropic does not support embedding models");

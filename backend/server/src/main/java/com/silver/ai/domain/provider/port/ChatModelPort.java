@@ -3,6 +3,7 @@ package com.silver.ai.domain.provider.port;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.tool.ToolCallback;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -17,7 +18,7 @@ public interface ChatModelPort {
     Flux<String> streamChat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks);
 
     /**
-     * 同步对话
+     * 非流式对话（响应式）
      */
-    String chat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks);
+    Mono<String> chat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks);
 }

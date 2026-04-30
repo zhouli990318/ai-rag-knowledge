@@ -4,7 +4,6 @@ import com.silver.ai.domain.chat.model.ChatMessage;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.Conversation;
 import com.silver.ai.domain.chat.model.PromptTemplates;
-import com.silver.ai.domain.provider.port.ChatModelPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;

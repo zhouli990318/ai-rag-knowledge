@@ -25,6 +25,7 @@ public class SuggestionCache {
     private static final Duration TTL = Duration.ofHours(24);
 
     private final ConcurrentHashMap<Long, Entry> store = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> computing = new ConcurrentHashMap<>();
     private RedissonClient redissonClient;
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -59,6 +60,7 @@ public class SuggestionCache {
 
     public void evict(Long conversationId) {
         store.remove(conversationId);
+        computing.keySet().removeIf(k -> k.startsWith(conversationId + ":"));
         if (redissonClient != null) {
             try {
                 redissonClient.getKeys().deleteByPattern(redisPattern(conversationId));
@@ -66,6 +68,20 @@ public class SuggestionCache {
                 log.debug("Evict redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
             }
         }
+    }
+
+    /**
+     * 尝试获取指定会话+版本的计算权。返回 true 表示获得计算权，false 表示已有计算进行中。
+     */
+    public boolean tryStartComputing(Long conversationId, int version) {
+        return computing.putIfAbsent(conversationId + ":" + version, Boolean.TRUE) == null;
+    }
+
+    /**
+     * 释放指定会话+版本的计算权。
+     */
+    public void finishComputing(Long conversationId, int version) {
+        computing.remove(conversationId + ":" + version);
     }
 
     private Optional<List<String>> getFromRedis(Long conversationId, int version) {

@@ -13,7 +13,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.test.util.ReflectionTestUtils;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -108,7 +107,9 @@ class ModelProviderAppServiceTest {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
                 mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        when(repository.existsByName("dup")).thenReturn(Mono.just(true));
+        ReflectionTestUtils.setField(service, "cryptoSecretKey", "unit-test-key");
+        when(repository.save(any(ModelProvider.class)))
+                .thenReturn(Mono.error(new org.springframework.dao.DuplicateKeyException("uk_provider_name")));
 
         StepVerifier.create(service.createProvider("dup", ProviderType.OPENAI, "key", null, null, null, null))
                 .expectError(BusinessException.class)

@@ -12,6 +12,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -51,33 +52,31 @@ public class LlmIntentClassifier implements IntentClassifierPort {
             """;
 
     @Override
-    public IntentResult classify(String userMessage, List<String> conversationContext) {
+    public Mono<IntentResult> classify(String userMessage, List<String> conversationContext) {
         if (intentProviderId == null) {
             log.debug("No intent provider configured, skipping LLM classification");
-            return IntentResult.defaultRetrieval();
+            return Mono.just(IntentResult.defaultRetrieval());
         }
 
-        try {
-            StringBuilder contextBuilder = new StringBuilder();
-            if (conversationContext != null && !conversationContext.isEmpty()) {
-                contextBuilder.append("对话上下文:\n");
-                conversationContext.forEach(msg -> contextBuilder.append(msg).append("\n"));
-                contextBuilder.append("\n");
-            }
-            contextBuilder.append("当前消息: ").append(userMessage);
+        StringBuilder contextBuilder = new StringBuilder();
+        if (conversationContext != null && !conversationContext.isEmpty()) {
+            contextBuilder.append("对话上下文:\n");
+            conversationContext.forEach(msg -> contextBuilder.append(msg).append("\n"));
+            contextBuilder.append("\n");
+        }
+        contextBuilder.append("当前消息: ").append(userMessage);
 
-            String response = chatModelPort.chat(
-                    intentProviderId, null,
-                    List.of(new SystemMessage(INTENT_SYSTEM_PROMPT),
-                            new UserMessage(contextBuilder.toString())),
-                    List.of()
-            );
-
-            return parseResponse(response);
-        } catch (Exception e) {
+        return chatModelPort.chat(
+                intentProviderId, null,
+                List.of(new SystemMessage(INTENT_SYSTEM_PROMPT),
+                        new UserMessage(contextBuilder.toString())),
+                List.of()
+        )
+        .map(this::parseResponse)
+        .onErrorResume(e -> {
             log.warn("LLM intent classification failed: {}", e.getMessage());
-            return IntentResult.defaultRetrieval();
-        }
+            return Mono.just(IntentResult.defaultRetrieval());
+        });
     }
 
     private IntentResult parseResponse(String response) {

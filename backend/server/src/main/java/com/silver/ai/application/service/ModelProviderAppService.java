@@ -33,30 +33,26 @@ public class ModelProviderAppService {
     private final ChatModelRegistry chatModelRegistry;
     private final EmbeddingModelRegistry embeddingModelRegistry;
 
-    @Value("${app.crypto.secret-key:SpringAiRagPlatform2024}")
+    @Value("${app.crypto.secret-key}")
     private String cryptoSecretKey;
 
     public Mono<ModelProvider> createProvider(String name, ProviderType providerType, String apiKey,
                                               String baseUrl, String defaultModel,
                                               String embeddingModel, Integer embeddingDimensions) {
-        return providerRepository.existsByName(name)
-                .flatMap(exists -> {
-                    if (exists) {
-                        return Mono.error(new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "提供商名称已存在: " + name));
-                    }
-                    String encryptedKey = (apiKey != null && !apiKey.isBlank())
-                            ? CryptoUtil.encrypt(apiKey, cryptoSecretKey) : null;
-                    ModelProvider provider = ModelProvider.builder()
-                            .name(name)
-                            .providerType(providerType)
-                            .apiKey(encryptedKey)
-                            .baseUrl(baseUrl)
-                            .defaultModel(defaultModel)
-                            .embeddingModel(embeddingModel)
-                            .embeddingDimensions(embeddingDimensions)
-                            .build();
-                    return providerRepository.save(provider);
-                });
+        String encryptedKey = (apiKey != null && !apiKey.isBlank())
+                ? CryptoUtil.encrypt(apiKey, cryptoSecretKey) : null;
+        ModelProvider provider = ModelProvider.builder()
+                .name(name)
+                .providerType(providerType)
+                .apiKey(encryptedKey)
+                .baseUrl(baseUrl)
+                .defaultModel(defaultModel)
+                .embeddingModel(embeddingModel)
+                .embeddingDimensions(embeddingDimensions)
+                .build();
+        return providerRepository.save(provider)
+                .onErrorMap(org.springframework.dao.DuplicateKeyException.class,
+                        e -> new BusinessException(ErrorCode.DUPLICATE_RESOURCE, "提供商名称已存在: " + name));
     }
 
     public Mono<ModelProvider> updateProvider(Long id, String name, String apiKey, String baseUrl,

@@ -4,7 +4,7 @@ import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.port.ChatModelPort;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
-import com.silver.ai.domain.provider.service.ModelRoutingDomainService;
+import com.silver.ai.domain.provider.port.ModelSelectionPort;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,9 @@ import org.springframework.ai.model.tool.DefaultToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import reactor.util.retry.Retry;
 
 import java.util.List;
 import java.util.Locale;
@@ -31,14 +33,14 @@ public class ChatModelAdapter implements ChatModelPort {
 
     private final ModelProviderRepository providerRepository;
     private final ChatModelRegistry chatModelRegistry;
-    private final ModelRoutingDomainService modelRouting;
+    private final ModelSelectionPort modelSelection;
     private final ChatOrchestratorConfig orchestratorConfig;
 
     @Override
     public Flux<String> streamChat(Long providerId, String model, List<Message> messages,
                                    List<ToolCallback> toolCallbacks) {
         return Flux.defer(() -> {
-            ModelProvider provider = modelRouting.selectProvider(providerId);
+            ModelProvider provider = modelSelection.selectProvider(providerId);
             ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
             Prompt prompt = createPrompt(messages, toolCallbacks);
 
@@ -49,7 +51,7 @@ public class ChatModelAdapter implements ChatModelPort {
                     .map(response -> {
                         if (firstTokenTime[0] == 0) {
                             firstTokenTime[0] = System.currentTimeMillis() - startTime;
-                            modelRouting.recordSuccess(provider.getId(), firstTokenTime[0]);
+                            modelSelection.recordSuccess(provider.getId(), firstTokenTime[0]);
                         }
                         if (response.getResult() != null && response.getResult().getOutput() != null) {
                             String text = response.getResult().getOutput().getText();
@@ -61,54 +63,69 @@ public class ChatModelAdapter implements ChatModelPort {
                     .doOnError(e -> recordFailureIfProviderIssue(provider.getId(), e));
         })
         .subscribeOn(Schedulers.boundedElastic())
-        .retry(orchestratorConfig.getModelMaxRetries())
+        .retryWhen(Retry.max(orchestratorConfig.getModelMaxRetries())
+                .filter(e -> !isRateLimitError(e)))
         .onErrorMap(e -> {
             if (e instanceof BusinessException) return e;
             log.error("Stream chat error for provider {}: {}", providerId, e.getMessage(), e);
+            logResponseBodyIfPresent(e);
             return new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e);
         });
     }
 
     @Override
-    public String chat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks) {
-        int maxRetries = orchestratorConfig.getModelMaxRetries();
-        Exception lastException = null;
+    public Mono<String> chat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks) {
+        return Mono.defer(() -> {
+            ModelProvider provider = modelSelection.selectProvider(providerId);
+            ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
+            Prompt prompt = createPrompt(messages, toolCallbacks);
 
-        for (int attempt = 0; attempt <= maxRetries; attempt++) {
-            ModelProvider selectedProvider = null;
-            try {
-                selectedProvider = modelRouting.selectProvider(providerId);
-                ChatModel chatModel = chatModelRegistry.getWithModel(selectedProvider, model);
+            long startTime = System.currentTimeMillis();
 
-                long startTime = System.currentTimeMillis();
-                Prompt prompt = createPrompt(messages, toolCallbacks);
-                var response = chatModel.call(prompt);
-                long duration = System.currentTimeMillis() - startTime;
-
-                modelRouting.recordSuccess(selectedProvider.getId(), duration);
-                return response.getResult().getOutput().getText();
-            } catch (Exception e) {
-                lastException = e;
-                if (e instanceof BusinessException be && be.getErrorCode() == ErrorCode.PROVIDER_NOT_AVAILABLE) {
-                    throw be; // 无可用提供商，不再重试
-                }
-                log.warn("Chat attempt {} failed for provider {}: {}",
-                        attempt + 1, providerId, e.getMessage());
-                if (selectedProvider != null) {
-                    recordFailureIfProviderIssue(selectedProvider.getId(), e);
-                }
-            }
-        }
-
-        throw new BusinessException(ErrorCode.CHAT_STREAM_ERROR,
-                "All retry attempts exhausted: " + lastException.getMessage(), lastException);
+            return chatModel.stream(prompt)
+                    .map(response -> {
+                        if (response.getResult() != null && response.getResult().getOutput() != null) {
+                            String text = response.getResult().getOutput().getText();
+                            return text != null ? text : "";
+                        }
+                        return "";
+                    })
+                    .filter(text -> !text.isEmpty())
+                    .collect(StringBuilder::new, StringBuilder::append)
+                    .map(StringBuilder::toString)
+                    .doOnSuccess(result -> {
+                        long duration = System.currentTimeMillis() - startTime;
+                        modelSelection.recordSuccess(provider.getId(), duration);
+                    })
+                    .doOnError(e -> recordFailureIfProviderIssue(provider.getId(), e));
+        })
+        .subscribeOn(Schedulers.boundedElastic())
+        .retryWhen(Retry.max(orchestratorConfig.getModelMaxRetries())
+                .filter(e -> !isRateLimitError(e)))
+        .onErrorMap(e -> {
+            if (e instanceof BusinessException) return e;
+            log.error("Chat error for provider {}: {}", providerId, e.getMessage(), e);
+            logResponseBodyIfPresent(e);
+            return new BusinessException(ErrorCode.CHAT_STREAM_ERROR, e.getMessage(), e);
+        });
     }
 
     private void recordFailureIfProviderIssue(Long providerId, Throwable error) {
         if (providerId == null || !isProviderAvailabilityError(error)) {
             return;
         }
-        modelRouting.recordFailure(providerId);
+        logResponseBodyIfPresent(error);
+        modelSelection.recordFailure(providerId);
+    }
+
+    /**
+     * 从 WebClient 响应异常中提取并记录响应体，辅助诊断 API 4xx/5xx 错误。
+     */
+    private void logResponseBodyIfPresent(Throwable error) {
+        Throwable root = unwrap(error);
+        if (root instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
+            log.error("API response error [{}]: {}", wce.getStatusCode(), wce.getResponseBodyAsString());
+        }
     }
 
     private boolean isProviderAvailabilityError(Throwable error) {
@@ -152,6 +169,17 @@ public class ChatModelAdapter implements ChatModelPort {
                 || normalized.contains(" 502")
                 || normalized.contains(" 503")
                 || normalized.contains(" 504");
+    }
+
+    private boolean isRateLimitError(Throwable error) {
+        Throwable root = unwrap(error);
+        String message = root.getMessage();
+        if (message == null || message.isBlank()) return false;
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("rate limit")
+                || normalized.contains("too many requests")
+                || normalized.contains("insufficient_quota")
+                || normalized.contains(" 429");
     }
 
     private Throwable unwrap(Throwable error) {

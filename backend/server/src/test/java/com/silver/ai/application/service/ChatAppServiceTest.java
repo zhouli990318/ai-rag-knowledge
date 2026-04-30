@@ -2,17 +2,8 @@ package com.silver.ai.application.service;
 
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.Conversation;
-import com.silver.ai.domain.chat.model.IntentResult;
-import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.chat.port.ChatTraceRepository;
 import com.silver.ai.domain.chat.port.ConversationRepository;
-import com.silver.ai.domain.chat.service.IntentDecisionDomainService;
-import com.silver.ai.domain.chat.service.QueryPlanningDomainService;
-import com.silver.ai.domain.chat.service.ToolRoutingDomainService;
-import com.silver.ai.domain.knowledge.model.KnowledgeBase;
-import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
-import com.silver.ai.domain.knowledge.service.MultiPathRetrievalDomainService;
-import com.silver.ai.domain.knowledge.service.RetrievalDomainService;
 import com.silver.ai.domain.provider.port.ChatModelPort;
 import com.silver.ai.infrastructure.ai.ChatMemoryManager;
 import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
@@ -32,53 +23,37 @@ import static org.mockito.Mockito.*;
 
 class ChatAppServiceTest {
 
+    private static final ChatOrchestrator.OrchestrationResult DEFAULT_RESULT =
+            new ChatOrchestrator.OrchestrationResult(
+                    List.of(new UserMessage("hello")), List.of());
+
     private ChatAppService createService(ChatModelPort chatModelPort,
                                           ConversationRepository conversationRepository,
-                                          KnowledgeBaseRepository knowledgeBaseRepository,
-                                          RetrievalDomainService retrievalDomainService,
-                                          PromptTemplateEngine promptTemplateEngine,
-                                          ChatMemoryManager chatMemoryManager) {
-        MultiPathRetrievalDomainService multiPathRetrieval = mock(MultiPathRetrievalDomainService.class);
-        IntentDecisionDomainService intentDecision = mock(IntentDecisionDomainService.class);
-        QueryPlanningDomainService queryPlanning = mock(QueryPlanningDomainService.class);
-        ToolRoutingDomainService toolRouting = mock(ToolRoutingDomainService.class);
+                                          ChatOrchestrator orchestrator) {
         ChatTraceRepository traceRepo = mock(ChatTraceRepository.class);
-        ChatOrchestratorConfig config = new ChatOrchestratorConfig();
+        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
+        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
 
-        // Default stubs for orchestration services
-        when(intentDecision.detect(anyString(), anyList()))
-                .thenReturn(IntentResult.defaultRetrieval());
-        when(queryPlanning.plan(anyString(), anyList()))
-                .thenAnswer(inv -> new QueryPlanningDomainService.QueryPlan(
-                        inv.getArgument(0), inv.getArgument(0), List.of(inv.getArgument(0))));
-        when(toolRouting.decide(any(), any(), any()))
-                .thenReturn(ToolRoutingDomainService.ToolDecision.noTool());
         when(traceRepo.save(any())).thenReturn(Mono.empty());
-        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), any())).thenReturn("");
 
-        return new ChatAppService(chatModelPort, conversationRepository, knowledgeBaseRepository,
-                retrievalDomainService, multiPathRetrieval, promptTemplateEngine, chatMemoryManager,
-                intentDecision, queryPlanning, toolRouting, traceRepo, config,
-                new com.silver.ai.application.service.SuggestionCache());
+        return new ChatAppService(chatModelPort, conversationRepository, orchestrator,
+                traceRepo, promptTemplateEngine, chatMemoryManager,
+                new SuggestionCache(), new ChatOrchestratorConfig());
     }
 
     @Test
     void chatShouldPersistUserAndAssistantMessages() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository,
-                mock(KnowledgeBaseRepository.class), mock(RetrievalDomainService.class),
-                promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
 
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(conversationRepository.findById(any()))
                 .thenAnswer(inv -> Mono.empty());
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
 
         String response = service.chat(null, 1L, "model-x", "hello", null, null, null, null).block();
@@ -91,21 +66,13 @@ class ChatAppServiceTest {
     void streamChatShouldAggregateChunksAndSaveAssistantMessageOnComplete() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-        RetrievalDomainService retrievalDomainService = mock(RetrievalDomainService.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository, knowledgeBaseRepository,
-                retrievalDomainService, promptTemplateEngine, chatMemoryManager);
-        KnowledgeBase kb = KnowledgeBase.builder().id(8L).name("kb").build();
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
 
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(knowledgeBaseRepository.findById(8L)).thenReturn(Mono.just(kb));
-        when(retrievalDomainService.retrieveContext(kb, "hello")).thenReturn("rag-context");
-        when(chatMemoryManager.buildMessages(any(Conversation.class),
-                argThat(prompt -> prompt.contains("custom") && prompt.contains("rag-context")), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.streamChat(eq(1L), eq("model-x"), any(), any()))
                 .thenReturn(Flux.just("A", "B"));
 
@@ -120,8 +87,7 @@ class ChatAppServiceTest {
     void getConversationShouldThrowWhenMissing() {
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
         ChatAppService service = createService(mock(ChatModelPort.class), conversationRepository,
-                mock(KnowledgeBaseRepository.class), mock(RetrievalDomainService.class),
-                mock(PromptTemplateEngine.class), mock(ChatMemoryManager.class));
+                mock(ChatOrchestrator.class));
 
         when(conversationRepository.findById(99L)).thenReturn(Mono.empty());
 
@@ -134,54 +100,41 @@ class ChatAppServiceTest {
     void chatShouldUseConversationScopedKnowledgeBaseWhenRequestOmitsIt() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-        RetrievalDomainService retrievalDomainService = mock(RetrievalDomainService.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository, knowledgeBaseRepository,
-                retrievalDomainService, promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
         Conversation conversation = Conversation.builder()
                 .id(7L).providerId(1L).model("model-x").knowledgeBaseId(8L).build();
-        KnowledgeBase knowledgeBase = KnowledgeBase.builder().id(8L).name("kb").build();
 
         when(conversationRepository.findById(7L)).thenReturn(Mono.just(conversation));
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(knowledgeBaseRepository.findById(8L)).thenReturn(Mono.just(knowledgeBase));
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
 
-        String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of()).block();
+        String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of(), null).block();
 
         assertEquals("reply", response);
-        verify(knowledgeBaseRepository).findById(8L);
     }
 
     @Test
     void chatShouldGracefullyHandleMissingKnowledgeBase() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository, knowledgeBaseRepository,
-                mock(RetrievalDomainService.class), promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
         Conversation conversation = Conversation.builder()
                 .id(7L).providerId(1L).model("model-x").knowledgeBaseId(8L).build();
 
         when(conversationRepository.findById(7L)).thenReturn(Mono.just(conversation));
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(knowledgeBaseRepository.findById(8L)).thenReturn(Mono.empty());
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
 
         // Orchestration pipeline handles missing KB gracefully — chat still completes
-        String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of()).block();
+        String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of(), null).block();
         assertEquals("reply", response);
     }
 
@@ -189,11 +142,8 @@ class ChatAppServiceTest {
     void streamChatShouldEmitFriendlyErrorMessageAndPersistIt() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository,
-                mock(KnowledgeBaseRepository.class), mock(RetrievalDomainService.class),
-                promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
         Conversation conversation = Conversation.builder()
                 .id(8L).providerId(1L).model("model-x").mcpServerIds(List.of(11L)).build();
         IllegalStateException rootCause = new IllegalStateException("No ToolCallback found for tool name: getAlarmInfoUsingGET");
@@ -202,9 +152,8 @@ class ChatAppServiceTest {
         when(conversationRepository.findById(8L)).thenReturn(Mono.just(conversation));
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.streamChat(eq(1L), eq("model-x"), any(), any()))
                 .thenReturn(Flux.error(businessException));
 
@@ -218,20 +167,16 @@ class ChatAppServiceTest {
     void streamChatShouldNotFailWhenAssistantPersistenceFailsOnCompletion() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository,
-                mock(KnowledgeBaseRepository.class), mock(RetrievalDomainService.class),
-                promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
         Conversation conversation = Conversation.builder()
                 .id(8L).providerId(1L).model("model-x").build();
 
         when(conversationRepository.findById(8L)).thenReturn(Mono.just(conversation));
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.streamChat(eq(1L), eq("model-x"), any(), any()))
                 .thenReturn(Flux.just("chunk"));
 
@@ -245,21 +190,16 @@ class ChatAppServiceTest {
     void streamChatShouldGracefullyHandleMissingKnowledgeBase() {
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
-        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
-        ChatAppService service = createService(chatModelPort, conversationRepository, knowledgeBaseRepository,
-                mock(RetrievalDomainService.class), promptTemplateEngine, chatMemoryManager);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
         Conversation conversation = Conversation.builder()
                 .id(8L).providerId(1L).model("model-x").knowledgeBaseId(99L).build();
 
         when(conversationRepository.findById(8L)).thenReturn(Mono.just(conversation));
         when(conversationRepository.save(any(Conversation.class)))
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
-        when(knowledgeBaseRepository.findById(99L)).thenReturn(Mono.empty());
-        when(promptTemplateEngine.render(any())).thenReturn("system");
-        when(chatMemoryManager.buildMessages(any(Conversation.class), any(String.class), anyInt()))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(DEFAULT_RESULT));
         when(chatModelPort.streamChat(eq(1L), eq("model-x"), any(), any()))
                 .thenReturn(Flux.just("reply"));
 

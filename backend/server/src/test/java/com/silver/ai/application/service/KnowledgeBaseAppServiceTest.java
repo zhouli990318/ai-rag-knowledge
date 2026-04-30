@@ -21,7 +21,6 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,7 +58,8 @@ class KnowledgeBaseAppServiceTest {
     @Test
     void createKnowledgeBaseShouldRejectDuplicateName() {
         KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
-        when(knowledgeBaseRepository.existsByName("kb")).thenReturn(Mono.just(true));
+        when(knowledgeBaseRepository.save(any(KnowledgeBase.class)))
+                .thenReturn(Mono.error(new org.springframework.dao.DuplicateKeyException("uk_kb_name")));
         KnowledgeBaseAppService service = createService(knowledgeBaseRepository,
                 mock(DocumentRepository.class), mock(DocumentChunkRepository.class),
                 mock(DocumentProcessingDomainService.class), mock(RetrievalDomainService.class), mock(VectorStorePort.class));

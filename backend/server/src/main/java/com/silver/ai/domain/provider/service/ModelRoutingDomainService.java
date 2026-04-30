@@ -3,6 +3,7 @@ package com.silver.ai.domain.provider.service;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
+import com.silver.ai.domain.provider.port.ModelSelectionPort;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ModelRoutingDomainService {
+public class ModelRoutingDomainService implements ModelSelectionPort {
 
     private final ModelProviderRepository providerRepository;
     private final ChatOrchestratorConfig config;
@@ -27,6 +28,7 @@ public class ModelRoutingDomainService {
      * 选择最佳可用提供商：优先使用指定的 providerId，
      * 如果不可用则按优先级寻找备选。
      */
+    @Override
     public ModelProvider selectProvider(Long preferredProviderId) {
         // 1. 尝试首选
         ModelProvider preferred = providerRepository.findById(preferredProviderId)
@@ -73,6 +75,7 @@ public class ModelRoutingDomainService {
     /**
      * 记录调用成功（更新健康状态和首包延迟）。
      */
+    @Override
     public void recordSuccess(Long providerId, long firstTokenMs) {
         providerRepository.findById(providerId).subscribe(provider -> {
             provider.markHealthy(firstTokenMs);
@@ -83,6 +86,7 @@ public class ModelRoutingDomainService {
     /**
      * 记录调用失败（更新故障计数）。
      */
+    @Override
     public void recordFailure(Long providerId) {
         providerRepository.findById(providerId).subscribe(provider -> {
             provider.markUnhealthy();

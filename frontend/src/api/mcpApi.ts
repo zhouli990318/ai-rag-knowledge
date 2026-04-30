@@ -1,3 +1,4 @@
+import api from './client';
 import { mcpApi } from './client';
 import { ApiResponse, McpApiSource, McpConnectionInfo, McpToolMapping, SourceHealth } from './types';
 
@@ -19,4 +20,11 @@ export const mcpGatewayApi = {
   testTool: (id: number, args: string) => mcpApi.post<ApiResponse<string>>(`${BASE}/tools/${id}/test`, { arguments: args }).then((r) => r.data.data),
   listSourcesHealth: () => mcpApi.get<ApiResponse<SourceHealth[]>>(`${BASE}/sources/health`).then((r) => r.data.data),
   triggerHealthCheck: (id: number) => mcpApi.post<ApiResponse<SourceHealth>>(`${BASE}/sources/${id}/health-check`).then((r) => r.data.data),
+};
+
+/**
+ * 工具索引 API（走主服务 /api 代理，非 MCP 网关）
+ */
+export const toolIndexApi = {
+  reindex: () => api.post<ApiResponse<string>>('/api/v1/tools/reindex').then((r) => r.data.data),
 };

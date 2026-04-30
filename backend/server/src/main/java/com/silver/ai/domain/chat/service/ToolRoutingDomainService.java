@@ -2,8 +2,9 @@ package com.silver.ai.domain.chat.service;
 
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.IntentResult;
+import com.silver.ai.domain.chat.model.ToolIndexEntry;
 import com.silver.ai.domain.chat.model.ToolMode;
-import com.silver.ai.infrastructure.mcp.McpToolCallbackService;
+import com.silver.ai.domain.chat.port.McpToolPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.ToolCallback;
@@ -16,7 +17,7 @@ import java.util.List;
  *
  * ToolMode 三态：
  * - OFF:      完全不注入
- * - AUTO:     注入所有 active 且健康的 MCP 源工具，由模型自行决定是否调用
+ * - AUTO:     语义检索相关工具（启用时），或注入全部 active 工具（禁用时）
  * - SPECIFIC: 仅注入用户指定的 mcpServerIds
  */
 @Slf4j
@@ -24,10 +25,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ToolRoutingDomainService {
 
-    private final McpToolCallbackService mcpToolCallbackService;
+    private final McpToolPort mcpToolPort;
+    private final ToolIndexDomainService toolIndexService;
     private final ChatOrchestratorConfig config;
 
-    public ToolDecision decide(IntentResult intentResult, ToolMode toolMode, List<Long> mcpServerIds) {
+    public ToolDecision decide(IntentResult intentResult, ToolMode toolMode,
+                               List<Long> mcpServerIds, String userQuery) {
         ToolMode effectiveMode = toolMode == null ? ToolMode.AUTO : toolMode;
 
         if (effectiveMode == ToolMode.OFF) {
@@ -39,21 +42,47 @@ public class ToolRoutingDomainService {
             if (mcpServerIds == null || mcpServerIds.isEmpty()) {
                 return ToolDecision.noTool();
             }
-            callbacks = mcpToolCallbackService.getToolCallbacks(mcpServerIds);
+            callbacks = mcpToolPort.getToolCallbacks(mcpServerIds);
         } else {
-            // AUTO: 总是注入所有 active 源的工具，让 LLM 自己决定是否调用
-            callbacks = mcpToolCallbackService.getAllActiveToolCallbacks();
+            // AUTO 模式
+            callbacks = resolveAutoTools(userQuery);
         }
 
         if (callbacks.isEmpty()) {
             return ToolDecision.noTool();
         }
 
-        // AUTO/SPECIFIC 都允许自动执行；仅在模型返回工具调用时生效
         boolean autoExecute = effectiveMode == ToolMode.SPECIFIC
                 || intentResult == null
                 || intentResult.getConfidence() >= config.getToolAutoExecuteThreshold();
         return new ToolDecision(callbacks, autoExecute);
+    }
+
+    /**
+     * AUTO 模式工具解析：
+     * - 语义检索启用时 → 根据用户查询召回 topK 个相关工具
+     * - 语义检索禁用时 → 全量注入（兼容旧行为）
+     */
+    private List<ToolCallback> resolveAutoTools(String userQuery) {
+        if (config.isToolSemanticRetrievalEnabled() && userQuery != null && !userQuery.isBlank()) {
+            List<ToolIndexEntry> relevant = toolIndexService.retrieveRelevantTools(
+                    userQuery, config.getToolRetrievalTopK(), config.getToolRetrievalThreshold());
+
+            if (!relevant.isEmpty()) {
+                List<Long> toolIds = relevant.stream()
+                        .map(ToolIndexEntry::toolId)
+                        .toList();
+                List<ToolCallback> callbacks = mcpToolPort.getToolCallbacksByToolIds(toolIds);
+                log.debug("Semantic tool retrieval: {} relevant tools out of total pool",
+                        callbacks.size());
+                return callbacks;
+            }
+            log.debug("Semantic tool retrieval returned no results, falling back to no tools");
+            return List.of();
+        }
+
+        // 语义检索禁用 → 全量注入
+        return mcpToolPort.getAllActiveToolCallbacks();
     }
 
     public record ToolDecision(

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -30,22 +31,23 @@ public class CompositeIntentClassifier implements IntentClassifierPort {
     }
 
     @Override
-    public IntentResult classify(String userMessage, List<String> conversationContext) {
-        // 如果配置了 LLM 提供商，优先使用 LLM
+    public Mono<IntentResult> classify(String userMessage, List<String> conversationContext) {
         if (intentProviderId != null) {
-            try {
-                IntentResult result = llmClassifier.classify(userMessage, conversationContext);
-                if (result.getConfidence() > 0.3) {
-                    return result;
-                }
-                log.debug("LLM intent confidence too low ({}), falling back to rule-based",
-                        result.getConfidence());
-            } catch (Exception e) {
-                log.warn("LLM intent classifier failed, falling back to rule-based", e);
-            }
+            return llmClassifier.classify(userMessage, conversationContext)
+                    .flatMap(result -> {
+                        if (result.getConfidence() > 0.3) {
+                            return Mono.just(result);
+                        }
+                        log.debug("LLM intent confidence too low ({}), falling back to rule-based",
+                                result.getConfidence());
+                        return ruleClassifier.classify(userMessage, conversationContext);
+                    })
+                    .onErrorResume(e -> {
+                        log.warn("LLM intent classifier failed, falling back to rule-based", e);
+                        return ruleClassifier.classify(userMessage, conversationContext);
+                    });
         }
 
-        // 降级到规则分类器
         return ruleClassifier.classify(userMessage, conversationContext);
     }
 }

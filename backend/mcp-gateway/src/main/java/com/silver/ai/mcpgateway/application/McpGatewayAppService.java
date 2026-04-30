@@ -7,11 +7,11 @@ import com.silver.ai.mcpgateway.domain.port.ApiSourceRepository;
 import com.silver.ai.mcpgateway.domain.port.OpenApiParserPort;
 import com.silver.ai.mcpgateway.domain.port.ToolMappingRepository;
 import com.silver.ai.mcpgateway.domain.service.ToolInvocationDomainService;
+import com.silver.ai.mcpgateway.domain.service.UrlNormalizer;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.HttpUrl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
@@ -181,21 +181,6 @@ public class McpGatewayAppService {
     }
 
     private String normalizeBaseUrl(String baseUrl) {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "baseUrl不能为空");
-        }
-
-        String normalized = baseUrl.trim();
-        if (!normalized.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*$")) {
-            normalized = "http://" + normalized;
-        }
-
-        HttpUrl parsedUrl = HttpUrl.parse(normalized);
-        if (parsedUrl == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "baseUrl格式不合法: " + baseUrl);
-        }
-
-        String canonicalUrl = parsedUrl.toString();
-        return canonicalUrl.endsWith("/") ? canonicalUrl.substring(0, canonicalUrl.length() - 1) : canonicalUrl;
+        return UrlNormalizer.normalizeBaseUrl(baseUrl, ErrorCode.INVALID_PARAMETER);
     }
 }

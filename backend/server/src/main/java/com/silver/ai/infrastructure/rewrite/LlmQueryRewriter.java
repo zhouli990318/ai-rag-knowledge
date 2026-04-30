@@ -10,6 +10,7 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 
@@ -49,66 +50,67 @@ public class LlmQueryRewriter implements QueryRewriterPort {
             """;
 
     @Override
-    public String rewrite(String originalQuery, List<String> conversationContext) {
+    public Mono<String> rewrite(String originalQuery, List<String> conversationContext) {
         if (rewriteProviderId == null) {
-            return originalQuery;
+            return Mono.just(originalQuery);
         }
-
-        // 如果上下文为空，不需要重写
         if (conversationContext == null || conversationContext.isEmpty()) {
-            return originalQuery;
+            return Mono.just(originalQuery);
         }
 
-        try {
-            StringBuilder contextBuilder = new StringBuilder("对话上下文:\n");
-            conversationContext.forEach(msg -> contextBuilder.append(msg).append("\n"));
-            contextBuilder.append("\n用户最新问题: ").append(originalQuery);
+        StringBuilder contextBuilder = new StringBuilder("对话上下文:\n");
+        conversationContext.forEach(msg -> contextBuilder.append(msg).append("\n"));
+        contextBuilder.append("\n用户最新问题: ").append(originalQuery);
 
-            String rewritten = chatModelPort.chat(
-                    rewriteProviderId, null,
-                    List.of(new SystemMessage(REWRITE_SYSTEM_PROMPT),
-                            new UserMessage(contextBuilder.toString())),
-                    List.of()
-            );
-
+        return chatModelPort.chat(
+                rewriteProviderId, null,
+                List.of(new SystemMessage(REWRITE_SYSTEM_PROMPT),
+                        new UserMessage(contextBuilder.toString())),
+                List.of()
+        )
+        .map(rewritten -> {
             String result = rewritten.trim();
             log.debug("Query rewrite: [{}] -> [{}]", originalQuery, result);
             return result.isEmpty() ? originalQuery : result;
-        } catch (Exception e) {
+        })
+        .onErrorResume(e -> {
             log.warn("Query rewrite failed, using original: {}", e.getMessage());
-            return originalQuery;
-        }
+            return Mono.just(originalQuery);
+        });
     }
 
     @Override
-    public List<String> decompose(String query) {
+    public Mono<List<String>> decompose(String query) {
         if (rewriteProviderId == null) {
-            return List.of(query);
+            return Mono.just(List.of(query));
         }
 
-        try {
-            String response = chatModelPort.chat(
-                    rewriteProviderId, null,
-                    List.of(new SystemMessage(DECOMPOSE_SYSTEM_PROMPT),
-                            new UserMessage(query)),
-                    List.of()
-            );
-
+        return chatModelPort.chat(
+                rewriteProviderId, null,
+                List.of(new SystemMessage(DECOMPOSE_SYSTEM_PROMPT),
+                        new UserMessage(query)),
+                List.of()
+        )
+        .map(response -> {
             String json = response.trim();
             if (json.startsWith("```")) {
                 json = json.replaceAll("```json?\\s*", "").replaceAll("```\\s*$", "").trim();
             }
-
-            List<String> subQuestions = objectMapper.readValue(json, new TypeReference<>() {});
-            if (subQuestions == null || subQuestions.isEmpty()) {
+            try {
+                List<String> subQuestions = objectMapper.readValue(json, new TypeReference<>() {});
+                if (subQuestions == null || subQuestions.isEmpty()) {
+                    return List.of(query);
+                }
+                log.debug("Query decompose: [{}] -> {}", query, subQuestions);
+                return subQuestions;
+            } catch (Exception e) {
+                log.warn("Query decompose parse failed: {}", e.getMessage());
                 return List.of(query);
             }
-
-            log.debug("Query decompose: [{}] -> {}", query, subQuestions);
-            return subQuestions;
-        } catch (Exception e) {
+        })
+        .onErrorResume(e -> {
             log.warn("Query decompose failed, using original: {}", e.getMessage());
-            return List.of(query);
-        }
+            return Mono.just(List.of(query));
+        });
     }
 }

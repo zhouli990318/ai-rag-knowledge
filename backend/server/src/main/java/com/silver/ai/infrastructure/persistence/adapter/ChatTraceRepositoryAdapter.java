@@ -17,8 +17,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,15 +125,16 @@ public class ChatTraceRepositoryAdapter implements ChatTraceRepository {
             }
         }
 
-        TraceSpan span = TraceSpan.start(e.getTraceId(), stage);
-        // 用已有工厂方法无法完全复原，直接设置字段
-        if (e.getEndTime() != null) {
-            span.finish();
-        }
-        if (!e.isSuccess()) {
-            span.fail(e.getErrorMessage());
-        }
-        attributes.forEach((k, v) -> span.attr(k, v));
-        return span;
+        return TraceSpan.builder()
+                .traceId(e.getTraceId())
+                .spanId(e.getSpanId())
+                .stage(stage)
+                .startTime(e.getStartTime())
+                .endTime(e.getEndTime())
+                .durationMs(e.getDurationMs())
+                .success(e.isSuccess())
+                .errorMessage(e.getErrorMessage())
+                .attributes(attributes)
+                .build();
     }
 }

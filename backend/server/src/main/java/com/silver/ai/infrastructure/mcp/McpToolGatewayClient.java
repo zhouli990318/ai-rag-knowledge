@@ -1,28 +1,22 @@
 package com.silver.ai.infrastructure.mcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.OkHttpClient;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
-import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.jackson.JacksonConverterFactory;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
-@SuppressWarnings("null")
 public class McpToolGatewayClient {
 
-    private final McpGatewayApi api;
+    private final WebClient webClient;
 
-    public McpToolGatewayClient(McpGatewayProperties properties, ObjectMapper objectMapper) {
+    public McpToolGatewayClient(McpGatewayProperties properties, WebClient.Builder webClientBuilder) {
         String baseUrl = properties.baseUrl();
         if (baseUrl != null) {
             baseUrl = baseUrl.trim();
@@ -30,86 +24,56 @@ public class McpToolGatewayClient {
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalStateException("app.mcp-gateway.base-url 未配置");
         }
-        if (!baseUrl.endsWith("/")) {
-            baseUrl = baseUrl + "/";
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
-
-        OkHttpClient httpClient = new OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build();
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(baseUrl)
-                .client(httpClient)
-                .addConverterFactory(JacksonConverterFactory.create(objectMapper))
-                .build();
-
-        this.api = retrofit.create(McpGatewayApi.class);
+        this.webClient = webClientBuilder.clone().baseUrl(baseUrl).build();
     }
 
     public List<McpToolDefinition> listTools(Long sourceId) {
+        McpGatewayResponse<List<McpToolDefinition>> body = webClient.get()
+                .uri("/sources/{sourceId}/tools", sourceId)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<McpToolDefinition>>>() {})
+                .block();
+        if (body == null || body.data() == null) {
+            return Collections.emptyList();
+        }
+        return body.data();
+    }
+
+    public List<Long> listActiveSourceIds() {
         try {
-            Response<McpGatewayResponse<List<McpToolDefinition>>> response = api.listTools(sourceId).execute();
-            if (!response.isSuccessful()) {
-                throw new BusinessException(ErrorCode.CHAT_STREAM_ERROR,
-                        "加载 MCP 工具失败: HTTP " + response.code());
-            }
-            McpGatewayResponse<List<McpToolDefinition>> body = response.body();
+            McpGatewayResponse<List<ApiSourceLite>> body = webClient.get()
+                    .uri("/sources")
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<ApiSourceLite>>>() {})
+                    .block();
             if (body == null || body.data() == null) {
                 return Collections.emptyList();
             }
-            return body.data();
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (IOException ex) {
-            log.error("Failed to load MCP tools for source {}", sourceId, ex);
-            throw new BusinessException(ErrorCode.CHAT_STREAM_ERROR, "加载 MCP 工具失败: " + ex.getMessage(), ex);
-        }
-    }
-
-    /**
-     * 获取所有可用于工具注入的 MCP 源：active=true 且 healthStatus != UNREACHABLE。
-     * 失败时返回空列表，不中断对话流程。
-     */
-    public List<Long> listActiveSourceIds() {
-        try {
-            Response<McpGatewayResponse<List<ApiSourceLite>>> response = api.listSources().execute();
-            if (!response.isSuccessful() || response.body() == null || response.body().data() == null) {
-                log.warn("Failed to list MCP sources: HTTP {}", response.code());
-                return Collections.emptyList();
-            }
-            return response.body().data().stream()
+            return body.data().stream()
                     .filter(s -> Boolean.TRUE.equals(s.active()))
                     .filter(s -> !"UNREACHABLE".equalsIgnoreCase(s.healthStatus()))
                     .map(ApiSourceLite::id)
                     .filter(java.util.Objects::nonNull)
                     .toList();
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             log.warn("List active MCP sources failed: {}", ex.getMessage());
             return Collections.emptyList();
         }
     }
 
     public String invokeTool(Long toolId, String arguments) {
-        try {
-            Response<McpGatewayResponse<String>> response =
-                    api.invokeTool(toolId, new ToolInvokeRequest(arguments)).execute();
-            if (!response.isSuccessful()) {
-                throw new BusinessException(ErrorCode.CHAT_STREAM_ERROR,
-                        "调用 MCP 工具失败: HTTP " + response.code());
-            }
-            McpGatewayResponse<String> body = response.body();
-            if (body == null) {
-                return "";
-            }
-            return body.data() == null ? "" : body.data();
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (IOException ex) {
-            log.error("Failed to invoke MCP tool {}", toolId, ex);
-            throw new BusinessException(ErrorCode.CHAT_STREAM_ERROR, "调用 MCP 工具失败: " + ex.getMessage(), ex);
+        McpGatewayResponse<String> body = webClient.post()
+                .uri("/tools/{toolId}/test", toolId)
+                .bodyValue(new ToolInvokeRequest(arguments))
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<String>>() {})
+                .block();
+        if (body == null) {
+            return "";
         }
+        return body.data() == null ? "" : body.data();
     }
 }

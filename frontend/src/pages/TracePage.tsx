@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Box, Typography, Paper, Autocomplete, TextField, Chip, Stack,
+  Box, Typography, Autocomplete, TextField, Chip, Stack,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   CircularProgress, Alert, Collapse, IconButton,
 } from '@mui/material';
@@ -9,6 +9,17 @@ import { useQuery } from '@tanstack/react-query';
 import { traceApi, ChatTrace, TraceSpan } from '../api/orchestrationApi';
 import { chatApi } from '../api/chatApi';
 import { Conversation } from '../api/types';
+
+const serifFont = '"Noto Serif SC", "Source Han Serif SC", serif';
+
+const glassCard = {
+  borderRadius: '12px',
+  backgroundColor: 'rgba(255,255,255,0.72)',
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  border: '1px solid rgba(224,221,216,0.5)',
+  boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+};
 
 const stageLabels: Record<string, string> = {
   REWRITE: '查询重写',
@@ -20,24 +31,45 @@ const stageLabels: Record<string, string> = {
   PERSIST: '持久化',
 };
 
+const stageColor = (stage: string, success: boolean): string => {
+  if (!success) return '#C84B31';
+  const map: Record<string, string> = {
+    REWRITE: '#5B7065', INTENT: '#5B7065', RETRIEVAL: '#2C6E49',
+    RERANK: '#4A6FA5', TOOL: '#8B6914', GENERATION: '#C84B31', PERSIST: '#8B8B8B',
+  };
+  return map[stage] || '#4A4A4A';
+};
+
 function SpanRow({ span }: { span: TraceSpan }) {
   const [open, setOpen] = useState(false);
+  const color = stageColor(span.stage, span.success);
   return (
     <>
-      <TableRow>
+      <TableRow sx={{ '&:hover': { backgroundColor: 'rgba(245,243,238,0.5)' } }}>
         <TableCell>
           <Chip label={stageLabels[span.stage] || span.stage} size="small"
-            color={span.success ? 'primary' : 'error'} variant="outlined" />
+            sx={{ borderColor: color, color, fontWeight: 500 }} variant="outlined" />
         </TableCell>
-        <TableCell>{span.durationMs}ms</TableCell>
         <TableCell>
-          <Chip label={span.success ? '成功' : '失败'} size="small"
-            color={span.success ? 'success' : 'error'} />
+          <Typography sx={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: span.durationMs > 500 ? '#C84B31' : '#2C2C2C' }}>
+            {span.durationMs}ms
+          </Typography>
+        </TableCell>
+        <TableCell>
+          <Box sx={{
+            display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25,
+            borderRadius: '4px',
+            backgroundColor: span.success ? 'rgba(91,112,101,0.1)' : 'rgba(200,75,49,0.1)',
+            color: span.success ? '#5B7065' : '#C84B31',
+            fontSize: 12, fontWeight: 500,
+          }}>
+            {span.success ? '成功' : '失败'}
+          </Box>
         </TableCell>
         <TableCell>
           {Object.keys(span.attributes || {}).length > 0 && (
-            <IconButton size="small" onClick={() => setOpen(!open)}>
-              {open ? <ExpandLess /> : <ExpandMore />}
+            <IconButton size="small" onClick={() => setOpen(!open)} sx={{ color: '#8B8B8B' }}>
+              {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
             </IconButton>
           )}
         </TableCell>
@@ -46,14 +78,14 @@ function SpanRow({ span }: { span: TraceSpan }) {
         <TableRow>
           <TableCell colSpan={4} sx={{ py: 0 }}>
             <Collapse in={open}>
-              <Box sx={{ p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Box sx={{ p: 1.5, backgroundColor: 'rgba(245,243,238,0.5)', borderRadius: '8px', my: 0.5 }}>
                 {Object.entries(span.attributes || {}).map(([k, v]) => (
-                  <Typography key={k} variant="caption" display="block">
-                    <strong>{k}:</strong> {v}
+                  <Typography key={k} variant="caption" display="block" sx={{ color: '#4A4A4A', lineHeight: 1.8 }}>
+                    <strong style={{ color: '#2C2C2C' }}>{k}:</strong> {v}
                   </Typography>
                 ))}
                 {span.errorMessage && (
-                  <Typography variant="caption" color="error">
+                  <Typography variant="caption" sx={{ color: '#C84B31' }}>
                     <strong>Error:</strong> {span.errorMessage}
                   </Typography>
                 )}
@@ -83,7 +115,10 @@ export default function TracePage() {
       setLoading(true);
       setError(null);
       const res = await traceApi.getByConversation(convId);
-      setTraces(res.data.data || []);
+      const data = res.data.data || [];
+      setTraces(data);
+      // 默认展开最新 trace
+      if (data.length > 0) setExpandedTrace(data[0].traceId);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -100,12 +135,14 @@ export default function TracePage() {
   }, [selectedConv, loadTraces]);
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
-      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>链路追踪</Typography>
+    <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+      <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C', mb: 2.5 }}>
+        链路追踪
+      </Typography>
 
-      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2.5 }}>
         <Autocomplete
-          sx={{ minWidth: 380 }}
+          sx={{ maxWidth: 420 }}
           size="small"
           options={conversations}
           value={selectedConv}
@@ -115,31 +152,35 @@ export default function TracePage() {
           renderInput={(params) => <TextField {...params} label="选择会话" placeholder="搜索或选择会话..." />}
           noOptionsText="暂无会话记录"
         />
-      </Stack>
+      </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
       ) : !selectedConv ? (
-        <Alert severity="info">选择一个会话查看其全链路追踪</Alert>
+        <Box sx={{ ...glassCard, p: 4, textAlign: 'center' }}>
+          <Typography sx={{ color: '#8B8B8B', fontFamily: serifFont }}>选择一个会话查看其全链路追踪</Typography>
+        </Box>
       ) : traces.length === 0 ? (
-        <Alert severity="info">该会话暂无追踪记录</Alert>
+        <Box sx={{ ...glassCard, p: 4, textAlign: 'center' }}>
+          <Typography sx={{ color: '#8B8B8B', fontFamily: serifFont }}>该会话暂无追踪记录</Typography>
+        </Box>
       ) : (
         <Stack spacing={2}>
           {traces.map(trace => (
-            <Paper key={trace.traceId} sx={{ p: 2 }}>
+            <Box key={trace.traceId} sx={{ ...glassCard, p: 2.5 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Box>
-                  <Typography variant="subtitle2" sx={{ fontFamily: 'monospace' }}>
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: 13, color: '#4A4A4A', letterSpacing: 0.5 }}>
                     {trace.traceId}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    总耗时 {trace.totalDurationMs}ms · {new Date(trace.createdAt).toLocaleString()}
+                  <Typography sx={{ fontSize: 12, color: '#8B8B8B', mt: 0.25 }}>
+                    总耗时 <strong style={{ color: '#C84B31' }}>{trace.totalDurationMs}ms</strong> · {new Date(trace.createdAt).toLocaleString()}
                   </Typography>
                 </Box>
-                <IconButton onClick={() => setExpandedTrace(
-                  expandedTrace === trace.traceId ? null : trace.traceId)}>
+                <IconButton onClick={() => setExpandedTrace(expandedTrace === trace.traceId ? null : trace.traceId)}
+                  sx={{ color: '#8B8B8B' }}>
                   {expandedTrace === trace.traceId ? <ExpandLess /> : <ExpandMore />}
                 </IconButton>
               </Box>
@@ -147,8 +188,15 @@ export default function TracePage() {
               {/* 阶段简览条 */}
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                 {trace.spans?.map(span => (
-                  <Chip key={span.spanId} label={`${stageLabels[span.stage] || span.stage} ${span.durationMs}ms`}
-                    size="small" color={span.success ? 'default' : 'error'} variant="outlined" />
+                  <Chip key={span.spanId}
+                    label={`${stageLabels[span.stage] || span.stage} ${span.durationMs}ms`}
+                    size="small" variant="outlined"
+                    sx={{
+                      borderColor: stageColor(span.stage, span.success),
+                      color: stageColor(span.stage, span.success),
+                      fontSize: 12,
+                    }}
+                  />
                 ))}
               </Box>
 
@@ -157,10 +205,10 @@ export default function TracePage() {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>阶段</TableCell>
-                        <TableCell>耗时</TableCell>
-                        <TableCell>状态</TableCell>
-                        <TableCell>详情</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>阶段</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>耗时</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>状态</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>详情</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -171,7 +219,7 @@ export default function TracePage() {
                   </Table>
                 </TableContainer>
               </Collapse>
-            </Paper>
+            </Box>
           ))}
         </Stack>
       )}

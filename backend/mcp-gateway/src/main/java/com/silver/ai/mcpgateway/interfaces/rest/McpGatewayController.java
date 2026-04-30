@@ -2,12 +2,13 @@ package com.silver.ai.mcpgateway.interfaces.rest;
 
 import com.silver.ai.mcpgateway.application.McpGatewayAppService;
 import com.silver.ai.mcpgateway.domain.model.ApiSource;
-import com.silver.ai.mcpgateway.domain.model.ToolMapping;
 import com.silver.ai.mcpgateway.infrastructure.health.McpHealthCheckScheduler;
 import com.silver.ai.mcpgateway.infrastructure.mcp.SourceScopedMcpServerRegistry;
 import com.silver.ai.mcpgateway.interfaces.dto.ApiSourceRequest;
+import com.silver.ai.mcpgateway.interfaces.dto.ApiSourceResponse;
 import com.silver.ai.mcpgateway.interfaces.dto.SourceHealthDto;
 import com.silver.ai.mcpgateway.interfaces.dto.ToolInvokeRequest;
+import com.silver.ai.mcpgateway.interfaces.dto.ToolMappingResponse;
 import com.silver.ai.mcpgateway.interfaces.dto.ToolMappingUpdateRequest;
 import com.silver.ai.shared.result.ApiResponse;
 import jakarta.validation.Valid;
@@ -40,24 +41,24 @@ public class McpGatewayController {
     // ===== API Sources =====
 
     @GetMapping("/sources")
-    public Mono<ApiResponse<List<ApiSource>>> listSources() {
+    public Mono<ApiResponse<List<ApiSourceResponse>>> listSources() {
         return mcpService.listApiSources()
                 .collectList()
-                .map(ApiResponse::ok);
+                .map(sources -> ApiResponse.ok(ApiSourceResponse.fromList(sources)));
     }
 
     @PostMapping("/sources")
-    public Mono<ApiResponse<ApiSource>> createSource(@Valid @RequestBody ApiSourceRequest req) {
+    public Mono<ApiResponse<ApiSourceResponse>> createSource(@Valid @RequestBody ApiSourceRequest req) {
         return mcpService.createApiSource(
                         req.getName(), req.getDescription(), req.getBaseUrl(),
                         req.getAuthType(), req.getAuthConfig(), req.getOpenApiSpec())
-                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(source)));
+                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(ApiSourceResponse.from(source))));
     }
 
     @GetMapping("/sources/{id}")
-    public Mono<ApiResponse<ApiSource>> getSource(@PathVariable Long id) {
+    public Mono<ApiResponse<ApiSourceResponse>> getSource(@PathVariable Long id) {
         return mcpService.getApiSource(id)
-                .map(ApiResponse::ok);
+                .map(source -> ApiResponse.ok(ApiSourceResponse.from(source)));
     }
 
     @GetMapping("/connection-info")
@@ -85,11 +86,11 @@ public class McpGatewayController {
     }
 
     @PutMapping("/sources/{id}")
-    public Mono<ApiResponse<ApiSource>> updateSource(@PathVariable Long id, @Valid @RequestBody ApiSourceRequest req) {
+    public Mono<ApiResponse<ApiSourceResponse>> updateSource(@PathVariable Long id, @Valid @RequestBody ApiSourceRequest req) {
         return mcpService.updateApiSource(id,
                         req.getName(), req.getDescription(), req.getBaseUrl(),
                         req.getAuthType(), req.getAuthConfig())
-                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(source)));
+                .flatMap(source -> refreshRegistrySafely(source).thenReturn(ApiResponse.ok(ApiSourceResponse.from(source))));
     }
 
     @DeleteMapping("/sources/{id}")
@@ -102,13 +103,13 @@ public class McpGatewayController {
     // ===== Active Toggle =====
 
     @PatchMapping("/sources/{id}/toggle-active")
-    public Mono<ApiResponse<ApiSource>> toggleActive(@PathVariable Long id) {
+    public Mono<ApiResponse<ApiSourceResponse>> toggleActive(@PathVariable Long id) {
         return mcpService.toggleApiSourceActive(id)
                 .flatMap(source -> {
                     Mono<Void> refreshTask = source.isActive()
                             ? refreshRegistrySafely(source)
                             : removeFromRegistrySafely(id);
-                    return refreshTask.thenReturn(ApiResponse.ok(source));
+                    return refreshTask.thenReturn(ApiResponse.ok(ApiSourceResponse.from(source)));
                 });
     }
 
@@ -132,12 +133,14 @@ public class McpGatewayController {
     // ===== Parse =====
 
     @PostMapping("/sources/{id}/parse")
-    public Mono<ApiResponse<List<ToolMapping>>> parseSpec(@PathVariable Long id, @RequestBody ApiSourceRequest req) {
-        Mono<List<ToolMapping>> tools;
+    public Mono<ApiResponse<List<ToolMappingResponse>>> parseSpec(@PathVariable Long id, @RequestBody ApiSourceRequest req) {
+        Mono<List<ToolMappingResponse>> tools;
         if (req.getOpenApiUrl() != null && !req.getOpenApiUrl().isBlank()) {
-            tools = mcpService.parseFromUrl(id, req.getOpenApiUrl());
+            tools = mcpService.parseFromUrl(id, req.getOpenApiUrl())
+                    .map(ToolMappingResponse::fromList);
         } else {
-            tools = mcpService.parseOpenApiSpec(id, req.getOpenApiSpec());
+            tools = mcpService.parseOpenApiSpec(id, req.getOpenApiSpec())
+                    .map(ToolMappingResponse::fromList);
         }
         return tools
                 .flatMap(result ->
@@ -151,14 +154,14 @@ public class McpGatewayController {
     // ===== Tool Mappings =====
 
     @GetMapping("/sources/{id}/tools")
-    public Mono<ApiResponse<List<ToolMapping>>> getTools(@PathVariable Long id) {
+    public Mono<ApiResponse<List<ToolMappingResponse>>> getTools(@PathVariable Long id) {
         return mcpService.getToolMappings(id)
                 .collectList()
-                .map(ApiResponse::ok);
+                .map(mappings -> ApiResponse.ok(ToolMappingResponse.fromList(mappings)));
     }
 
     @PutMapping("/tools/{id}")
-    public Mono<ApiResponse<ToolMapping>> updateTool(@PathVariable Long id, @RequestBody ToolMappingUpdateRequest req) {
+    public Mono<ApiResponse<ToolMappingResponse>> updateTool(@PathVariable Long id, @RequestBody ToolMappingUpdateRequest req) {
         return mcpService.updateToolMapping(id,
                         req.getToolName(), req.getToolDescription(),
                         req.getHttpMethod(), req.getPath(),
@@ -167,7 +170,7 @@ public class McpGatewayController {
                 .flatMap(mapping ->
                         mcpService.getApiSource(mapping.getApiSourceId())
                     .flatMap(this::refreshRegistrySafely)
-                                .thenReturn(ApiResponse.ok(mapping))
+                                .thenReturn(ApiResponse.ok(ToolMappingResponse.from(mapping)))
                 );
     }
 

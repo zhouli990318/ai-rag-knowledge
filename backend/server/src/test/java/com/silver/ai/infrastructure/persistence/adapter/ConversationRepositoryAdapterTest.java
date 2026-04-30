@@ -1,7 +1,6 @@
 package com.silver.ai.infrastructure.persistence.adapter;
 
 import com.silver.ai.domain.chat.model.Conversation;
-import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.infrastructure.persistence.entity.ConversationEntity;
 import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcChatMessageRepository;
 import com.silver.ai.infrastructure.persistence.r2dbc.R2dbcConversationRepository;

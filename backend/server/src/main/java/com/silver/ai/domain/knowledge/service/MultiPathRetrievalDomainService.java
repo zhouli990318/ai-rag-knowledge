@@ -88,7 +88,7 @@ public class MultiPathRetrievalDomainService {
             List<Document> allResults = new ArrayList<>();
             for (Future<List<Document>> future : futures) {
                 try {
-                    allResults.addAll(future.get(10, TimeUnit.SECONDS));
+                    allResults.addAll(future.get(config.getRetrievalTimeoutSeconds(), TimeUnit.SECONDS));
                 } catch (Exception e) {
                     log.warn("Sub-query retrieval failed: {}", e.getMessage());
                 }
@@ -103,9 +103,11 @@ public class MultiPathRetrievalDomainService {
     private List<Document> deduplicateByContent(List<Document> docs) {
         Map<String, Document> seen = new LinkedHashMap<>();
         for (Document doc : docs) {
-            String contentKey = doc.getText().trim();
-            if (contentKey.length() > 200) {
-                contentKey = contentKey.substring(0, 200);
+            String text = doc.getText();
+            if (text == null) continue;
+            String contentKey = text.trim();
+            if (contentKey.length() > config.getDeduplicatePrefixLength()) {
+                contentKey = contentKey.substring(0, config.getDeduplicatePrefixLength());
             }
             seen.putIfAbsent(contentKey, doc);
         }

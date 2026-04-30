@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Locale;
@@ -25,34 +26,32 @@ public class RuleBasedIntentClassifier implements IntentClassifierPort {
     private final IntentNodeRepository intentNodeRepository;
 
     @Override
-    public IntentResult classify(String userMessage, List<String> conversationContext) {
+    public Mono<IntentResult> classify(String userMessage, List<String> conversationContext) {
         String lowerMessage = userMessage.toLowerCase(Locale.ROOT);
-        List<IntentNode> allNodes = intentNodeRepository.findAllPublished()
+        return intentNodeRepository.findAllPublished()
                 .collectList()
-                .blockOptional()
-                .orElse(List.of());
+                .map(allNodes -> {
+                    if (allNodes.isEmpty()) {
+                        return IntentResult.defaultRetrieval();
+                    }
 
-        if (allNodes.isEmpty()) {
-            return IntentResult.defaultRetrieval();
-        }
+                    IntentNode bestMatch = null;
+                    double bestScore = 0;
 
-        IntentNode bestMatch = null;
-        double bestScore = 0;
+                    for (IntentNode node : allNodes) {
+                        double score = computeMatchScore(lowerMessage, node);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMatch = node;
+                        }
+                    }
 
-        for (IntentNode node : allNodes) {
-            double score = computeMatchScore(lowerMessage, node);
-            if (score > bestScore) {
-                bestScore = score;
-                bestMatch = node;
-            }
-        }
+                    if (bestMatch == null || bestScore < 0.1) {
+                        return IntentResult.defaultRetrieval();
+                    }
 
-        if (bestMatch == null || bestScore < 0.1) {
-            return IntentResult.defaultRetrieval();
-        }
-
-        // 根据匹配节点的层级构建三级结果
-        return buildResult(bestMatch, bestScore, allNodes);
+                    return buildResult(bestMatch, bestScore, allNodes);
+                });
     }
 
     private double computeMatchScore(String lowerMessage, IntentNode node) {

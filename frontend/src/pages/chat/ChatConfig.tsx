@@ -186,7 +186,7 @@ export default memo(function ChatConfig() {
       </InkCard>
 
       {/* ═══════ 模型管理卡片 ═══════ */}
-      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 12px rgba(0,0,0,0.04)' }}>
         <Box sx={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           px: 2, pt: 1.75, pb: 1.25,
@@ -275,7 +275,7 @@ export default memo(function ChatConfig() {
       </InkCard>
 
       {/* ═══════ 知识库卡片 ═══════ */}
-      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 12px rgba(0,0,0,0.04)' }}>
         <Box sx={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           px: 2, pt: 1.75, pb: 1.25,

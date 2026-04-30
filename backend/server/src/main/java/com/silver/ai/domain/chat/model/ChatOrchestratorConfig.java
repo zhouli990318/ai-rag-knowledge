@@ -4,12 +4,16 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import static com.silver.ai.domain.chat.model.PromptTemplates.SUGGEST_FOLLOW_UP;
 
 /**
  * 对话编排运行时配置 — 值对象。
  * 由 application.yml 绑定，控制各阶段行为。
  */
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -42,6 +46,14 @@ public class ChatOrchestratorConfig {
     @Builder.Default
     private int rerankTopK = 5;
 
+    /** 多路检索并行子查询超时秒数 */
+    @Builder.Default
+    private int retrievalTimeoutSeconds = 10;
+
+    /** 去重指纹截取长度 */
+    @Builder.Default
+    private int deduplicatePrefixLength = 200;
+
     // ── 记忆管理 ──
     /** 保留近 N 轮完整对话 */
     @Builder.Default
@@ -73,6 +85,18 @@ public class ChatOrchestratorConfig {
     @Builder.Default
     private double toolAutoExecuteThreshold = 0.8;
 
+    /** 是否启用工具语义检索（true: 仅注入相关工具; false: 全量注入） */
+    @Builder.Default
+    private boolean toolSemanticRetrievalEnabled = true;
+
+    /** 语义检索召回工具数量 */
+    @Builder.Default
+    private int toolRetrievalTopK = 10;
+
+    /** 语义检索最低相似度阈值 */
+    @Builder.Default
+    private double toolRetrievalThreshold = 0.3;
+
     /** 工具调用失败是否自动回退到检索/直答 */
     @Builder.Default
     private boolean toolFallbackEnabled = true;
@@ -85,4 +109,12 @@ public class ChatOrchestratorConfig {
     /** 是否启用全链路追踪 */
     @Builder.Default
     private boolean traceEnabled = true;
+
+    // ── 辅助任务 ──
+    /** 辅助任务（摘要压缩、推荐问题）使用的提供商 ID，为 null 则使用会话自身的提供商 */
+    private Long auxiliaryProviderId;
+
+    /** 推荐问题提示词模板，{conversation} 为占位符 */
+    @Builder.Default
+    private String suggestionPrompt = SUGGEST_FOLLOW_UP.getTemplate();
 }

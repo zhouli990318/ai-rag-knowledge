@@ -10,9 +10,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.HttpUrl;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map.Entry;
@@ -78,32 +79,20 @@ public class ToolInvocationDomainService {
         }
 
         String normalizedBaseUrl = normalizeBaseUrl(baseUrl);
-        HttpUrl parsedBaseUrl = HttpUrl.parse(ensureTrailingSlash(normalizedBaseUrl));
-        if (parsedBaseUrl == null) {
-            throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED,
-                    "API源baseUrl格式不合法: " + baseUrl);
-        }
-
         String normalizedPath = fullPath == null ? "" : fullPath.trim().replaceFirst("^/+", "");
-        HttpUrl resolvedUrl = parsedBaseUrl.resolve(normalizedPath);
-        if (resolvedUrl == null) {
+
+        try {
+            URI baseUri = URI.create(ensureTrailingSlash(normalizedBaseUrl));
+            URI resolvedUrl = baseUri.resolve(normalizedPath);
+            return resolvedUrl.toString();
+        } catch (IllegalArgumentException e) {
             throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED,
                     "工具路径格式不合法: " + fullPath);
         }
-
-        return resolvedUrl.toString();
     }
 
     private String normalizeBaseUrl(String baseUrl) {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new BusinessException(ErrorCode.MCP_TOOL_INVOCATION_FAILED, "API源baseUrl不能为空");
-        }
-
-        String normalized = baseUrl.trim();
-        if (!normalized.matches("^[a-zA-Z][a-zA-Z0-9+.-]*://.*$")) {
-            normalized = "http://" + normalized;
-        }
-        return normalized;
+        return UrlNormalizer.normalizeBaseUrl(baseUrl, ErrorCode.MCP_TOOL_INVOCATION_FAILED);
     }
 
     private String ensureTrailingSlash(String value) {

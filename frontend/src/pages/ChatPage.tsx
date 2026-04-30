@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '../api/chatApi';
@@ -19,34 +19,22 @@ export default function ChatPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
-  const { activeConversationId, setActiveConversation } = useChatStore();
+  const {
+    activeConversationId, setActiveConversation,
+    streaming, streamContent, streamConversationId, optimisticUserMessage,
+    preStreamMessageCount,
+    startStream, stopStream, clearStream,
+  } = useChatStore();
   const { selectedProvider, selectedKb, setSelectedProvider, setSelectedKb, resetConfig, toolMode, selectedMcpServers } = useChatConfigStore();
 
   const [input, setInput] = useState('');
-  const [streaming, setStreaming] = useState(false);
-  const [streamContent, setStreamContent] = useState('');
-  const [optimisticMessages, setOptimisticMessages] = useState<DisplayMessage[]>([]);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const mountedRef = useRef(true);
-  const rafRef = useRef(0);
 
-  // Cleanup stream on unmount
+  // Clear stream state when switching conversations (different from current stream)
   useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      cancelAnimationFrame(rafRef.current);
-      abortControllerRef.current?.abort();
-    };
-  }, []);
-
-  // Abort stream and clear state when switching conversations
-  useEffect(() => {
-    abortControllerRef.current?.abort();
-    setStreaming(false);
-    setStreamContent('');
-    setOptimisticMessages([]);
-  }, [activeConversationId]);
+    if (activeConversationId !== streamConversationId && !streaming) {
+      clearStream();
+    }
+  }, [activeConversationId, streamConversationId, streaming, clearStream]);
 
   const { data: conversations = [], isLoading: convsLoading } = useQuery({ queryKey: ['conversations'], queryFn: chatApi.getConversations });
   const { data: activeConv } = useQuery({
@@ -62,18 +50,19 @@ export default function ChatPage() {
     setSelectedKb(activeConv.knowledgeBaseId ?? 0);
   }, [activeConv?.id, setSelectedProvider, setSelectedKb]);
 
+  // Clear optimistic state once real messages arrive from API
+  // Only clear when the refetched messages actually include new data (length increased),
+  // preventing premature clearing that causes the answer to vanish (Bug 2).
   useEffect(() => {
-    if (!streaming && activeConv?.messages?.length) {
-      setOptimisticMessages([]);
-      if (streamContent) setStreamContent('');
+    if (!streaming && optimisticUserMessage && activeConv?.messages?.length && activeConv.messages.length > preStreamMessageCount) {
+      clearStream();
     }
-  }, [activeConv?.messages, streaming, streamContent]);
+  }, [activeConv?.messages?.length, streaming, optimisticUserMessage, preStreamMessageCount, clearStream]);
 
   const deleteMutation = useMutation({
     mutationFn: chatApi.deleteConversation,
     onSuccess: () => {
-      setOptimisticMessages([]);
-      setStreamContent('');
+      clearStream();
       setActiveConversation(null);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       enqueueSnackbar('对话已删除', { variant: 'success' });
@@ -82,13 +71,12 @@ export default function ChatPage() {
   });
 
   const resetDraft = useCallback(() => {
-    setOptimisticMessages([]);
-    setStreamContent('');
+    clearStream();
     resetConfig();
     setActiveConversation(null);
-  }, [setActiveConversation, resetConfig]);
+  }, [setActiveConversation, resetConfig, clearStream]);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (streaming) return;
     if (!input.trim()) return;
     if (!selectedProvider) {
@@ -96,17 +84,10 @@ export default function ChatPage() {
       return;
     }
     const message = input.trim();
-    const localMsgId = `local-user-${Date.now()}`;
     setInput('');
-    setStreaming(true);
-    setStreamContent('');
-    setOptimisticMessages((cur) => [...cur, { id: localMsgId, role: 'USER', content: message }]);
 
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    try {
-      const res = await chatApi.streamChat({
+    startStream(
+      {
         conversationId: activeConversationId || undefined,
         providerId: selectedProvider,
         knowledgeBaseId: selectedKb || undefined,
@@ -114,94 +95,40 @@ export default function ChatPage() {
         systemPrompt: selectedKb > 0 ? '请优先根据知识库内容回答。' : undefined,
         toolMode,
         mcpServerIds: toolMode === 'SPECIFIC' ? selectedMcpServers : undefined,
-      }, controller.signal);
-
-      if (!res.ok) throw new Error('Stream failed');
-
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = '';
-      let pendingUpdate = false;
-      let buffer = '';
-
-      const flushContent = () => {
-        if (mountedRef.current) setStreamContent(fullContent);
-        pendingUpdate = false;
-      };
-
-      // 解析单个 SSE data 行：仅去除协议分隔符，不裁剪内容空白
-      const parseDataLine = (line: string): string | null => {
-        if (!line.startsWith('data:')) return null;
-        // SSE 规范允许 "data:xxx" 或 "data: xxx"，仅移除一个可选前导空格
-        let content = line.slice(5);
-        if (content.startsWith(' ')) content = content.slice(1);
-        return content;
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n');
-        buffer = parts.pop() || '';
-        for (const line of parts) {
-          // 跳过事件分隔空行和其他 SSE 字段（event:、id:、retry:）
-          if (line === '' || line.startsWith(':')) continue;
-          const data = parseDataLine(line);
-          if (data === null) continue;
-          if (data === '[DONE]') continue;
-          fullContent += data;
-          if (!pendingUpdate) {
-            pendingUpdate = true;
-            rafRef.current = requestAnimationFrame(flushContent);
-          }
-        }
-      }
-      // process remaining buffer
-      const tailData = parseDataLine(buffer);
-      if (tailData !== null && tailData !== '[DONE]') {
-        fullContent += tailData;
-      }
-      cancelAnimationFrame(rafRef.current);
-      if (mountedRef.current) setStreamContent(fullContent);
-
-      if (!activeConversationId) {
-        await queryClient.refetchQueries({ queryKey: ['conversations'] });
-        const updatedConvs = queryClient.getQueryData<Conversation[]>(['conversations']);
-        if (updatedConvs && updatedConvs.length > 0) {
-          setActiveConversation(updatedConvs[0].id);
-        }
-      } else {
-        queryClient.invalidateQueries({ queryKey: ['conversations'] });
-        queryClient.invalidateQueries({ queryKey: ['conversation', activeConversationId] });
-      }
-    } catch (e: any) {
-      if (e.name !== 'AbortError') {
-        setOptimisticMessages((cur) => cur.filter((m) => m.id !== localMsgId));
-        setStreamContent('');
-        enqueueSnackbar(e.message || '发送失败', { variant: 'error' });
-      }
-    } finally {
-      setStreaming(false);
-      abortControllerRef.current = null;
-    }
+      },
+      queryClient,
+      (id: number) => setActiveConversation(id),
+      enqueueSnackbar,
+    );
   };
 
   const handleStop = useCallback(() => {
-    abortControllerRef.current?.abort();
-    setStreaming(false);
-  }, []);
+    stopStream();
+  }, [stopStream]);
 
   const handleSelectConversation = useCallback((id: number) => {
+    if (streaming) stopStream();
     setActiveConversation(id);
-  }, [setActiveConversation]);
+  }, [setActiveConversation, streaming, stopStream]);
 
   const handleDelete = useCallback((id: number) => deleteMutation.mutate(id), [deleteMutation]);
 
-  const messages: DisplayMessage[] = useMemo(
-    () => [...(activeConv?.messages || []), ...optimisticMessages],
-    [activeConv?.messages, optimisticMessages],
-  );
+  // Build display messages: API messages + optimistic user message during streaming
+  const messages: DisplayMessage[] = useMemo(() => {
+    const apiMsgs = activeConv?.messages || [];
+    const isStreamingThisConv =
+      streaming && (streamConversationId === activeConversationId || (!streamConversationId && !activeConversationId));
+    if (isStreamingThisConv && optimisticUserMessage) {
+      return [...apiMsgs, { id: 'local-user-stream', role: 'USER' as const, content: optimisticUserMessage }];
+    }
+    return [...apiMsgs];
+  }, [activeConv?.messages, streaming, streamConversationId, activeConversationId, optimisticUserMessage]);
+
+  // Only show stream content if streaming for the currently viewed conversation
+  const visibleStreamContent =
+    (streamConversationId === activeConversationId || (!streamConversationId && !activeConversationId))
+      ? streamContent
+      : '';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -216,7 +143,7 @@ export default function ChatPage() {
       />
 
       {/* Message area */}
-      <MessageArea messages={messages} streamContent={streamContent} streaming={streaming} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
+      <MessageArea messages={messages} streamContent={visibleStreamContent} streaming={streaming && visibleStreamContent !== ''} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
 
       {/* Input */}
       <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />

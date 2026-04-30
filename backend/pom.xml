@@ -35,8 +35,6 @@
         <redisson.version>4.3.0</redisson.version>
         <jgit.version>7.2.0.202503040940-r</jgit.version>
         <swagger-parser.version>2.1.25</swagger-parser.version>
-        <okhttp.version>4.12.0</okhttp.version>
-        <retrofit.version>2.11.0</retrofit.version>
         <flyway.version>11.8.0</flyway.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jasypt.version>3.0.5</jasypt.version>
@@ -77,21 +75,6 @@
                 <groupId>io.swagger.parser.v3</groupId>
                 <artifactId>swagger-parser</artifactId>
                 <version>${swagger-parser.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.squareup.okhttp3</groupId>
-                <artifactId>okhttp</artifactId>
-                <version>${okhttp.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.squareup.retrofit2</groupId>
-                <artifactId>retrofit</artifactId>
-                <version>${retrofit.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.squareup.retrofit2</groupId>
-                <artifactId>converter-jackson</artifactId>
-                <version>${retrofit.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.github.ulisesbocchio</groupId>

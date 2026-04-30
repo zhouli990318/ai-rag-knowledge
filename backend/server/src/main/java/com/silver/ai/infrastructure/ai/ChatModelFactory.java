@@ -19,6 +19,8 @@ import org.springframework.ai.zhipuai.ZhiPuAiChatOptions;
 import org.springframework.ai.zhipuai.api.ZhiPuAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 
 /**
  * ChatModel 工厂 — 根据 ProviderType 和配置动态创建 ChatModel 实例
@@ -28,7 +30,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ChatModelFactory {
 
-    @Value("${app.crypto.secret-key:SpringAiRagPlatform2024}")
+    private final WebClient.Builder webClientBuilder;
+    private final RestClient.Builder restClientBuilder;
+
+    @Value("${app.crypto.secret-key}")
     private String cryptoSecretKey;
 
     public ChatModel createChatModel(ModelProvider provider) {
@@ -47,7 +52,11 @@ public class ChatModelFactory {
     }
 
     private ChatModel createOllamaModel(String baseUrl, String model) {
-        OllamaApi api = new OllamaApi.Builder().baseUrl(baseUrl).build();
+        OllamaApi api = new OllamaApi.Builder()
+                .baseUrl(baseUrl)
+                .webClientBuilder(webClientBuilder.clone())
+                .restClientBuilder(restClientBuilder.clone())
+                .build();
         return OllamaChatModel.builder()
                 .ollamaApi(api)
             .defaultOptions(OllamaChatOptions.builder().model(model).build())
@@ -58,6 +67,8 @@ public class ChatModelFactory {
         OpenAiApi api = OpenAiApi.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
+                .webClientBuilder(webClientBuilder.clone())
+                .restClientBuilder(restClientBuilder.clone())
                 .build();
         return OpenAiChatModel.builder()
                 .openAiApi(api)
@@ -66,7 +77,12 @@ public class ChatModelFactory {
     }
 
     private ChatModel createAnthropicModel(String baseUrl, String apiKey, String model) {
-        AnthropicApi api = new AnthropicApi.Builder().baseUrl(baseUrl).apiKey(apiKey).build();
+        AnthropicApi api = new AnthropicApi.Builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .webClientBuilder(webClientBuilder.clone())
+                .restClientBuilder(restClientBuilder.clone())
+                .build();
         return AnthropicChatModel.builder()
                 .anthropicApi(api)
                 .defaultOptions(AnthropicChatOptions.builder().model(model).build())
@@ -74,7 +90,12 @@ public class ChatModelFactory {
     }
 
     private ChatModel createZhiPuAiModel(String baseUrl, String apiKey, String model) {
-        ZhiPuAiApi api = ZhiPuAiApi.builder().baseUrl(baseUrl).apiKey(apiKey).build();
+        ZhiPuAiApi api = ZhiPuAiApi.builder()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .webClientBuilder(webClientBuilder.clone())
+                .restClientBuilder(restClientBuilder.clone())
+                .build();
         return new ZhiPuAiChatModel(api,ZhiPuAiChatOptions.builder().model(model).build());
     }
 

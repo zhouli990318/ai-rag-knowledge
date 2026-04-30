@@ -3,13 +3,6 @@ package com.silver.ai.application.service;
 import com.silver.ai.domain.chat.model.*;
 import com.silver.ai.domain.chat.port.ChatTraceRepository;
 import com.silver.ai.domain.chat.port.ConversationRepository;
-import com.silver.ai.domain.chat.service.IntentDecisionDomainService;
-import com.silver.ai.domain.chat.service.QueryPlanningDomainService;
-import com.silver.ai.domain.chat.service.ToolRoutingDomainService;
-import com.silver.ai.domain.knowledge.model.KnowledgeBase;
-import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
-import com.silver.ai.domain.knowledge.service.MultiPathRetrievalDomainService;
-import com.silver.ai.domain.knowledge.service.RetrievalDomainService;
 import com.silver.ai.domain.provider.port.ChatModelPort;
 import com.silver.ai.infrastructure.ai.ChatMemoryManager;
 import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
@@ -17,9 +10,7 @@ import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -35,19 +26,12 @@ public class ChatAppService {
 
     private final ChatModelPort chatModelPort;
     private final ConversationRepository conversationRepository;
-    private final KnowledgeBaseRepository knowledgeBaseRepository;
-    private final RetrievalDomainService retrievalDomainService;
-    private final MultiPathRetrievalDomainService multiPathRetrieval;
+    private final ChatOrchestrator orchestrator;
+    private final ChatTraceRepository chatTraceRepository;
     private final PromptTemplateEngine promptTemplateEngine;
     private final ChatMemoryManager chatMemoryManager;
-    private final IntentDecisionDomainService intentDecision;
-    private final QueryPlanningDomainService queryPlanning;
-    private final ToolRoutingDomainService toolRouting;
-    private final ChatTraceRepository chatTraceRepository;
-    private final ChatOrchestratorConfig orchestratorConfig;
     private final SuggestionCache suggestionCache;
-
-    private static final int CONTEXT_WINDOW = 20;
+    private final ChatOrchestratorConfig orchestratorConfig;
 
     public Flux<String> streamChat(Long conversationId, Long providerId, String model,
                                     String userMessage, Long knowledgeBaseId, String systemPrompt,
@@ -65,16 +49,17 @@ public class ChatAppService {
                             // ── 创建追踪上下文 ──
                             ChatTraceContext trace = ChatTraceContext.create(conversation.getId());
 
-                            return orchestrateAndBuildMessages(conversation, userMessage, systemPrompt, trace)
+                            return orchestrator.orchestrate(conversation, userMessage, systemPrompt, trace)
+                                    .doOnNext(_ -> checkSummaryCompression(conversation))
                                     .flatMapMany(result -> {
                                         // ── GENERATION 阶段 ──
                                         TraceSpan genSpan = trace.startSpan(OrchestrationStage.GENERATION);
                                         return chatModelPort.streamChat(providerId, model,
-                                                        result.messages, result.toolCallbacks)
+                                                        result.messages(), result.toolCallbacks())
                                                 .doOnNext(fullResponse::append)
-                                                .doOnComplete(() -> genSpan.finish())
+                                                .doOnComplete(genSpan::finish)
                                                 .doOnError(e -> genSpan.fail(e.getMessage()))
-                                                .doFinally(signal -> persistTrace(trace));
+                                                .doFinally(_ -> persistTrace(trace));
                                     });
                         })
         )
@@ -102,12 +87,11 @@ public class ChatAppService {
                 .flatMap(conversation -> {
                     ChatTraceContext trace = ChatTraceContext.create(conversation.getId());
 
-                    return orchestrateAndBuildMessages(conversation, userMessage, systemPrompt, trace)
+                    return orchestrator.orchestrate(conversation, userMessage, systemPrompt, trace)
+                            .doOnNext(result -> checkSummaryCompression(conversation))
                             .flatMap(result -> {
                                 TraceSpan genSpan = trace.startSpan(OrchestrationStage.GENERATION);
-                                return Mono.fromCallable(() ->
-                                                chatModelPort.chat(providerId, model, result.messages, result.toolCallbacks))
-                                        .subscribeOn(Schedulers.boundedElastic())
+                                return chatModelPort.chat(providerId, model, result.messages(), result.toolCallbacks())
                                         .doOnSuccess(r -> genSpan.finish())
                                         .doOnError(e -> genSpan.fail(e.getMessage()));
                             })
@@ -119,126 +103,29 @@ public class ChatAppService {
                 });
     }
 
-    // ── 编排核心：意图→重写→检索→工具路由→记忆构建 ──
+    // ── 编排由 ChatOrchestrator 负责 ──
 
-    private Mono<OrchestrationResult> orchestrateAndBuildMessages(
-            Conversation conversation, String userMessage, String customSystemPrompt,
-            ChatTraceContext trace) {
-
-        return Mono.fromCallable(() -> {
-            // 1. 提取对话上下文
-            List<String> conversationContext = chatMemoryManager.extractRecentContext(
-                    conversation, orchestratorConfig.getRewriteContextRounds());
-
-            // 2. 意图识别
-            TraceSpan intentSpan = trace.startSpan(OrchestrationStage.INTENT);
-            IntentResult intentResult;
-            try {
-                intentResult = intentDecision.detect(userMessage, conversationContext);
-                intentSpan.attr("domain", intentResult.getDomain());
-                intentSpan.attr("routing", intentResult.getRoutingAdvice().name());
-                intentSpan.attr("confidence", String.valueOf(intentResult.getConfidence()));
-                intentSpan.finish();
-            } catch (Exception e) {
-                intentSpan.fail(e.getMessage());
-                intentResult = IntentResult.defaultRetrieval();
-            }
-            conversation.recordIntent(intentResult);
-
-            // 3. 查询重写 + 拆分
-            TraceSpan rewriteSpan = trace.startSpan(OrchestrationStage.REWRITE);
-            QueryPlanningDomainService.QueryPlan queryPlan;
-            try {
-                queryPlan = queryPlanning.plan(userMessage, conversationContext);
-                rewriteSpan.attr("original", queryPlan.originalQuery());
-                rewriteSpan.attr("rewritten", queryPlan.rewrittenQuery());
-                rewriteSpan.attr("subQueries", String.valueOf(queryPlan.subQueries().size()));
-                rewriteSpan.finish();
-            } catch (Exception e) {
-                rewriteSpan.fail(e.getMessage());
-                queryPlan = new QueryPlanningDomainService.QueryPlan(userMessage, userMessage, List.of(userMessage));
-            }
-
-            // 4. 多路检索
-            TraceSpan retrievalSpan = trace.startSpan(OrchestrationStage.RETRIEVAL);
-            String ragSystemPrompt = "";
-            if (conversation.isRagEnabled()
-                    && (intentResult.getRoutingAdvice() == IntentResult.RoutingAdvice.RETRIEVAL
-                    || intentResult.getRoutingAdvice() == IntentResult.RoutingAdvice.HYBRID)) {
-                try {
-                    KnowledgeBase kb = knowledgeBaseRepository.findById(conversation.getKnowledgeBaseId())
-                            .block();
-                    if (kb != null) {
-                        ragSystemPrompt = multiPathRetrieval.retrieveAndFuse(
-                                kb, queryPlan.retrievalQueries(), intentResult);
-                        retrievalSpan.attr("hasContext", String.valueOf(!ragSystemPrompt.isEmpty()));
-                    }
-                    retrievalSpan.finish();
-                } catch (Exception e) {
-                    retrievalSpan.fail(e.getMessage());
-                }
-            } else {
-                retrievalSpan.attr("skipped", "true");
-                retrievalSpan.finish();
-            }
-
-            // 5. 工具路由
-            TraceSpan toolSpan = trace.startSpan(OrchestrationStage.TOOL);
-            ToolRoutingDomainService.ToolDecision toolDecision =
-                    toolRouting.decide(intentResult, conversation.getToolMode(), conversation.getMcpServerIds());
-            toolSpan.attr("toolMode", String.valueOf(conversation.getToolMode()));
-            toolSpan.attr("hasTools", String.valueOf(toolDecision.hasTools()));
-            toolSpan.attr("autoExecute", String.valueOf(toolDecision.autoExecute()));
-            toolSpan.finish();
-
-            // 6. 构建消息列表
-            String effectiveSystemPrompt = promptTemplateEngine.render(PromptTemplates.GENERAL_SYSTEM);
-            if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
-                effectiveSystemPrompt = customSystemPrompt;
-            }
-            if (ragSystemPrompt != null && !ragSystemPrompt.isBlank()) {
-                effectiveSystemPrompt = effectiveSystemPrompt + "\n\n" + ragSystemPrompt;
-            }
-
-            // 如果需要澄清且是 DIRECT 路由，直接返回澄清提示
-            if (intentResult.isNeedsClarification()
-                    && intentResult.getRoutingAdvice() == IntentResult.RoutingAdvice.DIRECT) {
-                // 不走 LLM，直接返回澄清提示
-                // 但这里仍然走正常流程，将澄清作为系统提示的一部分
-                effectiveSystemPrompt += "\n\n注意：用户的问题需要进一步澄清。请引导用户明确需求：\n"
-                        + intentResult.getClarificationPrompt();
-            }
-
-            List<Message> messages = chatMemoryManager.buildMessages(
-                    conversation, effectiveSystemPrompt, CONTEXT_WINDOW);
-
-            // 7. 异步检查是否需要摘要压缩
-            if (chatMemoryManager.needsSummary(conversation)) {
-                log.info("Conversation {} needs summary compression (messages={})",
-                        conversation.getId(), conversation.getMessages().size());
-                // 异步执行摘要（不阻塞当前对话）
-                scheduleSummaryCompression(conversation);
-            }
-
-            return new OrchestrationResult(messages,
-                    toolDecision.hasTools() ? toolDecision.toolCallbacks() : List.of());
-        }).subscribeOn(Schedulers.boundedElastic());
+    private void checkSummaryCompression(Conversation conversation) {
+        if (orchestrator.needsSummary(conversation)) {
+            log.info("Conversation {} needs summary compression (messages={})",
+                    conversation.getId(), conversation.getMessages().size());
+            scheduleSummaryCompression(conversation);
+        }
     }
 
-    private record OrchestrationResult(List<Message> messages, List<ToolCallback> toolCallbacks) {}
-
     private void scheduleSummaryCompression(Conversation conversation) {
-        Mono.fromCallable(() -> {
-            String summaryPrompt = chatMemoryManager.buildSummaryPrompt(conversation);
-            // 用当前对话的 provider 做摘要
-            String summary = chatModelPort.chat(
-                    conversation.getProviderId(), conversation.getModel(),
+        Long auxProvider = orchestratorConfig.getAuxiliaryProviderId();
+        Long providerId = auxProvider != null ? auxProvider : conversation.getProviderId();
+        String model = auxProvider != null ? null : conversation.getModel();
+        Mono.defer(() -> {
+            String summaryPrompt = orchestrator.buildSummaryPrompt(conversation);
+            return chatModelPort.chat(
+                    providerId, model,
                     List.of(new org.springframework.ai.chat.messages.UserMessage(summaryPrompt)),
-                    List.of());
-            conversation.updateSummary(summary);
-            return conversation;
-        }).subscribeOn(Schedulers.boundedElastic())
-                .flatMap(conversationRepository::save)
+                    List.of())
+                    .doOnSuccess(summary -> conversation.updateSummary(summary))
+                    .thenReturn(conversation);
+        }).flatMap(conversationRepository::save)
                 .doOnSuccess(c -> log.info("Summary compressed for conversation {}", c.getId()))
                 .doOnError(e -> log.warn("Summary compression failed: {}", e.getMessage()))
                 .subscribe();
@@ -268,8 +155,15 @@ public class ChatAppService {
 
                     return suggestionCache.get(conversationId, version)
                             .map(Mono::just)
-                            .orElseGet(() -> computeSuggestions(conversation)
-                                    .flatMap(list -> persistSuggestions(conversationId, conversation, version, list)));
+                            .orElseGet(() -> {
+                                if (!suggestionCache.tryStartComputing(conversationId, version)) {
+                                    log.debug("Suggestions computing in progress for conversation {} v{}, returning defaults", conversationId, version);
+                                    return Mono.just(defaultSuggestions());
+                                }
+                                return computeSuggestions(conversation)
+                                        .flatMap(list -> persistSuggestions(conversationId, conversation, version, list))
+                                        .doFinally(signal -> suggestionCache.finishComputing(conversationId, version));
+                            });
                 })
                 .onErrorResume(e -> {
                     log.warn("Generate suggestions failed for conversation {}: {}", conversationId, e.getMessage());
@@ -292,8 +186,13 @@ public class ChatAppService {
                     if (suggestionCache.get(conversationId, version).isPresent()) {
                         return Mono.empty();
                     }
+                    if (!suggestionCache.tryStartComputing(conversationId, version)) {
+                        log.debug("Suggestions already being computed for conversation {} v{}", conversationId, version);
+                        return Mono.empty();
+                    }
                     return computeSuggestions(conv)
                             .flatMap(list -> persistSuggestions(conversationId, conv, version, list))
+                            .doFinally(signal -> suggestionCache.finishComputing(conversationId, version))
                             .then();
                 })
                 .doOnError(e -> log.debug("Prefetch suggestions failed: {}", e.getMessage()))
@@ -302,48 +201,60 @@ public class ChatAppService {
     }
 
     private Mono<List<String>> computeSuggestions(Conversation conversation) {
-        return Mono.fromCallable(() -> {
-            List<ChatMessage> msgs = conversation.getMessages();
-            if (msgs == null || msgs.isEmpty()) {
-                return defaultSuggestions();
+        List<ChatMessage> msgs = conversation.getMessages();
+        if (msgs == null || msgs.isEmpty()) {
+            return Mono.just(defaultSuggestions());
+        }
+        String lastUser = null;
+        String lastAssistant = null;
+        for (int i = msgs.size() - 1; i >= 0; i--) {
+            ChatMessage m = msgs.get(i);
+            if (lastAssistant == null && m.getRole() == MessageRole.ASSISTANT) {
+                lastAssistant = m.getContent();
+            } else if (lastAssistant != null && m.getRole() == MessageRole.USER) {
+                lastUser = m.getContent();
+                break;
             }
-            // 取最后一个助手回复 + 其前面的用户问题
-            String lastAssistant = null;
-            String lastUser = null;
+        }
+        if (lastUser == null) {
             for (int i = msgs.size() - 1; i >= 0; i--) {
-                ChatMessage m = msgs.get(i);
-                if (lastAssistant == null && m.getRole() == MessageRole.ASSISTANT) {
-                    lastAssistant = m.getContent();
-                } else if (lastAssistant != null && m.getRole() == MessageRole.USER) {
-                    lastUser = m.getContent();
+                if (msgs.get(i).getRole() == MessageRole.USER) {
+                    lastUser = msgs.get(i).getContent();
                     break;
                 }
             }
-            if (lastAssistant == null) {
-                return defaultSuggestions();
+        }
+        if (lastUser == null) {
+            return Mono.just(defaultSuggestions());
+        }
+        StringBuilder ctx = new StringBuilder();
+        ctx.append("用户：").append(lastUser.trim()).append("\n");
+        if (lastAssistant != null) {
+            String assistantText = lastAssistant.trim();
+            if (assistantText.length() > 1500) {
+                assistantText = assistantText.substring(0, 1500) + "...";
             }
-            StringBuilder ctx = new StringBuilder();
-            if (lastUser != null) {
-                ctx.append("用户：").append(lastUser.trim()).append("\n");
-            }
-            ctx.append("助手：").append(lastAssistant.trim()).append("\n");
+            ctx.append("助手：").append(assistantText).append("\n");
+        }
 
-            String prompt = promptTemplateEngine.render(
-                    PromptTemplates.SUGGEST_FOLLOW_UP,
-                    java.util.Map.of("conversation", ctx.toString()));
+        String prompt = orchestratorConfig.getSuggestionPrompt()
+                .replace("{conversation}", ctx.toString());
 
-            try {
-                String response = chatModelPort.chat(
-                        conversation.getProviderId(), conversation.getModel(),
-                        List.of(new UserMessage(prompt)),
-                        List.of());
-                List<String> parsed = parseSuggestions(response);
-                return parsed.isEmpty() ? defaultSuggestions() : parsed;
-            } catch (Exception ex) {
-                log.warn("Suggestion model call failed for conversation {}: {}", conversation.getId(), ex.getMessage());
-                return defaultSuggestions();
-            }
-        }).subscribeOn(Schedulers.boundedElastic());
+        Long auxProvider = orchestratorConfig.getAuxiliaryProviderId();
+        Long providerId = auxProvider != null ? auxProvider : conversation.getProviderId();
+        String model = auxProvider != null ? null : conversation.getModel();
+        return chatModelPort.chat(
+                providerId, model,
+                List.of(new UserMessage(prompt)),
+                List.of())
+                .map(response -> {
+                    List<String> parsed = parseSuggestions(response);
+                    return parsed.isEmpty() ? defaultSuggestions() : parsed;
+                })
+                .onErrorResume(ex -> {
+                    log.warn("Suggestion model call failed for conversation {}: {}", conversation.getId(), ex.getMessage());
+                    return Mono.just(defaultSuggestions());
+                });
     }
 
     private List<String> defaultSuggestions() {

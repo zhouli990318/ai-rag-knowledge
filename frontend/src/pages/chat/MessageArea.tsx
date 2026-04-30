@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Box, Typography, Fab } from '@mui/material';
 import { KeyboardArrowDown, Send as SendIcon } from '@mui/icons-material';
+import { useQuery } from '@tanstack/react-query';
 import { ChatMessage } from '../../api/types';
 import { chatApi } from '../../api/chatApi';
 import MessageBubble from './MessageBubble';
@@ -21,9 +22,9 @@ interface Props {
   onSuggestedClick?: (q: string) => void;
 }
 
-/* 默认推荐问题（首次对话 / 动态生成失败时的兑底） */
+/* 默认推荐问题（首次对话 / 动态生成失败时的兑底）—— 需与后端 defaultSuggestions() 保持一致 */
 const fallbackQuestions = [
-  'RAG 与 Fine-tuning 的区别',
+  'RAG 与 Fine-tuning 的区别？',
   '如何构建一个 RAG 应用？',
   'RAG 常见问题有哪些？',
 ];
@@ -32,11 +33,7 @@ export default function MessageArea({ messages, streamContent, streaming, conver
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [suggestionsFailed, setSuggestionsFailed] = useState(false);
   const userScrolled = useRef(false);
-  const lastFetchedKey = useRef<string | null>(null);
 
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
@@ -47,47 +44,49 @@ export default function MessageArea({ messages, streamContent, streaming, conver
     if (!userScrolled.current) scrollToBottom(true);
   }, [messages.length, streamContent, scrollToBottom]);
 
-  // 动态获取推荐问题：在流式结束后，最后一条是 ASSISTANT 时拉取
-  useEffect(() => {
-    const lastMsg = messages[messages.length - 1];
-    const hasAssistantAnswer = String(lastMsg?.role || '').toUpperCase() === 'ASSISTANT' || (!!streamContent && !streaming);
-    const shouldFetch = !streaming && conversationId && hasAssistantAnswer;
-    if (!shouldFetch) {
-      if (!conversationId) {
-        setSuggestions(fallbackQuestions);
-        setSuggestionsFailed(false);
-      }
-      setLoadingSuggestions(false);
-      return;
-    }
-    const key = `${conversationId}-${messages.length}`;
-    if (lastFetchedKey.current === key) return;
-    lastFetchedKey.current = key;
+  // Determine whether suggestions should be fetched
+  const lastMsg = messages[messages.length - 1];
+  const lastMsgIsAssistant = String(lastMsg?.role || '').toUpperCase() === 'ASSISTANT';
+  const suggestionsEnabled = !streaming && !!conversationId && lastMsgIsAssistant;
 
-    let cancelled = false;
-    setLoadingSuggestions(true);
-    chatApi.getSuggestions(conversationId)
-      .then((list) => {
-        if (cancelled) return;
-        const normalized = Array.isArray(list) ? list.filter((q) => !!q && q.trim().length > 0) : [];
-        setSuggestions(normalized);
-        setSuggestionsFailed(false);
-        if (normalized.length === 0) {
-          // 空结果不锁死 key，允许后续同版本再次触发拉取。
-          lastFetchedKey.current = null;
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSuggestions(fallbackQuestions);
-          setSuggestionsFailed(true);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingSuggestions(false);
-      });
-    return () => { cancelled = true; };
-  }, [streaming, streamContent, conversationId, messages.length]);
+  // Use React Query for suggestions — cache survives route changes (Bug 3),
+  // and loading state is accurate from the start (Bug 4).
+  // Poll every 2s while backend still returns defaults (async computation not done yet).
+  const {
+    data: suggestionsRaw = [],
+    isLoading: suggestionsLoading,
+    isFetching: suggestionsFetching,
+    isError: suggestionsFailed,
+  } = useQuery({
+    queryKey: ['suggestions', conversationId, messages.length],
+    queryFn: () => chatApi.getSuggestions(conversationId!),
+    enabled: suggestionsEnabled,
+    staleTime: 5 * 60 * 1000,
+    select: (list) => {
+      const normalized = Array.isArray(list) ? list.filter((q) => !!q && q.trim().length > 0) : [];
+      return normalized;
+    },
+    refetchInterval: (query) => {
+      const data = query.state.data as string[] | undefined;
+      if (!data || data.length === 0) return 2000;
+      const isDefaults = data.length === fallbackQuestions.length &&
+        data.every((q, i) => q === fallbackQuestions[i]);
+      return isDefaults ? 2000 : false;
+    },
+  });
+
+  // Treat backend defaults as "still loading" — show skeleton instead of default questions
+  const isBackendDefaults = suggestionsRaw.length === fallbackQuestions.length &&
+    suggestionsRaw.every((q, i) => q === fallbackQuestions[i]);
+  const suggestions = isBackendDefaults ? [] : suggestionsRaw;
+  const stillComputingSuggestions = suggestionsEnabled && isBackendDefaults;
+
+  // Detect whether API messages already contain the stream content (dedup for Bug 1)
+  const streamAlreadyInMessages = (() => {
+    if (!streamContent) return false;
+    const last = messages[messages.length - 1];
+    return last && String(last.role).toUpperCase() === 'ASSISTANT' && last.content === streamContent;
+  })();
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -260,7 +259,7 @@ export default function MessageArea({ messages, streamContent, streaming, conver
               );
             })}
 
-            {streamContent && (
+            {streamContent && !streamAlreadyInMessages && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -290,7 +289,7 @@ export default function MessageArea({ messages, streamContent, streaming, conver
             )}
 
             {/* 推荐问题（在最后一条AI消息后显示） */}
-            {!streaming && (String(messages[messages.length - 1]?.role || '').toUpperCase() === 'ASSISTANT' || !!streamContent) && (
+            {!streaming && lastMsgIsAssistant && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -298,8 +297,8 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                 style={{ marginTop: 4 }}
               >
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, pl: 1 }}>
-                  {loadingSuggestions && suggestions.length === 0 ? (
-                    // Skeleton pulse pills
+                  {suggestionsLoading || suggestionsFetching || stillComputingSuggestions ? (
+                    // Skeleton pulse pills while loading
                     [0, 1, 2].map((i) => (
                       <Box
                         key={`sk-${i}`}

@@ -1,5 +1,6 @@
 package com.silver.ai.infrastructure.mcp;
 
+import com.silver.ai.domain.chat.port.McpToolPort;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("null")
-public class McpToolCallbackService {
+public class McpToolCallbackService implements McpToolPort {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {
@@ -34,8 +35,10 @@ public class McpToolCallbackService {
     private final ObjectMapper objectMapper;
 
     private volatile List<ToolCallback> cachedActiveCallbacks = Collections.emptyList();
+    private volatile List<McpToolDefinition> cachedActiveDefinitions = Collections.emptyList();
     private volatile long cachedActiveAt = 0L;
 
+    @Override
     public List<ToolCallback> getToolCallbacks(List<Long> sourceIds) {
         if (sourceIds == null || sourceIds.isEmpty()) {
             return Collections.emptyList();
@@ -50,26 +53,54 @@ public class McpToolCallbackService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 全局工具注入：汇总所有 active 且健康的 MCP 源工具。
-     * 带 30s 内存缓存，避免每轮对话都拉 Gateway。
-     */
+    @Override
     public List<ToolCallback> getAllActiveToolCallbacks() {
+        refreshCacheIfNeeded();
+        return cachedActiveCallbacks;
+    }
+
+    @Override
+    public List<McpToolDefinition> getAllActiveToolDefinitions() {
+        refreshCacheIfNeeded();
+        return cachedActiveDefinitions;
+    }
+
+    @Override
+    public List<ToolCallback> getToolCallbacksByToolIds(List<Long> toolIds) {
+        if (toolIds == null || toolIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        var idSet = new java.util.HashSet<>(toolIds);
+        refreshCacheIfNeeded();
+        return cachedActiveDefinitions.stream()
+                .filter(def -> idSet.contains(def.id()))
+                .map(this::createToolCallback)
+                .collect(Collectors.toList());
+    }
+
+    private void refreshCacheIfNeeded() {
         long now = System.currentTimeMillis();
         if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
-            return cachedActiveCallbacks;
+            return;
         }
         synchronized (this) {
             if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
-                return cachedActiveCallbacks;
+                return;
             }
             List<Long> sourceIds = mcpToolGatewayClient.listActiveSourceIds();
-            List<ToolCallback> callbacks = getToolCallbacks(sourceIds);
-            cachedActiveCallbacks = callbacks;
+            List<McpToolDefinition> definitions = sourceIds.stream()
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .flatMap(this::loadToolsSafely)
+                    .filter(McpToolDefinition::enabled)
+                    .toList();
+            cachedActiveDefinitions = definitions;
+            cachedActiveCallbacks = definitions.stream()
+                    .map(this::createToolCallback)
+                    .collect(Collectors.toList());
             cachedActiveAt = now;
             log.debug("Refreshed global MCP tool cache: {} tools from {} sources",
-                    callbacks.size(), sourceIds.size());
-            return callbacks;
+                    cachedActiveCallbacks.size(), sourceIds.size());
         }
     }
 

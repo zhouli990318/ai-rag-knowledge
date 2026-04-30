@@ -251,22 +251,26 @@ export default function SettingsPage() {
                     </Typography>
                   </Box>
 
-                  {/* Actions */}
-                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); testMutation.mutate(p.id); }}
-                    sx={{ color: testMutation.isPending ? ink.lightGray : ink.teal }}>
-                    <CheckCircle sx={{ fontSize: 20 }} />
-                  </IconButton>
-
-                  <InkSwitch
-                    checked={p.enabled}
-                    onChange={(e) => { e.stopPropagation(); toggleMutation.mutate(p.id); }}
+                  {/* Actions — wrapper stops pointer events from bubbling to motion.div / row onClick */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
                     onClick={(e) => e.stopPropagation()}
-                  />
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <IconButton size="small" onClick={() => testMutation.mutate(p.id)}
+                      sx={{ color: testMutation.isPending ? ink.lightGray : ink.teal }}>
+                      <CheckCircle sx={{ fontSize: 20 }} />
+                    </IconButton>
 
-                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(p.id); }}
-                    sx={{ color: ink.lightGray, '&:hover': { color: ink.cinnabar } }}>
-                    <Delete sx={{ fontSize: 18 }} />
-                  </IconButton>
+                    <InkSwitch
+                      checked={p.enabled}
+                      onChange={() => toggleMutation.mutate(p.id)}
+                    />
+
+                    <IconButton size="small" onClick={() => deleteMutation.mutate(p.id)}
+                      sx={{ color: ink.lightGray, '&:hover': { color: ink.cinnabar } }}>
+                      <Delete sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
                 </Box>
               </motion.div>
             );

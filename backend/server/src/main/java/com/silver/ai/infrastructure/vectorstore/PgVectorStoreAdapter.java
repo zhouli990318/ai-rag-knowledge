@@ -14,15 +14,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 @SuppressWarnings("null")
 public class PgVectorStoreAdapter implements VectorStorePort {
-
-    private static final int DELETE_BATCH_SIZE = 1000;
 
     private final VectorStore vectorStore;
 
@@ -65,34 +62,13 @@ public class PgVectorStoreAdapter implements VectorStorePort {
     @Override
     public void deleteByMetadata(String key, String value) {
         try {
-            int totalDeleted = 0;
-
-            while (true) {
-                List<Document> matchedDocuments = vectorStore.similaritySearch(SearchRequest.builder()
-                        .query(value)
-                        .topK(DELETE_BATCH_SIZE)
-                        .similarityThreshold(0.0d)
-                        .filterExpression(buildFilterExpression(Map.of(key, value)))
-                        .build());
-
-                List<String> documentIds = matchedDocuments.stream()
-                        .map(Document::getId)
-                        .filter(Objects::nonNull)
-                        .distinct()
-                        .toList();
-
-                if (documentIds.isEmpty()) {
-                    if (totalDeleted == 0) {
-                        log.info("No vectors matched {}={}", key, value);
-                    } else {
-                        log.info("Deleted {} vectors where {}={}", totalDeleted, key, value);
-                    }
-                    return;
-                }
-
-                vectorStore.delete(documentIds);
-                totalDeleted += documentIds.size();
+            Filter.Expression filter = buildFilterExpression(Map.of(key, value));
+            if (filter == null) {
+                log.info("No filter built for {}={}, skipping delete", key, value);
+                return;
             }
+            vectorStore.delete(filter);
+            log.info("Deleted vectors where {}={}", key, value);
         } catch (Exception e) {
             log.error("Failed to delete vectors by metadata {}={}", key, value, e);
             throw new BusinessException(ErrorCode.VECTOR_STORE_ERROR, e.getMessage(), e);

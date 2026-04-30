@@ -5,7 +5,6 @@ import com.silver.ai.mcpgateway.domain.model.HealthStatus;
 import com.silver.ai.mcpgateway.domain.port.ApiSourceRepository;
 import com.silver.ai.mcpgateway.infrastructure.config.McpHealthProperties;
 import com.silver.ai.mcpgateway.infrastructure.mcp.SourceScopedMcpServerRegistry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,17 +31,26 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class McpHealthCheckScheduler {
 
     private final ApiSourceRepository apiSourceRepository;
     private final SourceScopedMcpServerRegistry registry;
     private final McpHealthProperties properties;
 
-    private final WebClient webClient = WebClient.builder().build();
+    private final WebClient webClient;
 
     /** 跟踪下次允许探测的时间（指数退避） */
     private final ConcurrentHashMap<Long, Instant> nextProbeAt = new ConcurrentHashMap<>();
+
+    public McpHealthCheckScheduler(ApiSourceRepository apiSourceRepository,
+                                    SourceScopedMcpServerRegistry registry,
+                                    McpHealthProperties properties,
+                                    WebClient.Builder webClientBuilder) {
+        this.apiSourceRepository = apiSourceRepository;
+        this.registry = registry;
+        this.properties = properties;
+        this.webClient = webClientBuilder.clone().build();
+    }
 
     @Scheduled(fixedDelayString = "#{@mcpHealthProperties.checkInterval.toMillis()}",
                initialDelayString = "#{@mcpHealthProperties.checkInterval.toMillis()}")
