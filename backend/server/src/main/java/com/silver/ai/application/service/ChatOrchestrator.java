@@ -55,17 +55,24 @@ public class ChatOrchestrator {
                     QueryPlanningDomainService.QueryPlan queryPlan = tuple.getT2();
                     conversation.recordIntent(intentResult);
 
-                    String ragContext = retrieveContext(conversation, intentResult, queryPlan, trace);
+                Mono<String> ragContextMono = retrieveContextAsync(conversation, intentResult, queryPlan, trace);
+                Mono<ToolRoutingDomainService.ToolDecision> toolDecisionMono =
+                    routeToolsAsync(conversation, intentResult, userMessage, trace);
 
-                    ToolRoutingDomainService.ToolDecision toolDecision = routeTools(conversation, intentResult, userMessage, trace);
+                return Mono.zip(ragContextMono, toolDecisionMono)
+                    .map(resultTuple -> {
+                    String ragContext = resultTuple.getT1();
+                    ToolRoutingDomainService.ToolDecision toolDecision = resultTuple.getT2();
 
-                    String effectiveSystemPrompt = buildSystemPrompt(customSystemPrompt, ragContext, intentResult);
+                    String effectiveSystemPrompt = buildSystemPrompt(
+                        customSystemPrompt, ragContext, intentResult);
 
                     List<Message> messages = chatMemoryManager.buildMessages(
-                            conversation, effectiveSystemPrompt, orchestratorConfig.getMemoryFullRounds());
+                        conversation, effectiveSystemPrompt, orchestratorConfig.getMemoryFullRounds());
 
-                    return Mono.just(new OrchestrationResult(messages,
-                            toolDecision.hasTools() ? toolDecision.toolCallbacks() : List.of()));
+                    return new OrchestrationResult(messages,
+                        toolDecision.hasTools() ? toolDecision.toolCallbacks() : List.of());
+                    });
                 });
     }
 
@@ -109,6 +116,13 @@ public class ChatOrchestrator {
                 });
     }
 
+    private Mono<String> retrieveContextAsync(Conversation conversation, IntentResult intentResult,
+                                              QueryPlanningDomainService.QueryPlan queryPlan,
+                                              ChatTraceContext trace) {
+        return Mono.fromCallable(() -> retrieveContext(conversation, intentResult, queryPlan, trace))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
     private String retrieveContext(Conversation conversation, IntentResult intentResult,
                                    QueryPlanningDomainService.QueryPlan queryPlan, ChatTraceContext trace) {
         TraceSpan span = trace.startSpan(OrchestrationStage.RETRIEVAL);
@@ -133,6 +147,14 @@ public class ChatOrchestrator {
             span.fail(e.getMessage());
             return "";
         }
+    }
+
+    private Mono<ToolRoutingDomainService.ToolDecision> routeToolsAsync(Conversation conversation,
+                                                                        IntentResult intentResult,
+                                                                        String userMessage,
+                                                                        ChatTraceContext trace) {
+        return Mono.fromCallable(() -> routeTools(conversation, intentResult, userMessage, trace))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private ToolRoutingDomainService.ToolDecision routeTools(Conversation conversation,

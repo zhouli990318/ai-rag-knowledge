@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.PayloadTooLargeException;
 import org.springframework.web.server.ServerWebInputException;
 
 import java.lang.reflect.Method;
@@ -70,6 +71,17 @@ class GlobalExceptionHandlerTest {
     void handleDataBufferLimitShouldReturnPayloadTooLarge() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleDataBufferLimit(
                 new DataBufferLimitException("Exceeded limit"));
+        ApiResponse<Void> body = assertBody(response);
+
+        assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
+        assertEquals(40013, body.getCode());
+        assertEquals("文件大小超过限制", body.getMessage());
+    }
+
+    @Test
+    void handlePayloadTooLargeShouldReturnPayloadTooLarge() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handlePayloadTooLarge(
+                new PayloadTooLargeException("Request body too large"));
         ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.PayloadTooLargeException;
 import org.springframework.web.server.ServerWebInputException;
 
 import java.util.concurrent.TimeoutException;
@@ -43,6 +44,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataBufferLimitException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataBufferLimit(DataBufferLimitException ex) {
+        log.warn("Payload exceeded in-memory buffer limit: {}", ex.getMessage());
+        return payloadTooLargeResponse();
+    }
+
+    @ExceptionHandler(PayloadTooLargeException.class)
+    public ResponseEntity<ApiResponse<Void>> handlePayloadTooLarge(PayloadTooLargeException ex) {
+        log.warn("Payload too large: {}", ex.getMessage());
+        return payloadTooLargeResponse();
+    }
+
+    private ResponseEntity<ApiResponse<Void>> payloadTooLargeResponse() {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(ApiResponse.fail(40013, "文件大小超过限制"));
     }

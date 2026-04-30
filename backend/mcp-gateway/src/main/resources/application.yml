@@ -5,6 +5,8 @@ spring:
     active: dev,local
   main:
     web-application-type: reactive
+  codec:
+    max-in-memory-size: 10MB
 
   flyway:
     enabled: true

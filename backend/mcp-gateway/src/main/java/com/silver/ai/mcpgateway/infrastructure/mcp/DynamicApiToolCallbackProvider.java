@@ -14,6 +14,7 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +25,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
+@DependsOnDatabaseInitialization
 @RequiredArgsConstructor
 public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
 

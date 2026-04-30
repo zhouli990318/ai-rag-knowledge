@@ -40,7 +40,7 @@ spring:
       api-key: ${ZHIPUAI_API_KEY:placeholder}
     vectorstore:
       pgvector:
-        dimensions: 768
+        dimensions: 1024
         index-type: HNSW
         distance-type: COSINE_DISTANCE
         initialize-schema: true
@@ -60,8 +60,8 @@ app:
     base-url: ${APP_MCP_GATEWAY_BASE_URL:http://localhost:8092/api/v1/mcp}
   default-embedding:
     base-url: ${APP_DEFAULT_EMBEDDING_BASE_URL:${OLLAMA_BASE_URL:http://localhost:11434}}
-    model: ${APP_DEFAULT_EMBEDDING_MODEL:nomic-embed-text}
-    dimensions: ${APP_DEFAULT_EMBEDDING_DIMENSIONS:768}
+    model: ${APP_DEFAULT_EMBEDDING_MODEL:bge-m3}
+    dimensions: ${APP_DEFAULT_EMBEDDING_DIMENSIONS:1024}
   storage:
     upload-dir: ${APP_UPLOAD_DIR:./uploads}
 

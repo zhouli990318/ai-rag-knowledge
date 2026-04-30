@@ -12,9 +12,11 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.WebFluxSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
+import org.springframework.context.event.EventListener;
 import org.springframework.ai.mcp.server.common.autoconfigure.McpServerAutoConfiguration;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerChangeNotificationProperties;
 import org.springframework.ai.mcp.server.common.autoconfigure.properties.McpServerProperties;
@@ -46,6 +48,7 @@ import java.util.stream.Stream;
 
 @Slf4j
 @Component
+@DependsOnDatabaseInitialization
 @RequiredArgsConstructor
 public class SourceScopedMcpServerRegistry {
 
@@ -79,8 +82,9 @@ public class SourceScopedMcpServerRegistry {
     private final ConcurrentMap<Long, RegisteredSourceServer> servers = new ConcurrentHashMap<>();
     private final StampedLock stampedLock = new StampedLock();
 
-    @PostConstruct
+    @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
+        log.info("Application ready, refreshing source-scoped MCP servers");
         refreshAll();
     }
 
