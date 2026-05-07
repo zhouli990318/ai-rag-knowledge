@@ -1,7 +1,5 @@
 package com.silver.ai.infrastructure.mcp;
 
-import com.silver.ai.shared.exception.BusinessException;
-import com.silver.ai.shared.result.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -72,7 +70,10 @@ public class McpToolGatewayClient {
                 .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<String>>() {})
                 .block();
         if (body == null) {
-            return "";
+            return "[MCP 工具调用失败: 无响应]";
+        }
+        if (body.code() != 200) {
+            return "[MCP 工具调用失败: " + body.message() + "]";
         }
         return body.data() == null ? "" : body.data();
     }

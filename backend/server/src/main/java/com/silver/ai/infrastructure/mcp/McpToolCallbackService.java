@@ -1,7 +1,6 @@
 package com.silver.ai.infrastructure.mcp;
 
 import com.silver.ai.domain.chat.port.McpToolPort;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -146,8 +145,12 @@ public class McpToolCallbackService implements McpToolPort {
 
         try {
             return mcpToolGatewayClient.invokeTool(toolId, objectMapper.writeValueAsString(payload));
-        } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("MCP 工具参数序列化失败", ex);
+        } catch (IllegalArgumentException ex) {
+            log.warn("MCP tool {} parameter error: {}", toolId, ex.getMessage());
+            return "[MCP 工具参数错误: " + ex.getMessage() + "]";
+        } catch (Exception ex) {
+            log.warn("MCP tool {} invocation failed: {}", toolId, ex.getMessage());
+            return "[MCP 工具调用失败: " + ex.getMessage() + "]";
         }
     }
 
