@@ -132,6 +132,16 @@ body {
   box-shadow: 0 4px 24px rgba(0,0,0,0.2);
 }
 
+/* ── 沉浸模式 ── */
+[data-immersive="true"] body {
+  background-image: none !important;
+  background-color: #FAFAFA;
+}
+
+[data-immersive="true"][data-theme="dark"] body {
+  background-color: #1A1A1A;
+}
+
 /* ── 水墨分割线 ── */
 .ink-divider {
   height: 1px;

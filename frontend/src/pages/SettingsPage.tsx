@@ -4,7 +4,7 @@ import {
   DialogActions, TextField, IconButton, Select, MenuItem,
   FormControl, InputLabel, LinearProgress,
 } from '@mui/material';
-import { Add, Delete, CheckCircle, Edit, ChevronRight, Dns } from '@mui/icons-material';
+import { AddOutlined as Add, DeleteOutlined as Delete, CheckCircle, EditOutlined as Edit, ChevronRightOutlined as ChevronRight, DnsOutlined as Dns } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { providerApi } from '../api/providerApi';
 import { Provider, ProviderType } from '../api/types';

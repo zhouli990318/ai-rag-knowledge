@@ -6,11 +6,11 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  Add as AddIcon,
-  Cloud as WeatherIcon,
-  Search as SearchIcon,
-  Code as CodeIcon,
-  ExpandMore as ExpandMoreIcon,
+  AddOutlined as AddIcon,
+  CloudOutlined as WeatherIcon,
+  SearchOutlined as SearchIcon,
+  CodeOutlined as CodeIcon,
+  ExpandMoreOutlined as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { providerApi } from '../../api/providerApi';
 import { knowledgeApi } from '../../api/knowledgeApi';
@@ -53,19 +53,24 @@ export default memo(function ChatConfig() {
   const activeMcpSources = mcpSources.filter((s: McpApiSource) => s.active);
   const healthMap = new Map(mcpHealth.map((h) => [h.id, h]));
 
-  /* ── 手风琴公共样式 ── */
+  /* ── 手风琴公共样式 —— 独立悬浮卡片 ── */
   const accordionSx = {
     '&.MuiAccordion-root': {
-      backgroundColor: 'transparent',
+      backgroundColor: mode === 'dark' ? '#2A2826' : '#f7f2e6',
       backgroundImage: 'none',
-      boxShadow: 'none',
-      border: `1px solid ${di.glassBorder}`,
-      borderRadius: `${radius.md}px !important`,
+      boxShadow: mode === 'dark'
+        ? '0 4px 20px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2)'
+        : '0 4px 20px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
+      border: `1px solid ${mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(224,220,213,0.5)'}`,
+      borderRadius: '14px !important',
       overflow: 'hidden',
       '&::before': { display: 'none' },
       '&.Mui-expanded': {
         margin: 0,
-        borderColor: di.border,
+        borderColor: mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(200,196,190,0.6)',
+        boxShadow: mode === 'dark'
+          ? '0 6px 28px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25)'
+          : '0 6px 28px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.05)',
       },
     },
   };

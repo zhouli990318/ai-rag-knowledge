@@ -4,7 +4,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   CircularProgress, Alert, Collapse, IconButton,
 } from '@mui/material';
-import { ExpandMore, ExpandLess } from '@mui/icons-material';
+import { ExpandMoreOutlined as ExpandMore, ExpandLessOutlined as ExpandLess, CheckCircleOutlined, ErrorOutlineOutlined } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { traceApi, ChatTrace, TraceSpan } from '../api/orchestrationApi';
 import { chatApi } from '../api/chatApi';
@@ -34,8 +34,8 @@ const stageLabels: Record<string, string> = {
 const stageColor = (stage: string, success: boolean): string => {
   if (!success) return '#C84B31';
   const map: Record<string, string> = {
-    REWRITE: '#5B7065', INTENT: '#5B7065', RETRIEVAL: '#2C6E49',
-    RERANK: '#4A6FA5', TOOL: '#8B6914', GENERATION: '#C84B31', PERSIST: '#8B8B8B',
+    REWRITE: '#4A7FB5', INTENT: '#4A7FB5', RETRIEVAL: '#2C6E49',
+    RERANK: '#4A7FB5', TOOL: '#C89B3C', GENERATION: '#2C6E49', PERSIST: '#8B8B8B',
   };
   return map[stage] || '#4A4A4A';
 };
@@ -59,11 +59,14 @@ function SpanRow({ span }: { span: TraceSpan }) {
           <Box sx={{
             display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25,
             borderRadius: '4px',
-            backgroundColor: span.success ? 'rgba(91,112,101,0.1)' : 'rgba(200,75,49,0.1)',
-            color: span.success ? '#5B7065' : '#C84B31',
+            backgroundColor: span.success ? 'rgba(44,110,73,0.1)' : 'rgba(200,75,49,0.1)',
+            color: span.success ? '#2C6E49' : '#C84B31',
             fontSize: 12, fontWeight: 500,
           }}>
-            {span.success ? '成功' : '失败'}
+            {span.success
+              ? <><CheckCircleOutlined sx={{ fontSize: 13 }} /> 成功</>
+              : <><ErrorOutlineOutlined sx={{ fontSize: 13 }} /> 失败</>
+            }
           </Box>
         </TableCell>
         <TableCell>
@@ -137,7 +140,7 @@ export default function TracePage() {
   return (
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C', mb: 2.5 }}>
-        链路追踪
+        墨迹溯源
       </Typography>
 
       <Box sx={{ mb: 2.5 }}>

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Box, Typography, Fab } from '@mui/material';
-import { KeyboardArrowDown, Send as SendIcon } from '@mui/icons-material';
+import { KeyboardArrowDownOutlined as KeyboardArrowDown, SendOutlined as SendIcon } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { ChatMessage } from '../../api/types';
 import { chatApi } from '../../api/chatApi';
@@ -107,7 +107,7 @@ export default function MessageArea({ messages, streamContent, streaming, conver
       <Box
         ref={scrollRef}
         onScroll={handleScroll}
-        sx={{ height: '100%', overflow: 'auto', px: { xs: 1.5, md: 1.5 }, py: 2 }}
+        sx={{ height: '100%', overflow: 'auto', px: { xs: 1.5, md: 1.5 }, py: 2, pb: 12 }}
       >
         {isEmpty ? (
           /* ═══════ 水墨欢迎页 (匹配设计图) ═══════ */

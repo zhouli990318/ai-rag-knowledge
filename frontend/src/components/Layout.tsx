@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, Typography, useMediaQuery, useTheme,
@@ -7,21 +7,28 @@ import {
   IconButton, Tooltip, Collapse,
 } from '@mui/material';
 import {
-  Chat as ChatIcon, Storage as StorageIcon, Hub as HubIcon,
-  Settings as SettingsIcon, TuneRounded as TuneIcon,
-  ModelTraining as ModelIcon,
-  AccountTree as WorkflowIcon,
-  Apps as AppIcon,
-  Dataset as DatasetIcon,
-  NotificationsNone as BellIcon,
-  Description as DocCenterIcon,
-  Timeline as TimelineIcon,
-  CloudUpload as IngestIcon,
-  LightMode as LightModeIcon,
-  DarkMode as DarkModeIcon,
-  ExpandMore as ExpandMoreIcon,
+  ChatOutlined as ChatIcon,
+  StorageOutlined as StorageIcon,
+  HubOutlined as HubIcon,
+  SettingsOutlined as SettingsIcon,
+  TuneRounded as TuneIcon,
+  ModelTrainingOutlined as ModelIcon,
+  AccountTreeOutlined as WorkflowIcon,
+  AppsOutlined as AppIcon,
+  DatasetOutlined as DatasetIcon,
+  NotificationsNoneOutlined as BellIcon,
+  DescriptionOutlined as DocCenterIcon,
+  TimelineOutlined as TimelineIcon,
+  CloudUploadOutlined as IngestIcon,
+  LightModeOutlined as LightModeIcon,
+  DarkModeOutlined as DarkModeIcon,
+  ExpandMoreOutlined as ExpandMoreIcon,
+  VisibilityOffOutlined as ImmersiveIcon,
+  VisibilityOutlined as ImmersiveOffIcon,
+  CloseOutlined as CloseIcon,
 } from '@mui/icons-material';
 import { InkLogo } from './ink';
+import InkBreadcrumb from './ink/InkBreadcrumb';
 import ChatConfig from '../pages/chat/ChatConfig';
 import { ink, radius, serifFont, sansFont, getInk, useInk } from '../theme/ThemeProvider';
 import { useThemeStore } from '../stores/themeStore';
@@ -37,17 +44,30 @@ const primaryNav = [
   { label: '系统设置', path: '/system-settings', icon: <SettingsIcon /> },
 ];
 const secondaryNav = [
-  { label: '意图树', path: '/intent-tree', icon: <WorkflowIcon /> },
-  { label: '入库监控', path: '/ingest-monitor', icon: <IngestIcon /> },
-  { label: '链路追踪', path: '/traces', icon: <TimelineIcon /> },
+  { label: '意图决策', path: '/intent-tree', icon: <WorkflowIcon /> },
+  { label: '文墨入库', path: '/ingest-monitor', icon: <IngestIcon /> },
+  { label: '墨迹溯源', path: '/traces', icon: <TimelineIcon /> },
 ];
 const allNav = [...primaryNav, ...secondaryNav];
+
+/* ── 面包屑路由映射 ── */
+const breadcrumbMap: Record<string, { label: string; parent?: { label: string; path: string } }> = {
+  '/chat': { label: '对话' },
+  '/knowledge': { label: '知识库' },
+  '/mcp': { label: 'MCP 服务' },
+  '/settings': { label: '模型管理' },
+  '/system-settings': { label: '系统设置' },
+  '/intent-tree': { label: '意图决策', parent: { label: '更多工具', path: '/chat' } },
+  '/ingest-monitor': { label: '文墨入库', parent: { label: '更多工具', path: '/chat' } },
+  '/traces': { label: '墨迹溯源', parent: { label: '更多工具', path: '/chat' } },
+};
 
 const SIDEBAR_WIDTH = 228;
 const PANEL_WIDTH = 300;
 
 /* ── 中间+右侧 水墨山峰背景（真实图片） ── */
-function MountainBackground({ mode }: { mode: 'light' | 'dark' }) {
+function MountainBackground({ mode, hidden }: { mode: 'light' | 'dark'; hidden?: boolean }) {
+  if (hidden) return null;
   return (
     <Box
       sx={{
@@ -62,12 +82,16 @@ function MountainBackground({ mode }: { mode: 'light' | 'dark' }) {
         src={mainInkLandscape}
         alt=""
         sx={{
-          width: '100%', height: '100%',
+          position: 'absolute',
+          bottom: 0, left: 0,
+          width: '100%', maxHeight: '40vh',
           objectFit: 'cover', objectPosition: 'center bottom',
           display: 'block',
-          opacity: mode === 'dark' ? 0.08 : 0.18,
-          filter: mode === 'dark' ? 'brightness(0.5) contrast(1.3) invert(0.85)' : 'none',
+          opacity: mode === 'dark' ? 0.08 : 0.88,
+          filter: mode === 'dark' ? 'brightness(0.5) contrast(1.3) invert(0.85)' : 'sepia(0.25) saturate(0.8) brightness(1.05)',
           transition: 'opacity 0.4s ease, filter 0.4s ease',
+          mask: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%)',
+          WebkitMask: 'linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%)',
         }}
       />
     </Box>
@@ -81,9 +105,17 @@ export default function Layout() {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
   const themeMode = useThemeStore((s) => s.mode);
   const toggleMode = useThemeStore((s) => s.toggleMode);
+  const immersive = useThemeStore((s) => s.immersive);
+  const toggleImmersive = useThemeStore((s) => s.toggleImmersive);
   const di = useInk(); // dark-aware ink tokens
+
+  /* 同步 data-immersive 到 <html> */
+  useEffect(() => {
+    document.documentElement.setAttribute('data-immersive', String(immersive));
+  }, [immersive]);
 
   const currentIndex = allNav.findIndex((n) => location.pathname.startsWith(n.path));
   const isChat = location.pathname.startsWith('/chat');
@@ -181,6 +213,7 @@ export default function Layout() {
         }}
       >
         {/* 竖版水墨山水画背景 — 真实图片 */}
+        {!immersive && (
         <Box sx={{
           position: 'absolute', inset: 0, zIndex: 0,
           overflow: 'hidden',
@@ -199,15 +232,18 @@ export default function Layout() {
             }}
           />
         </Box>
+        )}
 
         {/* 半透明遮罩保证文字可读性 */}
+        {!immersive && (
         <Box sx={{
           position: 'absolute', inset: 0, zIndex: 1,
           background: themeMode === 'dark'
-            ? 'linear-gradient(180deg, rgba(36,34,32,0.92) 0%, rgba(36,34,32,0.82) 50%, rgba(36,34,32,0.75) 100%)'
-            : 'linear-gradient(180deg, rgba(232,226,216,0.88) 0%, rgba(232,226,216,0.75) 50%, rgba(232,226,216,0.65) 100%)',
+            ? 'linear-gradient(180deg, rgba(36,34,32,0.94) 0%, rgba(36,34,32,0.88) 50%, rgba(36,34,32,0.82) 100%)'
+            : 'linear-gradient(180deg, rgba(232,226,216,0.93) 0%, rgba(232,226,216,0.85) 50%, rgba(232,226,216,0.78) 100%)',
           pointerEvents: 'none',
         }} />
+        )}
 
         {/* Logo 区域 */}
         <Box sx={{ pt: 3, pb: 2, px: 2.5, borderBottom: `1px solid ${di.border}`, position: 'relative', zIndex: 2 }}>
@@ -326,18 +362,32 @@ export default function Layout() {
 
         {/* 底部：暗色切换 + 署名 */}
         <Box sx={{ position: 'relative', zIndex: 2, pb: 1.5, pt: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-          <Tooltip title={themeMode === 'dark' ? '切换亮色' : '切换暗色'} placement="right">
-            <IconButton
-              onClick={toggleMode}
-              size="small"
-              sx={{
-                color: di.navIcon,
-                '&:hover': { color: di.black, bgcolor: 'rgba(0,0,0,0.04)' },
-              }}
-            >
-              {themeMode === 'dark' ? <LightModeIcon sx={{ fontSize: 18 }} /> : <DarkModeIcon sx={{ fontSize: 18 }} />}
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Tooltip title={themeMode === 'dark' ? '切换亮色' : '切换暗色'} placement="right">
+              <IconButton
+                onClick={toggleMode}
+                size="small"
+                sx={{
+                  color: di.navIcon,
+                  '&:hover': { color: di.black, bgcolor: 'rgba(0,0,0,0.04)' },
+                }}
+              >
+                {themeMode === 'dark' ? <LightModeIcon sx={{ fontSize: 18 }} /> : <DarkModeIcon sx={{ fontSize: 18 }} />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={immersive ? '退出沉浸模式' : '沉浸模式'} placement="right">
+              <IconButton
+                onClick={toggleImmersive}
+                size="small"
+                sx={{
+                  color: immersive ? di.cinnabar : di.navIcon,
+                  '&:hover': { color: di.black, bgcolor: 'rgba(0,0,0,0.04)' },
+                }}
+              >
+                {immersive ? <ImmersiveOffIcon sx={{ fontSize: 18 }} /> : <ImmersiveIcon sx={{ fontSize: 18 }} />}
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Typography sx={{
             fontSize: 9.5, color: di.lightGray, letterSpacing: 2.5,
             fontFamily: serifFont, textAlign: 'center',
@@ -349,9 +399,13 @@ export default function Layout() {
       </Box>
 
       {/* ═══════ 中间 + 右侧容器（共享背景） ═══════ */}
-      <Box sx={{ flex: 1, display: 'flex', position: 'relative', overflow: 'hidden' }}>
+      <Box sx={{
+        flex: 1, display: 'flex', position: 'relative', overflow: 'hidden',
+        backgroundColor: immersive ? (themeMode === 'dark' ? '#1A1A1A' : '#f7f2e6') : (themeMode === 'dark' ? 'transparent' : '#f7f2e6'),
+        transition: 'background-color 0.3s ease',
+      }}>
         {/* 水墨山峰背景层 */}
-        <MountainBackground mode={themeMode} />
+        <MountainBackground mode={themeMode} hidden={immersive} />
 
         {/* 顶部信息栏 — 浮在最右上角 */}
         <Box sx={{
@@ -403,26 +457,60 @@ export default function Layout() {
           >
             墨
           </Avatar>
+
+          {/* 对话配置按钮（仅 Chat 页面） */}
+          {isChat && (
+            <Tooltip title={configOpen ? '收起配置' : '对话配置'}>
+              <IconButton
+                size="small"
+                onClick={() => setConfigOpen(!configOpen)}
+                sx={{
+                  color: configOpen ? di.cinnabar : di.gray,
+                  p: 0.6,
+                  transition: 'all 150ms ease-in-out',
+                  '&:hover': { backgroundColor: 'rgba(255,255,255,0.5)' },
+                }}
+              >
+                <TuneIcon sx={{ fontSize: 19 }} />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
 
         {/* 主内容区 */}
         <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0, position: 'relative', zIndex: 1 }}>
+          {/* 面包屑导航 */}
+          {(() => {
+            const route = Object.keys(breadcrumbMap).find(k => location.pathname.startsWith(k));
+            if (!route || route === '/chat') return null;
+            const entry = breadcrumbMap[route];
+            const items: Array<{ label: string; path?: string }> = [{ label: '首页', path: '/chat' }];
+            if (entry.parent) items.push(entry.parent);
+            items.push({ label: entry.label });
+            return (
+              <Box sx={{ px: { xs: 2, md: 2.5 }, pt: { xs: 7, md: 7 }, pb: 0 }}>
+                <InkBreadcrumb items={items} />
+              </Box>
+            );
+          })()}
           <Outlet />
         </Box>
 
-        {/* 右侧面板（仅对话页，透明背景） */}
-        {isChat && (
-          <Box
-            sx={{
-              width: PANEL_WIDTH, flexShrink: 0,
-              overflow: 'auto',
-              display: 'flex', flexDirection: 'column',
-              position: 'relative', zIndex: 1,
-            }}
-          >
-            <Box sx={{ p: 2, pt: 7, flex: 1 }}>
-              <ChatConfig />
+        {/* 右侧配置面板（仅对话页） */}
+        {isChat && configOpen && (
+          <Box sx={{
+            width: PANEL_WIDTH, flexShrink: 0,
+            p: 1.5, pt: 7,
+            height: '100%', overflow: 'auto',
+            position: 'relative', zIndex: 1,
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 0.5 }}>
+              <Typography variant="h6" sx={{ fontFamily: serifFont, fontSize: 16 }}>对话配置</Typography>
+              <IconButton size="small" onClick={() => setConfigOpen(false)} sx={{ color: di.lightGray }}>
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
             </Box>
+            <ChatConfig />
           </Box>
         )}
       </Box>

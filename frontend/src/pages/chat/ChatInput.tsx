@@ -2,10 +2,10 @@ import { memo, useCallback } from 'react';
 import { Box, IconButton, InputBase, Typography } from '@mui/material';
 import {
   ArrowUpward as SendIcon,
-  Stop,
-  AttachFile,
-  InsertDriveFile,
-  Link as LinkIcon,
+  StopOutlined as Stop,
+  AttachFileOutlined as AttachFile,
+  InsertDriveFileOutlined as InsertDriveFile,
+  LinkOutlined as LinkIcon,
 } from '@mui/icons-material';
 import { ink, radius, useInk } from '../../theme/ThemeProvider';
 import { useThemeStore } from '../../stores/themeStore';
@@ -33,36 +33,27 @@ export default memo(function ChatInput({ value, onChange, onSend, streaming, dis
 
   return (
     <Box sx={{
-      px: 2.5,
-      pt: 1.5,
-      pb: 'max(14px, env(safe-area-inset-bottom, 14px))',
+      px: { xs: 2, md: 3 },
+      pb: 'max(16px, env(safe-area-inset-bottom, 16px))',
       position: 'relative',
     }}>
-      {/* 顶部渐变过渡遮罩 */}
-      <Box sx={{
-        position: 'absolute', top: -32, left: 0, right: 0, height: 32,
-        background: mode === 'dark'
-          ? 'linear-gradient(to bottom, transparent, rgba(26,26,26,0.6))'
-          : 'linear-gradient(to bottom, transparent, rgba(251,249,245,0.6))',
-        pointerEvents: 'none', zIndex: 0,
-      }} />
-      {/* 输入框容器 - 毛玻璃圆角卡片风格 */}
+      {/* 输入框容器 - 悬浮圆角卡片风格 */}
       <Box sx={{
         display: 'flex', flexDirection: 'column',
-        backgroundColor: mode === 'dark' ? 'rgba(42,40,38,0.85)' : 'rgba(255,255,255,0.8)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        border: `1px solid ${di.glassBorder}`,
-        borderRadius: `${radius.lg}px`,
+        backgroundColor: mode === 'dark' ? '#2A2826' : '#f7f2e6',
+        border: `1px solid ${mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(210,200,180,0.6)'}`,
+        borderRadius: '16px',
         overflow: 'hidden',
         transition: 'all 220ms ease-in-out',
-        boxShadow: mode === 'dark' ? '0 -4px 24px rgba(0,0,0,0.15)' : '0 -4px 24px rgba(0,0,0,0.05)',
+        boxShadow: mode === 'dark'
+          ? '0 4px 24px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.15)'
+          : '0 4px 24px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)',
         '&:focus-within': {
-          borderColor: mode === 'dark' ? 'rgba(255,255,255,0.15)' : '#B8B4AE',
+          borderColor: mode === 'dark' ? 'rgba(255,255,255,0.15)' : '#B8B0A0',
           boxShadow: mode === 'dark'
-            ? '0 -4px 24px rgba(0,0,0,0.2), 0 0 0 3px rgba(255,255,255,0.04)'
-            : '0 -4px 24px rgba(0,0,0,0.06), 0 0 0 3px rgba(74,74,74,0.05)',
-          backgroundColor: mode === 'dark' ? 'rgba(42,40,38,1)' : '#FFFFFF',
+            ? '0 6px 32px rgba(0,0,0,0.3), 0 0 0 3px rgba(255,255,255,0.04)'
+            : '0 6px 32px rgba(0,0,0,0.1), 0 0 0 3px rgba(180,170,150,0.12)',
+          backgroundColor: mode === 'dark' ? '#2E2C2A' : '#faf6ec',
         },
       }}>
         {/* 上方：文本输入 + 发送按钮 */}

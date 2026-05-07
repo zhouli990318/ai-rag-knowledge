@@ -10,3 +10,4 @@ export { default as InkActionSheet } from './InkActionSheet';
 export { default as InkSegmentedControl } from './InkSegmentedControl';
 export { default as InkGroupedList } from './InkGroupedList';
 export { default as InkSwitch } from './InkSwitch';
+export { default as InkBreadcrumb } from './InkBreadcrumb';

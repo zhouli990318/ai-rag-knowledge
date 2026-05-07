@@ -1,12 +1,14 @@
 import { ReactNode, CSSProperties } from 'react';
 import { Box, SxProps } from '@mui/material';
-import { ink, radius } from '../../theme/ThemeProvider';
+import { ink, radius, useInk } from '../../theme/ThemeProvider';
 
 type AccentColor = 'default' | 'cinnabar' | 'teal' | 'gray';
+type CardVariant = 'glass' | 'solid';
 
 interface InkCardProps {
   children?: ReactNode;
   accent?: AccentColor;
+  variant?: CardVariant;
   sx?: SxProps;
   onClick?: () => void;
   style?: Record<string, any>;
@@ -19,17 +21,26 @@ const accentColors: Record<AccentColor, string> = {
   gray: ink.lightGray,
 };
 
-export default function InkCard({ children, accent = 'default', sx, onClick, style }: InkCardProps) {
+export default function InkCard({ children, accent = 'default', variant = 'glass', sx, onClick, style }: InkCardProps) {
   const color = accentColors[accent];
+  const di = useInk();
+
+  const isSolid = variant === 'solid';
 
   return (
     <Box
       onClick={onClick}
       sx={{
-        backgroundColor: 'rgba(255,255,255,0.72)',
-        backdropFilter: 'blur(12px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(12px) saturate(180%)',
-        border: '1px solid rgba(224,221,216,0.6)',
+        backgroundColor: isSolid
+          ? di.cream === '#1A1A1A' ? '#2A2826' : '#FFFFFF'
+          : 'rgba(255,255,255,0.72)',
+        ...(isSolid ? {} : {
+          backdropFilter: 'blur(12px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+        }),
+        border: isSolid
+          ? `1px solid ${di.cream === '#1A1A1A' ? '#3A3A3A' : '#E5E5E5'}`
+          : '1px solid rgba(224,221,216,0.6)',
         borderRadius: radius.md,
         transition: 'all 300ms cubic-bezier(0.25,0.46,0.45,0.94)',
         overflow: 'hidden',
@@ -37,7 +48,9 @@ export default function InkCard({ children, accent = 'default', sx, onClick, sty
         ...(onClick && {
           cursor: 'pointer',
           '&:hover': {
-            borderColor: 'rgba(224,221,216,0.95)',
+            borderColor: isSolid
+              ? (di.cream === '#1A1A1A' ? '#505050' : '#D0D0D0')
+              : 'rgba(224,221,216,0.95)',
             boxShadow: `0 4px 20px rgba(0,0,0,0.06), 0 0 0 1px ${color}15`,
             transform: 'translateY(-1px)',
           },

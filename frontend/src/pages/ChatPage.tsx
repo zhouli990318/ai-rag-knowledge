@@ -131,7 +131,7 @@ export default function ChatPage() {
       : '';
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       {/* Top conversation tabs */}
       <ConversationList
         conversations={conversations}
@@ -145,8 +145,12 @@ export default function ChatPage() {
       {/* Message area */}
       <MessageArea messages={messages} streamContent={visibleStreamContent} streaming={streaming && visibleStreamContent !== ''} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
 
-      {/* Input */}
-      <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
+      {/* Input - 悬浮在底部 */}
+      <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10, pointerEvents: 'none' }}>
+        <Box sx={{ pointerEvents: 'auto' }}>
+          <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
+        </Box>
+      </Box>
     </Box>
   );
 }

@@ -6,9 +6,12 @@ import {
   CircularProgress, Alert, Collapse,
 } from '@mui/material';
 import {
-  ExpandMore, ExpandLess, Add, Delete,
+  ExpandMoreOutlined as ExpandMore, ExpandLessOutlined as ExpandLess,
+  AddOutlined as Add, DeleteOutlined as Delete,
+  AccountTreeOutlined as AccountTreeIcon,
 } from '@mui/icons-material';
 import { intentTreeApi, IntentNode } from '../api/orchestrationApi';
+import { InkEmptyState } from '../components/ink';
 
 const serifFont = '"Noto Serif SC", "Source Han Serif SC", serif';
 
@@ -168,7 +171,7 @@ export default function IntentTreePage() {
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
         <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C' }}>
-          意图树管理
+          意图决策
         </Typography>
         <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}
           sx={{ fontFamily: serifFont, letterSpacing: 1 }}>
@@ -180,11 +183,12 @@ export default function IntentTreePage() {
 
       <Box sx={{ ...glassCard, p: 1.5 }}>
         {nodes.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography sx={{ color: '#8B8B8B', fontFamily: serifFont }}>
-              暂无意图节点，点击"新建节点"开始构建意图树
-            </Typography>
-          </Box>
+          <InkEmptyState
+            icon={<AccountTreeIcon />}
+            title="暂无意图节点"
+            subtitle="构建意图决策树，让 AI 精准理解你的每一个意图"
+            action={{ label: '新建节点', onClick: () => setDialogOpen(true) }}
+          />
         ) : (
           nodes.map(node => renderTree(node))
         )}

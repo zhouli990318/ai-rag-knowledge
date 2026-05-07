@@ -4,8 +4,10 @@ import {
   DialogActions, TextField, IconButton, Grid, LinearProgress,
 } from '@mui/material';
 import {
-  Add, Delete, Upload, GitHub, Autorenew, Search,
-  FolderOpen, Description, ChevronRight,
+  AddOutlined as Add, DeleteOutlined as Delete, UploadOutlined as Upload,
+  GitHub, AutorenewOutlined as Autorenew, SearchOutlined as Search,
+  FolderOpenOutlined as FolderOpen, DescriptionOutlined as Description,
+  ChevronRightOutlined as ChevronRight,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { knowledgeApi } from '../api/knowledgeApi';
@@ -214,7 +216,13 @@ export default function KnowledgePage() {
 
       {/* KB Cards */}
       {kbs.length === 0 && !isLoading ? (
-        <InkEmptyState icon={<FolderOpen />} title="暂无知识库" subtitle="创建知识库来管理文档和向量检索" action={{ label: '新建知识库', onClick: openCreateDialog }} />
+        <InkEmptyState
+          icon={<FolderOpen />}
+          title="暂无知识库"
+          subtitle="创建你的第一个知识库，让 AI 拥有专属记忆"
+          description="支持文档上传、Git 仓库导入和向量检索"
+          action={{ label: '新建知识库', onClick: openCreateDialog }}
+        />
       ) : (
         <Grid container spacing={2} sx={{ mb: 2.5 }}>
           {kbs.map((kb: KnowledgeBase) => {

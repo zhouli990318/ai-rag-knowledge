@@ -21,11 +21,11 @@ const glassCard = {
 
 const stageStyle: Record<string, { bg: string; color: string }> = {
   PENDING:    { bg: 'rgba(139,139,139,0.1)', color: '#8B8B8B' },
-  FETCH:      { bg: 'rgba(91,112,101,0.1)',  color: '#5B7065' },
-  PARSE:      { bg: 'rgba(91,112,101,0.1)',  color: '#5B7065' },
-  ENHANCE:    { bg: 'rgba(74,111,165,0.1)',  color: '#4A6FA5' },
-  CHUNK:      { bg: 'rgba(139,105,20,0.1)',  color: '#8B6914' },
-  VECTORIZE:  { bg: 'rgba(139,105,20,0.1)',  color: '#8B6914' },
+  FETCH:      { bg: 'rgba(74,127,181,0.1)',  color: '#4A7FB5' },
+  PARSE:      { bg: 'rgba(74,127,181,0.1)',  color: '#4A7FB5' },
+  ENHANCE:    { bg: 'rgba(74,127,181,0.1)',  color: '#4A7FB5' },
+  CHUNK:      { bg: 'rgba(200,155,60,0.1)',  color: '#C89B3C' },
+  VECTORIZE:  { bg: 'rgba(200,155,60,0.1)',  color: '#C89B3C' },
   WRITE:      { bg: 'rgba(44,110,73,0.1)',   color: '#2C6E49' },
   COMPLETED:  { bg: 'rgba(44,110,73,0.1)',   color: '#2C6E49' },
   FAILED:     { bg: 'rgba(200,75,49,0.1)',   color: '#C84B31' },
@@ -63,7 +63,7 @@ export default function IngestMonitorPage() {
   return (
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C', mb: 2.5 }}>
-        入库监控
+        文墨入库
       </Typography>
 
       <Box sx={{ mb: 2.5 }}>

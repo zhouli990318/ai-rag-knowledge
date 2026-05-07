@@ -6,8 +6,9 @@ import {
   Tooltip, Drawer, CircularProgress,
 } from '@mui/material';
 import {
-  Add, Delete, PlayArrow, Edit, ContentCopy, Refresh,
-  Api, CheckCircle,
+  AddOutlined as Add, DeleteOutlined as Delete, PlayArrowOutlined as PlayArrow,
+  EditOutlined as Edit, ContentCopyOutlined as ContentCopy, RefreshOutlined as Refresh,
+  ApiOutlined as Api, CheckCircle,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mcpGatewayApi, toolIndexApi } from '../api/mcpApi';

@@ -6,7 +6,7 @@ import { useThemeStore } from '../stores/themeStore';
 export const ink = {
   black: '#2D2D2D',       // 主文字色
   gray: '#4A4A4A',        // 墨灰 (主色)
-  lightGray: '#8A8580',   // 次要文字
+  lightGray: '#6B6560',   // 次要文字 (提升对比度)
   cream: '#F7F4EF',       // 页面底色 — 暖米白
   border: '#E0DCD5',      // 边框/分割线
   cinnabar: '#C45C5C',    // 印章红
@@ -34,9 +34,19 @@ export const ink = {
   hoverBg: '#EAE5DD',          // 列表项悬停背景
   statusGray: '#9E9A95',       // 状态灰标签
   sendBtnBg: '#3D3D3D',        // 发送按钮背景
-  navIcon: '#5A5A5A',          // 导航图标色
-  navText: '#6A6A6A',          // 导航文字色
+  navIcon: '#404040',          // 导航图标色 (提升对比度)
+  navText: '#3D3D3D',          // 导航文字色 (提升对比度)
   tagline: '#A09A94',          // 标语色
+
+  /* 标准状态色体系 */
+  statusSuccess: '#2C6E49',
+  statusSuccessBg: 'rgba(44,110,73,0.1)',
+  statusWarning: '#C89B3C',
+  statusWarningBg: 'rgba(200,155,60,0.1)',
+  statusError: '#C84B31',
+  statusErrorBg: 'rgba(200,75,49,0.1)',
+  statusInfo: '#4A7FB5',
+  statusInfoBg: 'rgba(74,127,181,0.1)',
 };
 
 /* ── 圆角 Token ── */
@@ -84,6 +94,16 @@ export const inkDark = {
   navIcon: '#8A8580',
   navText: '#8A8580',
   tagline: '#5A5856',
+
+  /* 标准状态色体系 (暗色) */
+  statusSuccess: '#5A9E6B',
+  statusSuccessBg: 'rgba(90,158,107,0.15)',
+  statusWarning: '#D4A94C',
+  statusWarningBg: 'rgba(212,169,76,0.15)',
+  statusError: '#D47070',
+  statusErrorBg: 'rgba(212,112,112,0.15)',
+  statusInfo: '#6A9FD5',
+  statusInfoBg: 'rgba(106,159,213,0.15)',
 };
 
 export const serifFont = '"Noto Serif SC", "Source Han Serif SC", "SimSun", serif';

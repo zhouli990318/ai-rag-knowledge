@@ -1,5 +1,5 @@
 import { Box, Typography, IconButton, Skeleton } from '@mui/material';
-import { Add, Close } from '@mui/icons-material';
+import { AddOutlined as Add, CloseOutlined as Close } from '@mui/icons-material';
 import { Conversation } from '../../api/types';
 import { memo, useCallback } from 'react';
 

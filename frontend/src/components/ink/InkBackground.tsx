@@ -32,7 +32,7 @@ export default function InkBackground({ sx }: InkBackgroundProps) {
           objectPosition: 'center bottom',
           bottom: 0,
           left: 0,
-          opacity: mode === 'dark' ? 0.03 : 0.06,
+          opacity: mode === 'dark' ? 0.06 : 0.15,
           filter: mode === 'dark' ? 'brightness(0.5) contrast(1.3) invert(0.85)' : 'none',
           transition: 'opacity 0.4s ease, filter 0.4s ease',
         }}
