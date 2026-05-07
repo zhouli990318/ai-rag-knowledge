@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Box, Typography, SxProps } from '@mui/material';
-import { ink, radius } from '../../theme/ThemeProvider';
+import { ink, radius, useInk } from '../../theme/ThemeProvider';
 
 interface GroupItem {
   label: string;
@@ -17,6 +17,7 @@ interface InkGroupedListProps {
 }
 
 export default function InkGroupedList({ title, items, sx }: InkGroupedListProps) {
+  const di = useInk();
   return (
     <Box
       sx={{
@@ -35,7 +36,7 @@ export default function InkGroupedList({ title, items, sx }: InkGroupedListProps
             px: 2, pt: 1.75, pb: 0.5,
             fontSize: 12,
             fontWeight: 600,
-            color: ink.lightGray,
+            color: di.lightGray,
             textTransform: 'uppercase',
             letterSpacing: 1,
           }}
@@ -60,14 +61,14 @@ export default function InkGroupedList({ title, items, sx }: InkGroupedListProps
           }}
         >
           {item.icon && (
-            <Box sx={{ fontSize: 20, color: ink.lightGray, flexShrink: 0 }}>
+            <Box sx={{ fontSize: 20, color: di.lightGray, flexShrink: 0 }}>
               {item.icon}
             </Box>
           )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontSize: 15, fontWeight: 500 }}>{item.label}</Typography>
             {item.value && (
-              <Typography sx={{ fontSize: 13, color: ink.lightGray, mt: 0.25 }}>{item.value}</Typography>
+              <Typography sx={{ fontSize: 13, color: di.lightGray, mt: 0.25 }}>{item.value}</Typography>
             )}
           </Box>
           {item.right && <Box sx={{ flexShrink: 0 }}>{item.right}</Box>}
@@ -75,7 +76,7 @@ export default function InkGroupedList({ title, items, sx }: InkGroupedListProps
       ))}
       {!items.length && (
         <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography sx={{ fontSize: 14, color: ink.lightGray }}>暂无数据</Typography>
+          <Typography sx={{ fontSize: 14, color: di.lightGray }}>暂无数据</Typography>
         </Box>
       )}
     </Box>

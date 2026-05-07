@@ -1,20 +1,39 @@
 /* ═══════════════════════════════════════════
-   墨语 RAG - 全局样式 (水墨风格 2.0)
+   墨语 RAG - 全局样式 (水墨风格 3.0)
    ═══════════════════════════════════════════ */
 
 :root {
-  --ink-black: #2C2C2C;
+  --ink-black: #2D2D2D;
   --ink-gray: #4A4A4A;
-  --ink-light: #8B8B8B;
-  --ink-cream: #F5F3EE;
-  --ink-border: #E0DDD8;
-  --ink-cinnabar: #C84B31;
-  --ink-teal: #5B7065;
+  --ink-light: #8A8580;
+  --ink-cream: #F7F4EF;
+  --ink-border: #E0DCD5;
+  --ink-cinnabar: #C45C5C;
+  --ink-teal: #5A9E6B;
+  --ink-card-bg: #F0EBE3;
 
-  /* 背景渐变 - 模拟水墨山水 */
-  --bg-mountain-top: #E8E4DC;
-  --bg-mountain-mid: #F0ECE4;
-  --bg-mountain-bottom: #F5F3EE;
+  --bg-mountain-top: #E8E2D8;
+  --bg-mountain-mid: #F0EBE3;
+  --bg-mountain-bottom: #F7F4EF;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --ink-black: #E8E4DF;
+  --ink-gray: #C0BCB4;
+  --ink-light: #8A8580;
+  --ink-cream: #1A1A1A;
+  --ink-border: #3A3836;
+  --ink-cinnabar: #C45C5C;
+  --ink-teal: #5A9E6B;
+  --ink-card-bg: #2A2826;
+
+  --bg-mountain-top: #242220;
+  --bg-mountain-mid: #1E1E1E;
+  --bg-mountain-bottom: #1A1A1A;
+
+  color-scheme: dark;
 }
 
 /* ── 水墨山水背景 ── */
@@ -23,32 +42,48 @@ body {
   padding: 0;
   font-family: 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
   background-color: var(--ink-cream);
-  /* 多层渐变模拟远山近水 */
   background-image:
     radial-gradient(ellipse 120% 60% at 10% 90%, rgba(74,74,74,0.04) 0%, transparent 50%),
-    radial-gradient(ellipse 80% 40% at 85% 80%, rgba(91,112,101,0.04) 0%, transparent 45%),
-    radial-gradient(ellipse 100% 50% at 50% 100%, rgba(44,44,44,0.03) 0%, transparent 55%),
-    linear-gradient(180deg, #FAF9F6 0%, #F5F3EE 30%, #F0ECE4 70%, #E8E4DC 100%);
+    radial-gradient(ellipse 80% 40% at 85% 80%, rgba(90,158,107,0.03) 0%, transparent 45%),
+    radial-gradient(ellipse 100% 50% at 50% 100%, rgba(45,45,45,0.03) 0%, transparent 55%),
+    linear-gradient(180deg, #FBF9F5 0%, #F7F4EF 30%, #F0EBE3 70%, #E8E2D8 100%);
   background-attachment: fixed;
   background-size: 100% 100%;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease;
 }
 
-/* 隐藏滚动条但保留滚动功能（全局） */
+[data-theme="dark"] body {
+  background-color: #1A1A1A;
+  background-image:
+    radial-gradient(ellipse 120% 60% at 10% 90%, rgba(200,200,200,0.015) 0%, transparent 50%),
+    radial-gradient(ellipse 80% 40% at 85% 80%, rgba(90,158,107,0.015) 0%, transparent 45%),
+    linear-gradient(180deg, #1A1A1A 0%, #1C1C1C 30%, #1E1E1E 70%, #242220 100%);
+}
+
+/* 滚动条 */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(74,74,74,0.15); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(74,74,74,0.28); }
 
-/* 禁止文本选择时的默认高亮 */
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* 文本选择 */
 ::selection {
-  background: rgba(200,75,49,0.15);
+  background: rgba(196,92,92,0.15);
   color: var(--ink-black);
 }
 
-/* ── 印章动画（水墨特色，保留） ── */
+[data-theme="dark"] ::selection {
+  background: rgba(196,92,92,0.3);
+  color: #E8E4DF;
+}
+
+/* ── 印章动画 ── */
 @keyframes seal-stamp {
   0% { transform: scale(1.4) rotate(-8deg); opacity: 0; }
   40% { opacity: 1; }
@@ -73,7 +108,7 @@ body {
   50% { opacity: 0.25; }
 }
 
-/* ── 毛笔字标题效果 ── */
+/* ── 毛笔字标题 ── */
 .brush-title {
   font-family: 'Noto Serif SC', serif;
   letter-spacing: 0.15em;
@@ -81,17 +116,20 @@ body {
 
 /* ── 水墨卡片通用 ── */
 .ink-card {
-  background: rgba(255,255,255,0.72);
+  background: var(--ink-card-bg);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(224,221,216,0.6);
+  border: 1px solid var(--ink-border);
   border-radius: 12px;
   transition: all 300ms cubic-bezier(0.25,0.46,0.45,0.94);
 }
 
 .ink-card:hover {
-  border-color: rgba(224,221,216,0.95);
   box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] .ink-card:hover {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.2);
 }
 
 /* ── 水墨分割线 ── */

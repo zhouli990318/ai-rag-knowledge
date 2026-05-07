@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import {
   Box, Typography, ButtonBase,
+  Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -9,17 +10,21 @@ import {
   Cloud as WeatherIcon,
   Search as SearchIcon,
   Code as CodeIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { providerApi } from '../../api/providerApi';
 import { knowledgeApi } from '../../api/knowledgeApi';
 import { mcpGatewayApi } from '../../api/mcpApi';
 import { Provider, McpApiSource } from '../../api/types';
 import { useChatConfigStore } from '../../stores/chatConfigStore';
-import { InkCard, InkBadge, InkSegmentedControl } from '../../components/ink';
-import { ink, radius, serifFont, sansFont } from '../../theme/ThemeProvider';
+import { InkBadge, InkSegmentedControl } from '../../components/ink';
+import { ink, radius, serifFont, sansFont, useInk } from '../../theme/ThemeProvider';
+import { useThemeStore } from '../../stores/themeStore';
 
 export default memo(function ChatConfig() {
   const navigate = useNavigate();
+  const di = useInk();
+  const mode = useThemeStore((s) => s.mode);
   const {
     selectedProvider, setSelectedProvider,
     selectedKb, setSelectedKb,
@@ -29,6 +34,11 @@ export default memo(function ChatConfig() {
 
   const [mcpExpanded, setMcpExpanded] = useState(false);
   const [kbExpanded, setKbExpanded] = useState(false);
+  const [expanded, setExpanded] = useState<string | false>('mcp');
+
+  const handleAccordion = (panel: string) => (_: unknown, isExpanded: boolean) => {
+    setExpanded(isExpanded ? panel : false);
+  };
 
   const { data: providers = [] } = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
   const { data: kbs = [] } = useQuery({ queryKey: ['knowledgeBases'], queryFn: knowledgeApi.list });
@@ -43,108 +53,129 @@ export default memo(function ChatConfig() {
   const activeMcpSources = mcpSources.filter((s: McpApiSource) => s.active);
   const healthMap = new Map(mcpHealth.map((h) => [h.id, h]));
 
+  /* ── 手风琴公共样式 ── */
+  const accordionSx = {
+    '&.MuiAccordion-root': {
+      backgroundColor: 'transparent',
+      backgroundImage: 'none',
+      boxShadow: 'none',
+      border: `1px solid ${di.glassBorder}`,
+      borderRadius: `${radius.md}px !important`,
+      overflow: 'hidden',
+      '&::before': { display: 'none' },
+      '&.Mui-expanded': {
+        margin: 0,
+        borderColor: di.border,
+      },
+    },
+  };
+  const summarySx = {
+    minHeight: 44,
+    px: 1.5,
+    '&.Mui-expanded': { minHeight: 44 },
+    '& .MuiAccordionSummary-content': { margin: '8px 0', '&.Mui-expanded': { margin: '8px 0' } },
+  };
+
+  /* ── 折叠态摘要 ── */
+  const mcpSummary = `${activeMcpSources.length} 个服务 · ${toolMode === 'OFF' ? '关闭' : toolMode === 'AUTO' ? '自动' : '指定'}`;
+  const selectedProviderObj = enabledProviders.find((p: Provider) => p.id === selectedProvider);
+  const modelSummary = selectedProviderObj ? `${selectedProviderObj.name}` : `${enabledProviders.length} 个模型`;
+  const selectedKbObj = kbs.find((kb: any) => kb.id === selectedKb);
+  const kbSummary = selectedKbObj ? `${selectedKbObj.name}` : `${kbs.length} 个知识库`;
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, height: '100%' }}>
-      {/* ═══════ MCP 服务卡片 ═══════ */}
-      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 12px rgba(0,0,0,0.04)' }}>
-        {/* 卡片标题 */}
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          px: 2, pt: 1.75, pb: 1.25,
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
+      {/* ═══════ MCP 服务 ═══════ */}
+      <Accordion expanded={expanded === 'mcp'} onChange={handleAccordion('mcp')} sx={accordionSx}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 18, color: di.lightGray }} />} sx={summarySx}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <Box sx={{
-              width: 20, height: 20, borderRadius: radius.xs + 1,
-              background: `linear-gradient(135deg, ${ink.gray}, ${ink.black})`,
+              width: 20, height: 20, borderRadius: radius.xs + 1, flexShrink: 0,
+              background: `linear-gradient(135deg, ${di.gray}, ${di.black})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#FFF', fontSize: 11,
             }}>✦</Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 600, fontFamily: serifFont }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, fontFamily: serifFont }}>
               MCP 服务
             </Typography>
+            {expanded !== 'mcp' && (
+              <Typography sx={{ fontSize: 11, color: di.muted, ml: 'auto', mr: 1, flexShrink: 0 }}>
+                {mcpSummary}
+              </Typography>
+            )}
           </Box>
-          <ButtonBase
-            onClick={() => navigate('/mcp')}
-            sx={{
-              fontSize: 12, color: ink.lightGray,
-              '&:hover': { color: ink.cinnabar },
-              display: 'flex', alignItems: 'center', gap: 0.3,
-            }}
-          >
-            查看全部
-          </ButtonBase>
-        </Box>
-
-        {/* 添加服务按钮 */}
-        <Box
-          component={ButtonBase}
-          onClick={() => navigate('/mcp')}
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 0.6,
-            mx: 2, mb: 1.25, py: 0.7, px: 1.2,
-            border: `1px dashed ${ink.glassBorder}`,
-            borderRadius: radius.sm,
-            color: ink.lightGray,
-            fontSize: 13,
-            transition: 'all 180ms ease-in-out',
-            '&:hover': { borderColor: ink.cinnabar, color: ink.cinnabar, bgcolor: 'rgba(200,75,49,0.03)' },
-          }}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-          添加服务
-        </Box>
-
-        {/* 工具模式切换 */}
-        <Box sx={{ px: 2, mb: 1.25 }}>
-          <Typography sx={{ fontSize: 11, color: ink.lightGray, mb: 0.6, letterSpacing: 0.5 }}>
-            工具使用
-          </Typography>
-          <InkSegmentedControl
-            value={toolMode}
-            onChange={(v) => setToolMode(v as 'OFF' | 'AUTO' | 'SPECIFIC')}
-            options={[
-              { value: 'OFF', label: '不使用' },
-              { value: 'AUTO', label: 'AI 自动' },
-              { value: 'SPECIFIC', label: '指定' },
-            ]}
-          />
-          {toolMode === 'SPECIFIC' && (
-            <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 0.6 }}>
-              {activeMcpSources.length === 0 ? (
-                <Typography sx={{ fontSize: 11.5, color: ink.muted }}>
-                  暂无可用服务
-                </Typography>
-              ) : activeMcpSources.map((s: McpApiSource) => {
-                const picked = selectedMcpServers.includes(s.id);
-                return (
-                  <Box
-                    key={s.id}
-                    onClick={() => setSelectedMcpServers(
-                      picked
-                        ? selectedMcpServers.filter((id) => id !== s.id)
-                        : [...selectedMcpServers, s.id]
-                    )}
-                    sx={{
-                      px: 1, py: 0.3,
-                      fontSize: 11.5,
-                      borderRadius: radius.xs + 1,
-                      border: `1px solid ${picked ? ink.cinnabar : ink.glassBorder}`,
-                      color: picked ? ink.cinnabar : ink.gray,
-                      backgroundColor: picked ? 'rgba(200,75,49,0.06)' : 'transparent',
-                      cursor: 'pointer',
-                      transition: 'all 150ms',
-                    }}
-                  >
-                    {s.name}
-                  </Box>
-                );
-              })}
+        </AccordionSummary>
+        <AccordionDetails sx={{ px: 1.5, pt: 0, pb: 1.5 }}>
+          {/* 查看全部 + 添加 */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+            <Box
+              component={ButtonBase}
+              onClick={() => navigate('/mcp')}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                py: 0.5, px: 1,
+                border: `1px dashed ${di.glassBorder}`,
+                borderRadius: radius.sm,
+                color: di.lightGray, fontSize: 12,
+                transition: 'all 180ms ease-in-out',
+                '&:hover': { borderColor: di.cinnabar, color: di.cinnabar },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 14 }} />
+              添加服务
             </Box>
-          )}
-        </Box>
+            <ButtonBase
+              onClick={() => navigate('/mcp')}
+              sx={{ fontSize: 11, color: di.lightGray, '&:hover': { color: di.cinnabar } }}
+            >
+              查看全部 ›
+            </ButtonBase>
+          </Box>
 
-        {/* 服务列表 */}
-        <Box sx={{ px: 2, pb: 1.75, flex: 1, overflow: 'auto' }}>
+          {/* 工具模式切换 */}
+          <Box sx={{ mb: 0.75 }}>
+            <Typography sx={{ fontSize: 11, color: di.lightGray, mb: 0.4, letterSpacing: 0.5 }}>
+              工具使用
+            </Typography>
+            <InkSegmentedControl
+              value={toolMode}
+              onChange={(v) => setToolMode(v as 'OFF' | 'AUTO' | 'SPECIFIC')}
+              options={[
+                { value: 'OFF', label: '不使用' },
+                { value: 'AUTO', label: 'AI 自动' },
+                { value: 'SPECIFIC', label: '指定' },
+              ]}
+            />
+            {toolMode === 'SPECIFIC' && (
+              <Box sx={{ mt: 0.75, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {activeMcpSources.length === 0 ? (
+                  <Typography sx={{ fontSize: 11.5, color: di.muted }}>暂无可用服务</Typography>
+                ) : activeMcpSources.map((s: McpApiSource) => {
+                  const picked = selectedMcpServers.includes(s.id);
+                  return (
+                    <Box
+                      key={s.id}
+                      onClick={() => setSelectedMcpServers(
+                        picked ? selectedMcpServers.filter((id) => id !== s.id) : [...selectedMcpServers, s.id]
+                      )}
+                      sx={{
+                        px: 0.8, py: 0.25, fontSize: 11,
+                        borderRadius: radius.xs + 1,
+                        border: `1px solid ${picked ? di.cinnabar : di.glassBorder}`,
+                        color: picked ? di.cinnabar : di.gray,
+                        backgroundColor: picked ? 'rgba(200,75,49,0.06)' : 'transparent',
+                        cursor: 'pointer', transition: 'all 150ms',
+                      }}
+                    >
+                      {s.name}
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
+
+          {/* 服务列表 */}
           {activeMcpSources.map((source: McpApiSource) => {
             const health = healthMap.get(source.id);
             const status = health?.healthStatus ?? 'UNKNOWN';
@@ -157,77 +188,80 @@ export default memo(function ChatConfig() {
               status === 'DEGRADED' ? 'warning' :
               status === 'UNREACHABLE' ? 'error' : 'default';
             return (
-            <Box key={source.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.2, py: 0.85 }}>
-              <Box sx={{
-                width: 28, height: 28, borderRadius: radius.xs + 2,
-                backgroundColor: source.name.includes('天气') ? 'rgba(91,180,220,0.12)' :
-                               source.name.includes('搜索') ? 'rgba(74,144,226,0.10)' :
-                               source.name.includes('代码') ? 'rgba(44,44,44,0.08)' : 'rgba(74,74,74,0.06)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                color: source.name.includes('天气') ? '#5BB4DC' :
-                       source.name.includes('搜索') ? '#4A90E2' : ink.gray,
-              }}>
-                {source.name.includes('天气') ? <WeatherIcon sx={{ fontSize: 16 }} /> :
-                 source.name.includes('搜索') ? <SearchIcon sx={{ fontSize: 16 }} /> :
-                 <CodeIcon sx={{ fontSize: 16 }} />}
+              <Box key={source.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.6 }}>
+                <Box sx={{
+                  width: 24, height: 24, borderRadius: radius.xs + 2,
+                  backgroundColor: source.name.includes('天气') ? 'rgba(91,180,220,0.12)' :
+                                 source.name.includes('搜索') ? 'rgba(74,144,226,0.10)' :
+                                 source.name.includes('代码') ? 'rgba(44,44,44,0.08)' : 'rgba(74,74,74,0.06)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  color: source.name.includes('天气') ? '#5BB4DC' :
+                         source.name.includes('搜索') ? '#4A90E2' : di.gray,
+                }}>
+                  {source.name.includes('天气') ? <WeatherIcon sx={{ fontSize: 14 }} /> :
+                   source.name.includes('搜索') ? <SearchIcon sx={{ fontSize: 14 }} /> :
+                   <CodeIcon sx={{ fontSize: 14 }} />}
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 500 }}>{source.name}</Typography>
+                </Box>
+                <InkBadge label={label} status={badgeStatus} dot />
               </Box>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{source.name}</Typography>
-              </Box>
-              <InkBadge label={label} status={badgeStatus} dot />
-            </Box>
             );
           })}
           {activeMcpSources.length === 0 && (
-            <Typography sx={{ fontSize: 12, color: ink.muted, textAlign: 'center', py: 1 }}>暂无可用服务</Typography>
+            <Typography sx={{ fontSize: 11.5, color: di.muted, textAlign: 'center', py: 0.75 }}>暂无可用服务</Typography>
           )}
-        </Box>
-      </InkCard>
+        </AccordionDetails>
+      </Accordion>
 
-      {/* ═══════ 模型管理卡片 ═══════ */}
-      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 12px rgba(0,0,0,0.04)' }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          px: 2, pt: 1.75, pb: 1.25,
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* ═══════ 模型管理 ═══════ */}
+      <Accordion expanded={expanded === 'model'} onChange={handleAccordion('model')} sx={accordionSx}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 18, color: di.lightGray }} />} sx={summarySx}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <Box sx={{
-              width: 20, height: 20, borderRadius: radius.xs + 1,
-              background: `linear-gradient(135deg, ${ink.gray}, ${ink.black})`,
+              width: 20, height: 20, borderRadius: radius.xs + 1, flexShrink: 0,
+              background: `linear-gradient(135deg, ${di.gray}, ${di.black})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#FFF', fontSize: 11,
             }}>◆</Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 600, fontFamily: serifFont }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, fontFamily: serifFont }}>
               模型管理
             </Typography>
+            {expanded !== 'model' && (
+              <Typography sx={{ fontSize: 11, color: di.muted, ml: 'auto', mr: 1, flexShrink: 0 }}>
+                {modelSummary}
+              </Typography>
+            )}
           </Box>
-          <ButtonBase
-            onClick={() => navigate('/settings')}
-            sx={{ fontSize: 12, color: ink.lightGray, '&:hover': { color: ink.cinnabar }, display: 'flex', alignItems: 'center', gap: 0.3 }}
-          >
-            查看全部
-          </ButtonBase>
-        </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ px: 1.5, pt: 0, pb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+            <Box
+              component={ButtonBase}
+              onClick={() => navigate('/settings')}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                py: 0.5, px: 1,
+                border: `1px dashed ${di.glassBorder}`,
+                borderRadius: radius.sm,
+                color: di.lightGray, fontSize: 12,
+                transition: 'all 180ms ease-in-out',
+                '&:hover': { borderColor: di.cinnabar, color: di.cinnabar },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 14 }} />
+              添加模型
+            </Box>
+            <ButtonBase
+              onClick={() => navigate('/settings')}
+              sx={{ fontSize: 11, color: di.lightGray, '&:hover': { color: di.cinnabar } }}
+            >
+              查看全部 ›
+            </ButtonBase>
+          </Box>
 
-        <Box
-          component={ButtonBase}
-          onClick={() => navigate('/settings')}
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 0.6,
-            mx: 2, mb: 1.25, py: 0.7, px: 1.2,
-            border: `1px dashed ${ink.glassBorder}`,
-            borderRadius: radius.sm,
-            color: ink.lightGray, fontSize: 13,
-            transition: 'all 180ms ease-in-out',
-            '&:hover': { borderColor: ink.cinnabar, color: ink.cinnabar, bgcolor: 'rgba(200,75,49,0.03)' },
-          }}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-          添加模型
-        </Box>
-
-        <Box sx={{ px: 2, pb: 1.75, flex: 1, overflow: 'auto' }}>
           {enabledProviders.map((provider: Provider) => {
             const isSelected = selectedProvider === provider.id;
             return (
@@ -235,7 +269,7 @@ export default memo(function ChatConfig() {
                 key={provider.id}
                 onClick={() => setSelectedProvider(provider.id)}
                 sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.2, py: 0.85,
+                  display: 'flex', alignItems: 'center', gap: 1, py: 0.6,
                   cursor: 'pointer', borderRadius: radius.xs + 2,
                   bgcolor: isSelected ? 'rgba(200,75,49,0.05)' : 'transparent',
                   transition: 'all 150ms ease-in-out',
@@ -243,80 +277,83 @@ export default memo(function ChatConfig() {
                 }}
               >
                 <Box sx={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  backgroundColor: ink.black,
+                  width: 24, height: 24, borderRadius: '50%',
+                  backgroundColor: di.black,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#FFF', fontSize: 10, fontWeight: 600, fontFamily: serifFont,
+                  color: '#FFF', fontSize: 9, fontWeight: 600, fontFamily: serifFont,
                   flexShrink: 0,
                 }}>
                   墨
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 500 }}>
                     {provider.name}
-                    <span style={{ fontSize: 12, color: ink.lightGray, marginLeft: 4 }}>
+                    <span style={{ fontSize: 11, color: di.lightGray, marginLeft: 4 }}>
                       {provider.defaultModel && `· ${provider.defaultModel}`}
                     </span>
                   </Typography>
                 </Box>
                 <InkBadge
-                  label={isSelected ? '当前使用' : '已启用'}
+                  label={isSelected ? '使用中' : '已启用'}
                   status={isSelected ? 'cinnabar' : 'success'}
                 />
               </Box>
             );
           })}
           {enabledProviders.length === 0 && (
-            <Typography sx={{ fontSize: 13, color: ink.muted, textAlign: 'center', py: 1.5 }}>
+            <Typography sx={{ fontSize: 12, color: di.muted, textAlign: 'center', py: 0.75 }}>
               暂无可用模型
             </Typography>
           )}
-        </Box>
-      </InkCard>
+        </AccordionDetails>
+      </Accordion>
 
-      {/* ═══════ 知识库卡片 ═══════ */}
-      <InkCard sx={{ flex: 1, minHeight: 0, borderRadius: `${radius.md + 10}px`, overflow: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 12px rgba(0,0,0,0.04)' }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          px: 2, pt: 1.75, pb: 1.25,
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {/* ═══════ 知识库 ═══════ */}
+      <Accordion expanded={expanded === 'kb'} onChange={handleAccordion('kb')} sx={accordionSx}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 18, color: di.lightGray }} />} sx={summarySx}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
             <Box sx={{
-              width: 20, height: 20, borderRadius: radius.xs + 1,
-              background: `linear-gradient(135deg, ${ink.teal}, #4A5D53)`,
+              width: 20, height: 20, borderRadius: radius.xs + 1, flexShrink: 0,
+              background: `linear-gradient(135deg, ${di.teal}, #4A5D53)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: '#FFF', fontSize: 11,
             }}>📚</Box>
-            <Typography sx={{ fontSize: 15, fontWeight: 600, fontFamily: serifFont }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 600, fontFamily: serifFont }}>
               知识库
             </Typography>
+            {expanded !== 'kb' && (
+              <Typography sx={{ fontSize: 11, color: di.muted, ml: 'auto', mr: 1, flexShrink: 0 }}>
+                {kbSummary}
+              </Typography>
+            )}
           </Box>
-          <ButtonBase
-            onClick={() => navigate('/knowledge')}
-            sx={{ fontSize: 12, color: ink.lightGray, '&:hover': { color: ink.cinnabar }, display: 'flex', alignItems: 'center', gap: 0.3 }}
-          >
-            查看全部
-          </ButtonBase>
-        </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ px: 1.5, pt: 0, pb: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.75 }}>
+            <Box
+              component={ButtonBase}
+              onClick={() => navigate('/knowledge')}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 0.5,
+                py: 0.5, px: 1,
+                border: `1px dashed ${di.glassBorder}`,
+                borderRadius: radius.sm,
+                color: di.lightGray, fontSize: 12,
+                transition: 'all 180ms ease-in-out',
+                '&:hover': { borderColor: di.teal, color: di.teal },
+              }}
+            >
+              <AddIcon sx={{ fontSize: 14 }} />
+              创建知识库
+            </Box>
+            <ButtonBase
+              onClick={() => navigate('/knowledge')}
+              sx={{ fontSize: 11, color: di.lightGray, '&:hover': { color: di.cinnabar } }}
+            >
+              查看全部 ›
+            </ButtonBase>
+          </Box>
 
-        <Box
-          component={ButtonBase}
-          onClick={() => navigate('/knowledge')}
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 0.6,
-            mx: 2, mb: 1.25, py: 0.7, px: 1.2,
-            border: `1px dashed ${ink.glassBorder}`,
-            borderRadius: radius.sm,
-            color: ink.lightGray, fontSize: 13,
-            transition: 'all 180ms ease-in-out',
-            '&:hover': { borderColor: ink.teal, color: ink.teal, bgcolor: 'rgba(91,112,101,0.03)' },
-          }}
-        >
-          <AddIcon sx={{ fontSize: 16 }} />
-          创建知识库
-        </Box>
-
-        <Box sx={{ px: 2, pb: 1.75, flex: 1, overflow: 'auto' }}>
           {kbs.map((kb: any) => {
             const isSelected = selectedKb === kb.id;
             return (
@@ -324,7 +361,7 @@ export default memo(function ChatConfig() {
                 key={kb.id}
                 onClick={() => setSelectedKb(isSelected ? 0 : kb.id)}
                 sx={{
-                  display: 'flex', alignItems: 'center', gap: 1.2, py: 0.85,
+                  display: 'flex', alignItems: 'center', gap: 1, py: 0.6,
                   cursor: 'pointer', borderRadius: radius.xs + 2,
                   bgcolor: isSelected ? 'rgba(91,112,101,0.06)' : 'transparent',
                   transition: 'all 150ms ease-in-out',
@@ -332,29 +369,26 @@ export default memo(function ChatConfig() {
                 }}
               >
                 <Box sx={{
-                  width: 28, height: 28, borderRadius: radius.xs + 2,
-                  backgroundColor: ink.kbIconBg,
+                  width: 24, height: 24, borderRadius: radius.xs + 2,
+                  backgroundColor: di.kbIconBg,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: ink.teal, fontSize: 14,
+                  color: di.teal, fontSize: 12,
                   flexShrink: 0,
                 }}>📖</Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{kb.name}</Typography>
-                  <Typography sx={{ fontSize: 11, color: ink.muted }}>
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 500 }}>{kb.name}</Typography>
+                  <Typography sx={{ fontSize: 10.5, color: di.muted }}>
                     {kb.documentCount ?? 0} 文档 · {kb.fileSize ?? '-'}
                   </Typography>
                 </Box>
-                <Typography sx={{ fontSize: 11, color: ink.muted, flexShrink: 0 }}>
-                  更新于 {new Date().toLocaleDateString('zh-CN')}
-                </Typography>
               </Box>
             );
           })}
           {kbs.length === 0 && (
-            <Typography sx={{ fontSize: 12, color: ink.muted, textAlign: 'center', py: 1 }}>暂无知识库</Typography>
+            <Typography sx={{ fontSize: 11.5, color: di.muted, textAlign: 'center', py: 0.75 }}>暂无知识库</Typography>
           )}
-        </Box>
-      </InkCard>
+        </AccordionDetails>
+      </Accordion>
     </Box>
   );
 });

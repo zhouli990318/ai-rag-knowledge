@@ -1,54 +1,92 @@
 import { Box, Typography } from '@mui/material';
-import { ink, serifFont } from '../../theme/ThemeProvider';
+import { ink, serifFont, useInk } from '../../theme/ThemeProvider';
 
 interface InkLogoProps {
   size?: 'sm' | 'md' | 'lg';
+  showTagline?: boolean;
 }
 
-export default function InkLogo({ size = 'md' }: InkLogoProps) {
+export default function InkLogo({ size = 'md', showTagline = false }: InkLogoProps) {
+  const di = useInk();
   const sizes = {
-    sm: { fontSize: 18, subSize: 9, gap: 0.3 },
-    md: { fontSize: 22, subSize: 10, gap: 0.4 },
-    lg: { fontSize: 26, subSize: 11, gap: 0.5 },
+    sm: { title: '1rem', rag: '0.6rem', seal: '0.75rem', tagline: '0.5rem' },
+    md: { title: '1.1rem', rag: '0.65rem', seal: '0.875rem', tagline: '0.5625rem' },
+    lg: { title: '1.25rem', rag: '0.7rem', seal: '1rem', tagline: '0.625rem' },
   };
 
   const s = sizes[size];
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: s.gap, flexWrap: 'wrap' }}>
-      <Typography
-        sx={{
-          fontFamily: serifFont,
-          fontWeight: 900,
-          fontSize: s.fontSize,
-          color: ink.black,
-          letterSpacing: 3,
-          lineHeight: 1.2,
-        }}
-      >
-        墨语 RAG
-      </Typography>
-      {/* 红色印章风格标签 */}
-      <Box
-        component="span"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontFamily: serifFont,
-          fontWeight: 700,
-          fontSize: size === 'lg' ? 10 : size === 'md' ? 9 : 8,
-          color: ink.cinnabar,
-          border: `1.5px solid ${size === 'lg' ? ink.cinnabar : ink.cinnabarLight}`,
-          borderRadius: 2,
-          px: 0.6, py: 0.15,
-          letterSpacing: 1.5,
-          lineHeight: 1,
-          verticalAlign: 'middle',
-        }}
-      >
-        水墨
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+        {/* 墨语 */}
+        <Typography
+          sx={{
+            fontFamily: serifFont,
+            fontWeight: 700,
+            fontSize: s.title,
+            color: di.black,
+            letterSpacing: 2,
+            lineHeight: 1.2,
+          }}
+        >
+          墨语
+        </Typography>
+        {/* RAG */}
+        <Typography
+          component="span"
+          sx={{
+            fontSize: s.rag,
+            color: di.lightGray,
+            fontWeight: 500,
+            lineHeight: 1,
+            letterSpacing: 0.5,
+          }}
+        >
+          RAG
+        </Typography>
+        {/* 红色印章 */}
+        <Box
+          sx={{
+            width: s.seal,
+            height: s.seal,
+            backgroundColor: di.cinnabar,
+            borderRadius: '2px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily: serifFont,
+              fontWeight: 900,
+              fontSize: `calc(${s.seal} * 0.55)`,
+              color: '#FFFFFF',
+              lineHeight: 1,
+              letterSpacing: 0,
+            }}
+          >
+            墨
+          </Typography>
+        </Box>
       </Box>
+      {/* 标语 */}
+      {showTagline && (
+        <Typography
+          sx={{
+            fontSize: s.tagline,
+            color: di.tagline,
+            letterSpacing: 1.5,
+            mt: 0.3,
+            fontFamily: serifFont,
+            lineHeight: 1,
+          }}
+        >
+          让知识流动起来
+        </Typography>
+      )}
     </Box>
   );
 }

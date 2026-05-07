@@ -1,9 +1,17 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface ThemeState {
-  mode: 'light';
+  mode: 'light' | 'dark';
+  toggleMode: () => void;
 }
 
-export const useThemeStore = create<ThemeState>()(() => ({
-  mode: 'light' as const,
-}));
+export const useThemeStore = create<ThemeState>()(
+  persist(
+    (set) => ({
+      mode: 'light',
+      toggleMode: () => set((s) => ({ mode: s.mode === 'light' ? 'dark' : 'light' })),
+    }),
+    { name: 'ink-theme' },
+  ),
+);

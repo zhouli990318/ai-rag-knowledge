@@ -6,6 +6,8 @@ import { ChatMessage } from '../../api/types';
 import { chatApi } from '../../api/chatApi';
 import MessageBubble from './MessageBubble';
 import { InkBackground } from '../../components/ink';
+import { ink, useInk } from '../../theme/ThemeProvider';
+import { useThemeStore } from '../../stores/themeStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type DisplayMessage = Pick<ChatMessage, 'role' | 'content'> & {
@@ -34,6 +36,8 @@ export default function MessageArea({ messages, streamContent, streaming, conver
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const userScrolled = useRef(false);
+  const di = useInk();
+  const mode = useThemeStore((s) => s.mode);
 
   const scrollToBottom = useCallback((smooth = true) => {
     bottomRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
@@ -112,7 +116,7 @@ export default function MessageArea({ messages, streamContent, streaming, conver
             minHeight: '65vh', position: 'relative', pl: 2,
           }}>
             {/* 水墨山水背景 */}
-            <InkBackground sx={{ opacity: 0.08 }} />
+            <InkBackground sx={{ opacity: 0.05 }} />
 
             {/* 主标题区域 */}
             <Box sx={{ position: 'relative', zIndex: 1 }}>
@@ -121,11 +125,12 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                 <Typography
                   sx={{
                     fontFamily: '"Noto Serif SC", serif',
-                    fontSize: { xs: 32, md: 40 },
+                    fontSize: { xs: 36, md: 52 },
                     fontWeight: 900,
-                    color: '#2C2C2C',
+                    color: di.black,
                     letterSpacing: 4,
                     lineHeight: 1.3,
+                    textShadow: mode === 'dark' ? '0 2px 12px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.06)',
                   }}
                 >
                   您好，墨客
@@ -142,9 +147,9 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                     justifyContent: 'center',
                     fontFamily: '"Noto Serif SC", serif',
                     fontWeight: 900,
-                    fontSize: 15,
-                    color: '#C84B31',
-                    border: `2px solid #C84B31`,
+                    fontSize: 18,
+                    color: di.cinnabar,
+                    border: `2px solid ${di.cinnabar}`,
                     borderRadius: 3,
                     px: 0.7, py: 0.1,
                     letterSpacing: '0.25em',
@@ -165,10 +170,10 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.6 }}
                 sx={{
-                  fontSize: 14.5,
-                  color: '#8B8B8B',
+                  fontSize: 15.5,
+                  color: di.lightGray,
                   lineHeight: 1.8,
-                  maxWidth: 480,
+                  maxWidth: 540,
                   mt: 1,
                 }}
               >
@@ -197,30 +202,36 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                 alignItems: 'center',
                 gap: 1.5,
                 px: 2.5, py: 1.75,
-                backgroundColor: 'rgba(255,255,255,0.72)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
+                backgroundColor: di.cardBg,
                 borderRadius: '8px 4px 8px 4px',
-                border: '1px solid rgba(224,221,216,0.6)',
-                color: '#4A4A4A',
+                border: `1px solid ${di.border}`,
+                color: di.gray,
                 fontSize: 14,
                 boxShadow: '0 4px 16px rgba(0,0,0,0.04)',
+                backdropFilter: 'blur(8px)',
               }}>
                 <Typography sx={{ fontSize: 14 }}>什么是RAG？它的工作原理是什么？</Typography>
 
                 {/* 右侧人物头像小图标 */}
                 <Box sx={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  bgcolor: '#2C2C2C',
+                  width: '2.25rem', height: '2.25rem', borderRadius: '50%',
+                  bgcolor: di.cardBg,
+                  border: `1px solid ${di.border}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, color: '#FFF', fontFamily: '"Noto Serif SC", serif',
-                  fontWeight: 600, flexShrink: 0,
+                  flexShrink: 0, overflow: 'hidden',
                 }}>
-                  墨
+                  <Box component="svg" viewBox="0 0 36 36" sx={{ width: '80%', height: '80%' }}>
+                    <path d="M10 14 Q18 6 26 14" fill="none" stroke="#4A4540" strokeWidth={1.2} strokeLinecap="round" />
+                    <circle cx="18" cy="16.5" r="2.8" fill="none" stroke="#4A4540" strokeWidth={1} />
+                    <path d="M14 19 Q13 24 10 30 L18 28 L26 30 Q23 24 22 19" fill="none" stroke="#4A4540" strokeWidth={1.1} strokeLinejoin="round" />
+                    <path d="M14 22 Q9 21 7 24" fill="none" stroke="#4A4540" strokeWidth={0.9} strokeLinecap="round" />
+                    <path d="M22 22 Q27 21 29 24" fill="none" stroke="#4A4540" strokeWidth={0.9} strokeLinecap="round" />
+                    <path d="M10 30 Q14 32 18 31 Q22 32 26 30" fill="none" stroke="#4A4540" strokeWidth={0.8} />
+                  </Box>
                 </Box>
               </Box>
               {/* 时间戳 */}
-              <Typography sx={{ fontSize: 11, color: '#B0ADA6', mt: 1, ml: 1 }}>
+              <Typography sx={{ fontSize: 11, color: di.muted, mt: 1, ml: 1 }}>
                 10:23
               </Typography>
             </Box>
@@ -303,10 +314,10 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                       <Box
                         key={`sk-${i}`}
                         sx={{
-                          height: 28,
+                          height: 32,
                           width: 120 + i * 30,
-                          borderRadius: '4px',
-                          backgroundColor: 'rgba(224,221,216,0.5)',
+                          borderRadius: '1.25rem',
+                          backgroundColor: mode === 'dark' ? 'rgba(60,58,54,0.5)' : 'rgba(224,220,213,0.5)',
                           animation: 'inkPulse 1.2s ease-in-out infinite',
                           '@keyframes inkPulse': {
                             '0%, 100%': { opacity: 0.5 },
@@ -323,29 +334,27 @@ export default function MessageArea({ messages, streamContent, streaming, conver
                         sx={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: 0.4,
-                          px: 2, py: 0.65,
-                          borderRadius: '4px',
-                          backgroundColor: 'rgba(255,255,255,0.72)',
-                          backdropFilter: 'blur(8px)',
-                          WebkitBackdropFilter: 'blur(8px)',
-                          border: '1px solid rgba(224,221,216,0.55)',
-                          color: '#4A4A4A',
-                          fontSize: 13,
+                          gap: 0.5,
+                          px: '1rem', py: '0.5rem',
+                          borderRadius: '1.25rem',
+                          backgroundColor: di.cardBg,
+                          border: `1px solid ${di.border}`,
+                          color: di.navText,
+                          fontSize: '0.8125rem',
                           cursor: 'pointer',
                           whiteSpace: 'nowrap',
                           transition: 'all 180ms ease-in-out',
                           '&:hover': {
-                            borderColor: '#C84B31',
-                            color: '#C84B31',
-                            backgroundColor: 'rgba(255,255,255,0.92)',
-                            boxShadow: '0 2px 8px rgba(200,75,49,0.08)',
+                            borderColor: di.cinnabar,
+                            color: di.cinnabar,
+                            backgroundColor: mode === 'dark' ? 'rgba(196,92,92,0.08)' : '#F5F0E8',
+                            boxShadow: `0 2px 8px rgba(196,92,92,0.08)`,
                             transform: 'translateY(-1px)',
                           },
                         }}
                       >
                         <span>{q}</span>
-                        <span style={{ fontSize: 14, marginLeft: 2 }}>›</span>
+                        <span style={{ fontSize: '0.75rem', marginLeft: 4 }}>›</span>
                       </Box>
                     ))
                   )}
@@ -372,14 +381,14 @@ export default function MessageArea({ messages, streamContent, streaming, conver
               onClick={() => scrollToBottom(true)}
               sx={{
                 width: 36, height: 36,
-                backgroundColor: 'rgba(255,255,255,0.85)',
+                backgroundColor: mode === 'dark' ? 'rgba(42,40,38,0.85)' : 'rgba(255,255,255,0.85)',
                 backdropFilter: 'blur(8px)',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-                border: '1px solid rgba(224,221,216,0.5)',
-                '&:hover': { backgroundColor: '#FFFFFF' },
+                boxShadow: mode === 'dark' ? '0 2px 12px rgba(0,0,0,0.2)' : '0 2px 12px rgba(0,0,0,0.08)',
+                border: `1px solid ${di.glassBorder}`,
+                '&:hover': { backgroundColor: mode === 'dark' ? 'rgba(50,48,46,0.95)' : '#FFFFFF' },
               }}
             >
-              <KeyboardArrowDown sx={{ fontSize: 20, color: '#8B8B8B' }} />
+              <KeyboardArrowDown sx={{ fontSize: 20, color: di.lightGray }} />
             </Fab>
           </motion.div>
         )}

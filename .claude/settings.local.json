@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn test *)",
+      "Bash(java *)",
+      "Bash(mvn *)",
+      "Bash(where java *)",
+      "Skill(gsd-plan-phase)"
+    ]
+  }
+}

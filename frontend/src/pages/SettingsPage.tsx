@@ -11,7 +11,7 @@ import { Provider, ProviderType } from '../api/types';
 import { useSnackbar } from 'notistack';
 import { InkEmptyState, InkSwitch } from '../components/ink';
 import { motion } from 'framer-motion';
-import { ink, serifFont, radius } from '../theme/ThemeProvider';
+import { ink, serifFont, radius, useInk } from '../theme/ThemeProvider';
 
 // Brand colors for provider types
 const providerColors: Record<string, string> = {
@@ -132,6 +132,7 @@ function ProviderDialog({
 export default function SettingsPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const di = useInk();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
 
@@ -197,7 +198,7 @@ export default function SettingsPage() {
     <Box sx={{ p: { xs: 2, md: 2.5 }, pt: { xs: 7, md: 7 } }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography variant="h5" sx={{ fontFamily: serifFont, color: ink.black }}>AI 供应商</Typography>
+        <Typography variant="h5" sx={{ fontFamily: serifFont, color: di.black }}>AI 供应商</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{ borderRadius: radius.sm }}>添加</Button>
       </Box>
 
@@ -208,22 +209,22 @@ export default function SettingsPage() {
         <InkEmptyState icon={<Dns />} title="暂无供应商" subtitle="添加 AI 供应商来开始对话" action={{ label: '添加供应商', onClick: openCreateDialog }} />
       ) : (
         <Box sx={{
-          backgroundColor: ink.glassBg,
+          backgroundColor: di.glassBg,
           backdropFilter: 'blur(12px) saturate(180%)',
           WebkitBackdropFilter: 'blur(12px) saturate(180%)',
           borderRadius: `${radius.md + 2}px`,
           overflow: 'hidden',
-          border: `1px solid ${ink.glassBorder}`,
+          border: `1px solid ${di.glassBorder}`,
           boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
         }}>
           {providers.map((p: Provider, i: number) => {
-            const brandColor = providerColors[p.providerType] || ink.gray;
+            const brandColor = providerColors[p.providerType] || di.gray;
             return (
               <motion.div key={p.id} whileTap={{ scale: 0.98 }}>
                 <Box sx={{
                   display: 'flex', alignItems: 'center', gap: 1.5,
                   px: 2, py: 1.5,
-                  borderBottom: i < providers.length - 1 ? `0.5px solid ${ink.glassBorder}` : 'none',
+                  borderBottom: i < providers.length - 1 ? `0.5px solid ${di.glassBorder}` : 'none',
                   cursor: 'pointer',
                   transition: 'background-color 150ms ease-in-out',
                   '&:hover': { backgroundColor: 'rgba(74,74,74,0.02)' },
@@ -244,8 +245,8 @@ export default function SettingsPage() {
 
                   {/* Info */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 15.5, fontWeight: 500, color: ink.black }}>{p.name}</Typography>
-                    <Typography sx={{ fontSize: 13, color: ink.lightGray }}>
+                    <Typography sx={{ fontSize: 15.5, fontWeight: 500, color: di.black }}>{p.name}</Typography>
+                    <Typography sx={{ fontSize: 13, color: di.lightGray }}>
                       {p.defaultModel || p.providerType}
                       {p.baseUrl && (() => { try { return ` · ${new URL(p.baseUrl).host}`; } catch { return ''; } })()}
                     </Typography>
@@ -257,7 +258,7 @@ export default function SettingsPage() {
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     <IconButton size="small" onClick={() => testMutation.mutate(p.id)}
-                      sx={{ color: testMutation.isPending ? ink.lightGray : ink.teal }}>
+                      sx={{ color: testMutation.isPending ? di.lightGray : di.teal }}>
                       <CheckCircle sx={{ fontSize: 20 }} />
                     </IconButton>
 
@@ -267,7 +268,7 @@ export default function SettingsPage() {
                     />
 
                     <IconButton size="small" onClick={() => deleteMutation.mutate(p.id)}
-                      sx={{ color: ink.lightGray, '&:hover': { color: ink.cinnabar } }}>
+                      sx={{ color: di.lightGray, '&:hover': { color: di.cinnabar } }}>
                       <Delete sx={{ fontSize: 18 }} />
                     </IconButton>
                   </Box>

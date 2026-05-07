@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { SxProps } from '@mui/material';
 import { Box, Typography, Button as MuiButton } from '@mui/material';
-import { ink, radius, serifFont } from '../../theme/ThemeProvider';
+import { ink, radius, serifFont, useInk } from '../../theme/ThemeProvider';
 
 interface InkEmptyStateProps {
   icon: ReactNode;
@@ -15,6 +15,7 @@ interface InkEmptyStateProps {
 }
 
 export default function InkEmptyState({ icon, title, subtitle, action, sx }: InkEmptyStateProps) {
+  const di = useInk();
   return (
     <Box
       sx={{
@@ -38,7 +39,7 @@ export default function InkEmptyState({ icon, title, subtitle, action, sx }: Ink
           alignItems: 'center',
           justifyContent: 'center',
           mb: 2.5,
-          color: ink.muted,
+          color: di.muted,
           fontSize: 32,
         }}
       >
@@ -46,12 +47,12 @@ export default function InkEmptyState({ icon, title, subtitle, action, sx }: Ink
       </Box>
       <Typography
         variant="h6"
-        sx={{ fontFamily: serifFont, fontWeight: 600, color: ink.gray, mb: 0.5 }}
+        sx={{ fontFamily: serifFont, fontWeight: 600, color: di.gray, mb: 0.5 }}
       >
         {title}
       </Typography>
       {subtitle && (
-        <Typography sx={{ fontSize: 14, color: ink.lightGray, maxWidth: 320, lineHeight: 1.6 }}>
+        <Typography sx={{ fontSize: 14, color: di.lightGray, maxWidth: 320, lineHeight: 1.6 }}>
           {subtitle}
         </Typography>
       )}
@@ -64,8 +65,8 @@ export default function InkEmptyState({ icon, title, subtitle, action, sx }: Ink
             borderRadius: radius.sm,
             px: 3,
             textTransform: 'none',
-            backgroundImage: `linear-gradient(135deg, ${ink.gray}, #3A3A3A)`,
-            '&:hover': { backgroundImage: `linear-gradient(135deg, ${ink.cinnabar}, #A83D27)` },
+            backgroundImage: `linear-gradient(135deg, ${di.gray}, #3A3A3A)`,
+            '&:hover': { backgroundImage: `linear-gradient(135deg, ${di.cinnabar}, #A83D27)` },
           }}
         >
           {action.label}
