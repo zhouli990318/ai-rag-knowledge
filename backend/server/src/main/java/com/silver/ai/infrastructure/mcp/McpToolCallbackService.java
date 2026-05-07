@@ -72,10 +72,18 @@ public class McpToolCallbackService implements McpToolPort {
         }
         var idSet = new java.util.HashSet<>(toolIds);
         refreshCacheIfNeeded();
-        return cachedActiveDefinitions.stream()
+        List<ToolCallback> result = cachedActiveDefinitions.stream()
                 .filter(def -> idSet.contains(def.id()))
                 .map(this::createToolCallback)
                 .collect(Collectors.toList());
+        if (result.isEmpty() && !cachedActiveDefinitions.isEmpty()) {
+            log.warn("getToolCallbacksByToolIds: requested {} tool IDs {} but no match in cache ({} cached defs: {})",
+                    toolIds.size(), toolIds, cachedActiveDefinitions.size(),
+                    cachedActiveDefinitions.stream().map(McpToolDefinition::id).toList());
+        }
+        log.debug("getToolCallbacksByToolIds: requested={}, cacheSize={}, matched={}",
+                toolIds.size(), cachedActiveDefinitions.size(), result.size());
+        return result;
     }
 
     private void refreshCacheIfNeeded() {
@@ -88,6 +96,7 @@ public class McpToolCallbackService implements McpToolPort {
                 return;
             }
             List<Long> sourceIds = mcpToolGatewayClient.listActiveSourceIds();
+            log.info("MCP cache refresh: found {} active source IDs: {}", sourceIds.size(), sourceIds);
             List<McpToolDefinition> definitions = sourceIds.stream()
                     .filter(Objects::nonNull)
                     .distinct()
@@ -99,8 +108,9 @@ public class McpToolCallbackService implements McpToolPort {
                     .map(this::createToolCallback)
                     .collect(Collectors.toList());
             cachedActiveAt = now;
-            log.debug("Refreshed global MCP tool cache: {} tools from {} sources",
-                    cachedActiveCallbacks.size(), sourceIds.size());
+            log.info("MCP cache refresh complete: {} tools from {} sources. Tool IDs: {}",
+                    cachedActiveCallbacks.size(), sourceIds.size(),
+                    definitions.stream().map(McpToolDefinition::id).toList());
         }
     }
 

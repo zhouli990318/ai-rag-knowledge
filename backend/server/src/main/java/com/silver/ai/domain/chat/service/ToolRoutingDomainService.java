@@ -73,11 +73,26 @@ public class ToolRoutingDomainService {
                         .map(ToolIndexEntry::toolId)
                         .toList();
                 List<ToolCallback> callbacks = mcpToolPort.getToolCallbacksByToolIds(toolIds);
-                log.debug("Semantic tool retrieval: {} relevant tools out of total pool",
-                        callbacks.size());
-                return callbacks;
+                if (!callbacks.isEmpty()) {
+                    log.debug("Semantic tool retrieval: {} relevant tools matched from {} candidates",
+                            callbacks.size(), relevant.size());
+                    return callbacks;
+                }
+                log.warn("Semantic retrieval found {} tools but getToolCallbacksByToolIds returned empty, " +
+                                "toolIds={}. Falling back to all active tools.",
+                        relevant.size(), toolIds);
+            } else {
+                log.debug("Semantic tool retrieval returned no results for query='{}'", userQuery);
             }
-            log.debug("Semantic tool retrieval returned no results, falling back to no tools");
+
+            // 语义检索无结果或回调为空 → fallback 到全量活跃工具
+            if (config.isToolFallbackEnabled()) {
+                List<ToolCallback> fallback = mcpToolPort.getAllActiveToolCallbacks();
+                if (!fallback.isEmpty()) {
+                    log.debug("Fallback: injecting all {} active tools", fallback.size());
+                    return fallback;
+                }
+            }
             return List.of();
         }
 

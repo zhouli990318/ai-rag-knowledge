@@ -192,9 +192,11 @@ public class ChatModelAdapter implements ChatModelPort {
 
     private Prompt createPrompt(List<Message> messages, List<ToolCallback> toolCallbacks) {
         if (toolCallbacks == null || toolCallbacks.isEmpty()) {
+            log.debug("Creating prompt without tools ({} messages)", messages.size());
             return new Prompt(messages);
         }
 
+        log.info("Creating prompt with {} tool callbacks", toolCallbacks.size());
         return new Prompt(messages, DefaultToolCallingChatOptions.builder()
                 .internalToolExecutionEnabled(true)
                 .toolCallbacks(toolCallbacks)
