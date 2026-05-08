@@ -1,23 +1,20 @@
 package com.silver.ai.application.service;
 
+import com.silver.ai.domain.chat.model.DomainMessage;
+import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.model.ProviderType;
 import com.silver.ai.domain.provider.port.ChatModelPort;
+import com.silver.ai.domain.provider.port.EncryptionPort;
+import com.silver.ai.domain.provider.port.ModelCachePort;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
-import com.silver.ai.infrastructure.ai.ChatModelRegistry;
-import com.silver.ai.infrastructure.ai.EmbeddingModelRegistry;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
-import com.silver.ai.shared.util.CryptoUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.Arrays;
 import java.util.List;
@@ -30,17 +27,14 @@ public class ModelProviderAppService {
 
     private final ModelProviderRepository providerRepository;
     private final ChatModelPort chatModelPort;
-    private final ChatModelRegistry chatModelRegistry;
-    private final EmbeddingModelRegistry embeddingModelRegistry;
-
-    @Value("${app.crypto.secret-key}")
-    private String cryptoSecretKey;
+    private final ModelCachePort modelCachePort;
+    private final EncryptionPort encryptionPort;
 
     public Mono<ModelProvider> createProvider(String name, ProviderType providerType, String apiKey,
                                               String baseUrl, String defaultModel,
                                               String embeddingModel, Integer embeddingDimensions) {
         String encryptedKey = (apiKey != null && !apiKey.isBlank())
-                ? CryptoUtil.encrypt(apiKey, cryptoSecretKey) : null;
+                ? encryptionPort.encrypt(apiKey) : null;
         ModelProvider provider = ModelProvider.builder()
                 .name(name)
                 .providerType(providerType)
@@ -62,15 +56,12 @@ public class ModelProviderAppService {
                 .flatMap(provider -> {
                     String encryptedKey = null;
                     if (apiKey != null && !apiKey.isBlank()) {
-                        encryptedKey = CryptoUtil.encrypt(apiKey, cryptoSecretKey);
+                        encryptedKey = encryptionPort.encrypt(apiKey);
                     }
                     provider.updateConfig(name, encryptedKey, baseUrl, defaultModel, embeddingModel, embeddingDimensions);
                     return providerRepository.save(provider);
                 })
-                .doOnNext(saved -> {
-                    chatModelRegistry.refresh(id);
-                    embeddingModelRegistry.refresh(id);
-                });
+                .doOnNext(saved -> modelCachePort.refreshCache(id));
     }
 
     public Mono<ModelProvider> getProvider(Long id) {
@@ -83,8 +74,7 @@ public class ModelProviderAppService {
     }
 
     public Mono<Void> deleteProvider(Long id) {
-        chatModelRegistry.refresh(id);
-        embeddingModelRegistry.refresh(id);
+        modelCachePort.refreshCache(id);
         return providerRepository.deleteById(id);
     }
 
@@ -94,27 +84,19 @@ public class ModelProviderAppService {
                     if (provider.isEnabled()) provider.disable(); else provider.enable();
                     return providerRepository.save(provider);
                 })
-                .doOnNext(saved -> {
-                    chatModelRegistry.refresh(id);
-                    embeddingModelRegistry.refresh(id);
-                })
+                .doOnNext(saved -> modelCachePort.refreshCache(id))
                 .then();
     }
 
     public Mono<String> testConnection(Long id) {
         return getProvider(id).flatMap(provider ->
-                Mono.fromCallable(() -> {
-                            long startTime = System.currentTimeMillis();
-                            var chatModel = chatModelRegistry.getWithModel(provider, provider.getDefaultModel());
-                            var response = chatModel.call(new Prompt(List.of(new UserMessage("Hello, reply with 'OK' only."))));
-                            long duration = System.currentTimeMillis() - startTime;
-                            return new ConnectionProbeResult(response.getResult().getOutput().getText(), duration);
-                        })
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .flatMap(result -> {
-                            provider.markHealthy(result.firstTokenMs());
+                chatModelPort.chat(provider.getId(), provider.getDefaultModel(),
+                                List.of(new DomainMessage(MessageRole.USER, "Hello, reply with 'OK' only.")),
+                                List.of())
+                        .flatMap(response -> {
+                            provider.markHealthy(0);
                             return providerRepository.save(provider)
-                                    .thenReturn("连接成功: " + result.response());
+                                    .thenReturn("连接成功: " + response);
                         })
                         .onErrorResume(error -> {
                             provider.markUnhealthy();
@@ -139,8 +121,5 @@ public class ModelProviderAppService {
                         "supportsEmbedding", pt.supportsEmbedding()
                 ))
                 .toList();
-    }
-
-    private record ConnectionProbeResult(String response, long firstTokenMs) {
     }
 }

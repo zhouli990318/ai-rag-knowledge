@@ -1,10 +1,14 @@
 package com.silver.ai.interfaces.rest;
 
 import com.silver.ai.application.service.KnowledgeBaseAppService;
+import com.silver.ai.domain.knowledge.model.ChunkStrategy;
 import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
+import com.silver.ai.domain.knowledge.model.RetrievalConfig;
+import com.silver.ai.interfaces.dto.ChunkStrategyRequest;
 import com.silver.ai.interfaces.dto.GitImportRequest;
 import com.silver.ai.interfaces.dto.KnowledgeBaseRequest;
+import com.silver.ai.interfaces.dto.RetrievalConfigRequest;
 import com.silver.ai.interfaces.dto.SearchRequest;
 import com.silver.ai.shared.result.ApiResponse;
 import jakarta.validation.Valid;
@@ -38,7 +42,8 @@ public class KnowledgeBaseController {
     public Mono<ApiResponse<KnowledgeBase>> update(@PathVariable Long id, @Valid @RequestBody KnowledgeBaseRequest req) {
         return knowledgeBaseAppService.updateKnowledgeBase(id,
                         req.getName(), req.getDescription(),
-                        req.getChunkStrategy(), req.getRetrievalConfig())
+                        toChunkStrategy(req.getChunkStrategy()),
+                        toRetrievalConfig(req.getRetrievalConfig()))
                 .map(ApiResponse::ok);
     }
 
@@ -81,10 +86,28 @@ public class KnowledgeBaseController {
                 .map(results -> {
                     var mapped = results.stream()
                             .map(doc -> Map.<String, Object>of(
-                                    "content", doc.getText(),
-                                    "metadata", doc.getMetadata()
+                                    "content", doc.content(),
+                                    "metadata", doc.metadata()
                             )).toList();
                     return ApiResponse.ok(mapped);
                 });
+    }
+
+    private ChunkStrategy toChunkStrategy(ChunkStrategyRequest dto) {
+        if (dto == null) return null;
+        var builder = ChunkStrategy.builder();
+        if (dto.getType() != null) builder.type(ChunkStrategy.ChunkType.valueOf(dto.getType()));
+        if (dto.getChunkSize() != null) builder.chunkSize(dto.getChunkSize());
+        if (dto.getChunkOverlap() != null) builder.chunkOverlap(dto.getChunkOverlap());
+        return builder.build();
+    }
+
+    private RetrievalConfig toRetrievalConfig(RetrievalConfigRequest dto) {
+        if (dto == null) return null;
+        var builder = RetrievalConfig.builder();
+        if (dto.getTopK() != null) builder.topK(dto.getTopK());
+        if (dto.getSimilarityThreshold() != null) builder.similarityThreshold(dto.getSimilarityThreshold());
+        if (dto.getFilterExpression() != null) builder.filterExpression(dto.getFilterExpression());
+        return builder.build();
     }
 }

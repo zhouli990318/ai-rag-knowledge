@@ -105,8 +105,8 @@ public class ChatModelFactory {
         }
         try {
             return CryptoUtil.decrypt(encryptedKey, cryptoSecretKey);
-        } catch (Exception e) {
-            log.warn("Failed to decrypt API key, using raw value");
+        } catch (IllegalStateException e) {
+            log.warn("Failed to decrypt API key, using raw value: {}", e.getMessage());
             return encryptedKey;
         }
     }

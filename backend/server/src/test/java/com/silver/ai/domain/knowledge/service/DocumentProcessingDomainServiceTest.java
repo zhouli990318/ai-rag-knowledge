@@ -50,8 +50,8 @@ class DocumentProcessingDomainServiceTest {
         verify(repository, atLeast(2)).save(document);
         verify(documentChunkRepository).deleteByDocumentId(11L);
         verify(vectorStore).addDocuments(argThat(docs -> docs.size() == 2
-                && "11".equals(docs.get(0).getMetadata().get("document_id"))
-                && "22".equals(docs.get(0).getMetadata().get("knowledge_base_id"))));
+                && "11".equals(docs.get(0).metadata().get("document_id"))
+                && "22".equals(docs.get(0).metadata().get("knowledge_base_id"))));
     }
 
     @Test

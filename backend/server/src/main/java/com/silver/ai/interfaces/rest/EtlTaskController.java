@@ -1,7 +1,7 @@
 package com.silver.ai.interfaces.rest;
 
+import com.silver.ai.application.service.EtlTaskAppService;
 import com.silver.ai.domain.knowledge.model.EtlTask;
-import com.silver.ai.domain.knowledge.port.EtlTaskRepository;
 import com.silver.ai.shared.result.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -17,17 +17,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EtlTaskController {
 
-    private final EtlTaskRepository etlTaskRepository;
+    private final EtlTaskAppService etlTaskAppService;
 
     @GetMapping("/{id}")
     public Mono<ApiResponse<EtlTask>> getTask(@PathVariable Long id) {
-        return etlTaskRepository.findById(id)
+        return etlTaskAppService.getTask(id)
                 .map(ApiResponse::ok);
     }
 
     @GetMapping("/knowledge-base/{knowledgeBaseId}")
     public Mono<ApiResponse<List<EtlTask>>> getTasksByKnowledgeBase(@PathVariable Long knowledgeBaseId) {
-        return etlTaskRepository.findByKnowledgeBaseId(knowledgeBaseId)
+        return etlTaskAppService.getTasksByKnowledgeBase(knowledgeBaseId)
                 .collectList()
                 .map(ApiResponse::ok);
     }

@@ -1,5 +1,6 @@
 package com.silver.ai.infrastructure.vectorstore;
 
+import com.silver.ai.domain.knowledge.model.VectorDocument;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -26,13 +27,18 @@ public class MilvusVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
-    public void addDocuments(List<Document> documents) {
-        milvusVectorStore.add(documents);
+    public void addDocuments(List<VectorDocument> documents) {
+        List<Document> aiDocs = documents.stream().map(d -> {
+            var doc = new Document(d.content());
+            doc.getMetadata().putAll(d.metadata());
+            return doc;
+        }).toList();
+        milvusVectorStore.add(aiDocs);
         log.debug("Added {} documents to Milvus", documents.size());
     }
 
     @Override
-    public List<Document> similaritySearch(String query, int topK, double threshold,
+    public List<VectorDocument> similaritySearch(String query, int topK, double threshold,
                                            Map<String, Object> filterMetadata) {
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(query)
@@ -51,7 +57,9 @@ public class MilvusVectorStoreAdapter implements VectorStorePort {
             }
         }
 
-        return milvusVectorStore.similaritySearch(builder.build());
+        return milvusVectorStore.similaritySearch(builder.build()).stream()
+                .map(d -> new VectorDocument(d.getText(), d.getMetadata()))
+                .toList();
     }
 
     @Override

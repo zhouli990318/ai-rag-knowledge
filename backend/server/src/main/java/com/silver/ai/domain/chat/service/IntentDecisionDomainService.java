@@ -7,7 +7,6 @@ import com.silver.ai.domain.chat.port.IntentClassifierPort;
 import com.silver.ai.domain.chat.port.IntentNodeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -16,7 +15,6 @@ import java.util.List;
  * 意图决策领域服务 — 编排意图识别、澄清门控和路由建议。
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class IntentDecisionDomainService {
 

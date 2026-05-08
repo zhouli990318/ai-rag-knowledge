@@ -1,5 +1,7 @@
 package com.silver.ai.infrastructure.mcp;
 
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
+import com.silver.ai.domain.chat.model.ToolDefinition;
 import com.silver.ai.domain.chat.port.McpToolPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +23,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class McpToolCallbackService implements McpToolPort {
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
@@ -33,12 +34,13 @@ public class McpToolCallbackService implements McpToolPort {
     private final McpToolGatewayClient mcpToolGatewayClient;
     private final ObjectMapper objectMapper;
 
-    private volatile List<ToolCallback> cachedActiveCallbacks = Collections.emptyList();
+    private volatile List<ToolCallbackHandle> cachedActiveCallbacks = Collections.emptyList();
     private volatile List<McpToolDefinition> cachedActiveDefinitions = Collections.emptyList();
     private volatile long cachedActiveAt = 0L;
+    private final Object cacheLock = new Object();
 
     @Override
-    public List<ToolCallback> getToolCallbacks(List<Long> sourceIds) {
+    public List<ToolCallbackHandle> getToolCallbacks(List<Long> sourceIds) {
         if (sourceIds == null || sourceIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -48,32 +50,34 @@ public class McpToolCallbackService implements McpToolPort {
                 .distinct()
                 .flatMap(this::loadToolsSafely)
                 .filter(McpToolDefinition::enabled)
-                .map(this::createToolCallback)
+                .map(this::createToolCallbackHandle)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public List<ToolCallback> getAllActiveToolCallbacks() {
+    public List<ToolCallbackHandle> getAllActiveToolCallbacks() {
         refreshCacheIfNeeded();
         return cachedActiveCallbacks;
     }
 
     @Override
-    public List<McpToolDefinition> getAllActiveToolDefinitions() {
+    public List<ToolDefinition> getAllActiveToolDefinitions() {
         refreshCacheIfNeeded();
-        return cachedActiveDefinitions;
+        return cachedActiveDefinitions.stream()
+                .map(this::toDomainDefinition)
+                .toList();
     }
 
     @Override
-    public List<ToolCallback> getToolCallbacksByToolIds(List<Long> toolIds) {
+    public List<ToolCallbackHandle> getToolCallbacksByToolIds(List<Long> toolIds) {
         if (toolIds == null || toolIds.isEmpty()) {
             return Collections.emptyList();
         }
         var idSet = new java.util.HashSet<>(toolIds);
         refreshCacheIfNeeded();
-        List<ToolCallback> result = cachedActiveDefinitions.stream()
+        List<ToolCallbackHandle> result = cachedActiveDefinitions.stream()
                 .filter(def -> idSet.contains(def.id()))
-                .map(this::createToolCallback)
+                .map(this::createToolCallbackHandle)
                 .collect(Collectors.toList());
         if (result.isEmpty() && !cachedActiveDefinitions.isEmpty()) {
             log.warn("getToolCallbacksByToolIds: requested {} tool IDs {} but no match in cache ({} cached defs: {})",
@@ -90,7 +94,9 @@ public class McpToolCallbackService implements McpToolPort {
         if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
             return;
         }
-        synchronized (this) {
+        synchronized (cacheLock) {
+            // Double-check after acquiring lock
+            now = System.currentTimeMillis();
             if (now - cachedActiveAt < ACTIVE_CACHE_TTL_MS) {
                 return;
             }
@@ -104,7 +110,7 @@ public class McpToolCallbackService implements McpToolPort {
                     .toList();
             cachedActiveDefinitions = definitions;
             cachedActiveCallbacks = definitions.stream()
-                    .map(this::createToolCallback)
+                    .map(this::createToolCallbackHandle)
                     .collect(Collectors.toList());
             cachedActiveAt = now;
             log.info("MCP cache refresh complete: {} tools from {} sources. Tool IDs: {}",
@@ -120,6 +126,10 @@ public class McpToolCallbackService implements McpToolPort {
             log.warn("Skip MCP source {} because tool loading failed", sourceId, ex);
             return Stream.empty();
         }
+    }
+
+    private ToolCallbackHandle createToolCallbackHandle(McpToolDefinition toolDefinition) {
+        return new ToolCallbackHandleAdapter(createToolCallback(toolDefinition));
     }
 
     private ToolCallback createToolCallback(McpToolDefinition toolDefinition) {
@@ -166,5 +176,10 @@ public class McpToolCallbackService implements McpToolPort {
             return "{\"type\":\"object\",\"properties\":{}}";
         }
         return parameterSchema;
+    }
+
+    private ToolDefinition toDomainDefinition(McpToolDefinition def) {
+        return new ToolDefinition(def.id(), def.apiSourceId(), def.toolName(),
+                def.toolDescription(), def.parameterSchema(), def.enabled());
     }
 }

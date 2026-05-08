@@ -1,12 +1,19 @@
 package com.silver.ai.shared.util;
 
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.Base64;
 
@@ -47,7 +54,8 @@ public final class CryptoUtil {
             System.arraycopy(encrypted, 0, combined, salt.length + iv.length, encrypted.length);
 
             return Base64.getEncoder().encodeToString(combined);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                 | InvalidAlgorithmParameterException | IllegalBlockSizeException | BadPaddingException e) {
             throw new IllegalStateException("Encryption failed", e);
         }
     }
@@ -69,7 +77,8 @@ public final class CryptoUtil {
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, keySpec, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
+                 | InvalidAlgorithmParameterException | IllegalBlockSizeException | BadPaddingException e) {
             throw new IllegalStateException("Decryption failed", e);
         }
     }
@@ -79,7 +88,7 @@ public final class CryptoUtil {
             SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
             KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS);
             return factory.generateSecret(spec).getEncoded();
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
             throw new IllegalStateException("Key derivation failed", e);
         }
     }

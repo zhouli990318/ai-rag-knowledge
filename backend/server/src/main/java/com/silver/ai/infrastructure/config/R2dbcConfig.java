@@ -54,7 +54,13 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     }
     @ReadingConverter
     static class ProviderTypeReadConverter implements Converter<String, ProviderType> {
-        @Override public ProviderType convert(String source) { return ProviderType.valueOf(source); }
+        @Override public ProviderType convert(String source) {
+            try {
+                return ProviderType.valueOf(source);
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        }
     }
     @WritingConverter
     static class DocumentStatusWriteConverter implements Converter<DocumentStatus, String> {
@@ -62,7 +68,13 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     }
     @ReadingConverter
     static class DocumentStatusReadConverter implements Converter<String, DocumentStatus> {
-        @Override public DocumentStatus convert(String source) { return DocumentStatus.valueOf(source); }
+        @Override public DocumentStatus convert(String source) {
+            try {
+                return DocumentStatus.valueOf(source);
+            } catch (IllegalArgumentException e) {
+                return DocumentStatus.PENDING;
+            }
+        }
     }
     @WritingConverter
     static class ChunkTypeWriteConverter implements Converter<ChunkStrategy.ChunkType, String> {
@@ -70,7 +82,13 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     }
     @ReadingConverter
     static class ChunkTypeReadConverter implements Converter<String, ChunkStrategy.ChunkType> {
-        @Override public ChunkStrategy.ChunkType convert(String source) { return ChunkStrategy.ChunkType.valueOf(source); }
+        @Override public ChunkStrategy.ChunkType convert(String source) {
+            try {
+                return ChunkStrategy.ChunkType.valueOf(source);
+            } catch (IllegalArgumentException e) {
+                return ChunkStrategy.ChunkType.FIXED_SIZE;
+            }
+        }
     }
     @WritingConverter
     static class MessageRoleWriteConverter implements Converter<MessageRole, String> {
@@ -78,6 +96,12 @@ public class R2dbcConfig extends AbstractR2dbcConfiguration {
     }
     @ReadingConverter
     static class MessageRoleReadConverter implements Converter<String, MessageRole> {
-        @Override public MessageRole convert(String source) { return MessageRole.valueOf(source); }
+        @Override public MessageRole convert(String source) {
+            try {
+                return MessageRole.valueOf(source);
+            } catch (IllegalArgumentException e) {
+                return MessageRole.USER;
+            }
+        }
     }
 }

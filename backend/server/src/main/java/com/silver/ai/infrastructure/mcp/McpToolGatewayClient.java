@@ -5,6 +5,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,6 +14,8 @@ import java.util.List;
 public class McpToolGatewayClient {
 
     private final WebClient webClient;
+
+    private static final Duration BLOCK_TIMEOUT = Duration.ofSeconds(10);
 
     public McpToolGatewayClient(McpGatewayProperties properties, WebClient.Builder webClientBuilder) {
         String baseUrl = properties.baseUrl();
@@ -33,7 +36,7 @@ public class McpToolGatewayClient {
                 .uri("/sources/{sourceId}/tools", sourceId)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<McpToolDefinition>>>() {})
-                .block();
+                .block(BLOCK_TIMEOUT);
         if (body == null || body.data() == null) {
             return Collections.emptyList();
         }
@@ -46,7 +49,7 @@ public class McpToolGatewayClient {
                     .uri("/sources")
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<ApiSourceLite>>>() {})
-                    .block();
+                    .block(BLOCK_TIMEOUT);
             if (body == null || body.data() == null) {
                 return Collections.emptyList();
             }
@@ -68,7 +71,7 @@ public class McpToolGatewayClient {
                 .bodyValue(new ToolInvokeRequest(arguments))
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<String>>() {})
-                .block();
+                .block(BLOCK_TIMEOUT);
         if (body == null) {
             return "[MCP 工具调用失败: 无响应]";
         }

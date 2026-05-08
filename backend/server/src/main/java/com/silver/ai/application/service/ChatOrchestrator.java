@@ -1,18 +1,16 @@
 package com.silver.ai.application.service;
 
 import com.silver.ai.domain.chat.model.*;
+import com.silver.ai.domain.chat.port.ChatMemoryPort;
 import com.silver.ai.domain.chat.service.IntentDecisionDomainService;
 import com.silver.ai.domain.chat.service.QueryPlanningDomainService;
 import com.silver.ai.domain.chat.service.ToolRoutingDomainService;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
+import com.silver.ai.domain.knowledge.port.PromptRendererPort;
 import com.silver.ai.domain.knowledge.service.MultiPathRetrievalDomainService;
-import com.silver.ai.infrastructure.ai.ChatMemoryManager;
-import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -30,20 +28,20 @@ public class ChatOrchestrator {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final MultiPathRetrievalDomainService multiPathRetrieval;
-    private final PromptTemplateEngine promptTemplateEngine;
-    private final ChatMemoryManager chatMemoryManager;
+    private final PromptRendererPort promptRenderer;
+    private final ChatMemoryPort chatMemory;
     private final IntentDecisionDomainService intentDecision;
     private final QueryPlanningDomainService queryPlanning;
     private final ToolRoutingDomainService toolRouting;
     private final ChatOrchestratorConfig orchestratorConfig;
 
-    public record OrchestrationResult(List<Message> messages, List<ToolCallback> toolCallbacks) {}
+    public record OrchestrationResult(List<DomainMessage> messages, List<ToolCallbackHandle> toolCallbacks) {}
 
     public Mono<OrchestrationResult> orchestrate(
             Conversation conversation, String userMessage, String customSystemPrompt,
             ChatTraceContext trace) {
 
-        List<String> conversationContext = chatMemoryManager.extractRecentContext(
+        List<String> conversationContext = chatMemory.extractRecentContext(
                 conversation, orchestratorConfig.getRewriteContextRounds());
 
         Mono<IntentResult> intentMono = detectIntent(userMessage, conversationContext, trace);
@@ -67,7 +65,7 @@ public class ChatOrchestrator {
                     String effectiveSystemPrompt = buildSystemPrompt(
                         customSystemPrompt, ragContext, intentResult);
 
-                    List<Message> messages = chatMemoryManager.buildMessages(
+                    List<DomainMessage> messages = chatMemory.buildMessages(
                         conversation, effectiveSystemPrompt, orchestratorConfig.getMemoryFullRounds());
 
                     return new OrchestrationResult(messages,
@@ -77,11 +75,11 @@ public class ChatOrchestrator {
     }
 
     public boolean needsSummary(Conversation conversation) {
-        return chatMemoryManager.needsSummary(conversation);
+        return chatMemory.needsSummary(conversation);
     }
 
     public String buildSummaryPrompt(Conversation conversation) {
-        return chatMemoryManager.buildSummaryPrompt(conversation);
+        return chatMemory.buildSummaryPrompt(conversation);
     }
 
     // ── 各阶段拆分 ──
@@ -173,7 +171,7 @@ public class ChatOrchestrator {
     }
 
     private String buildSystemPrompt(String customSystemPrompt, String ragContext, IntentResult intentResult) {
-        String prompt = promptTemplateEngine.render(PromptTemplates.GENERAL_SYSTEM);
+        String prompt = promptRenderer.render(PromptTemplates.GENERAL_SYSTEM);
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             prompt = customSystemPrompt;
         }

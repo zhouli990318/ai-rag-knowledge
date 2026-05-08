@@ -8,7 +8,6 @@ import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
@@ -17,7 +16,6 @@ import java.util.List;
  * 模型路由领域服务 — 健康检查、故障转移、优先级路由。
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class ModelRoutingDomainService implements ModelSelectionPort {
 
@@ -77,10 +75,13 @@ public class ModelRoutingDomainService implements ModelSelectionPort {
      */
     @Override
     public void recordSuccess(Long providerId, long firstTokenMs) {
-        providerRepository.findById(providerId).subscribe(provider -> {
-            provider.markHealthy(firstTokenMs);
-            providerRepository.save(provider).subscribe();
-        });
+        providerRepository.findById(providerId)
+                .flatMap(provider -> {
+                    provider.markHealthy(firstTokenMs);
+                    return providerRepository.save(provider);
+                })
+                .doOnError(e -> log.warn("Failed to record success for provider {}: {}", providerId, e.getMessage()))
+                .subscribe();
     }
 
     /**
@@ -88,9 +89,12 @@ public class ModelRoutingDomainService implements ModelSelectionPort {
      */
     @Override
     public void recordFailure(Long providerId) {
-        providerRepository.findById(providerId).subscribe(provider -> {
-            provider.markUnhealthy();
-            providerRepository.save(provider).subscribe();
-        });
+        providerRepository.findById(providerId)
+                .flatMap(provider -> {
+                    provider.markUnhealthy();
+                    return providerRepository.save(provider);
+                })
+                .doOnError(e -> log.warn("Failed to record failure for provider {}: {}", providerId, e.getMessage()))
+                .subscribe();
     }
 }

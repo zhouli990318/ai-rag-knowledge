@@ -37,7 +37,6 @@
         <swagger-parser.version>2.1.25</swagger-parser.version>
         <flyway.version>11.8.0</flyway.version>
         <mapstruct.version>1.6.3</mapstruct.version>
-        <jasypt.version>3.0.5</jasypt.version>
     </properties>
 
     <dependencyManagement>
@@ -75,11 +74,6 @@
                 <groupId>io.swagger.parser.v3</groupId>
                 <artifactId>swagger-parser</artifactId>
                 <version>${swagger-parser.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.github.ulisesbocchio</groupId>
-                <artifactId>jasypt-spring-boot-starter</artifactId>
-                <version>${jasypt.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.mapstruct</groupId>

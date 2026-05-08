@@ -81,7 +81,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handlePayloadTooLargeShouldReturnPayloadTooLarge() {
         ResponseEntity<ApiResponse<Void>> response = handler.handlePayloadTooLarge(
-                new PayloadTooLargeException("Request body too large"));
+                new PayloadTooLargeException(new RuntimeException("Request body too large")));
         ApiResponse<Void> body = assertBody(response);
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());

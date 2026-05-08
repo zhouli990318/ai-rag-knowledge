@@ -1,6 +1,9 @@
 package com.silver.ai.infrastructure.ai;
 
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
+import com.silver.ai.domain.chat.model.DomainMessage;
+import com.silver.ai.domain.chat.model.MessageRole;
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.model.ProviderType;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
@@ -11,11 +14,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import reactor.core.publisher.Flux;
+
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -23,6 +26,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -45,15 +49,15 @@ class ChatModelAdapterTest {
         chatModelRegistry = mock(ChatModelRegistry.class);
         modelRouting = mock(ModelRoutingDomainService.class);
         ChatOrchestratorConfig config = ChatOrchestratorConfig.builder()
-                .modelMaxRetries(0)  // 不重试，使测试可控
+                .modelMaxRetries(0)
                 .build();
         adapter = new ChatModelAdapter(providerRepository, chatModelRegistry, modelRouting, config);
 
         when(modelRouting.selectProvider(1L)).thenReturn(provider);
     }
 
-    private List<Message> messages() {
-        return List.of(new UserMessage("hi"));
+    private List<DomainMessage> messages() {
+        return List.of(new DomainMessage(MessageRole.USER, "hi"));
     }
 
     // ─── 供应商级错误：应记录 failure ───
@@ -62,9 +66,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnConnectionTimeout() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException(new SocketTimeoutException("Read timed out")));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new RuntimeException(new SocketTimeoutException("Read timed out"))));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -72,9 +76,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnConnectionRefused() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException(new ConnectException("Connection refused")));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new RuntimeException(new ConnectException("Connection refused"))));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -82,9 +86,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnUnknownHost() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException(new UnknownHostException("api.example.com")));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new RuntimeException(new UnknownHostException("api.example.com"))));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -103,9 +107,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnProviderHttpErrors(String errorMessage) {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException(errorMessage));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new RuntimeException(errorMessage)));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -113,9 +117,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnProviderConnectionFailedBusinessException() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new BusinessException(ErrorCode.PROVIDER_CONNECTION_FAILED, "timeout"));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new BusinessException(ErrorCode.PROVIDER_CONNECTION_FAILED, "timeout")));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -123,9 +127,9 @@ class ChatModelAdapterTest {
     void shouldRecordFailureOnProviderModelNotAvailableBusinessException() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new BusinessException(ErrorCode.PROVIDER_MODEL_NOT_AVAILABLE, "no such model"));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new BusinessException(ErrorCode.PROVIDER_MODEL_NOT_AVAILABLE, "no such model")));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting).recordFailure(1L);
     }
 
@@ -135,9 +139,9 @@ class ChatModelAdapterTest {
     void shouldNotRecordFailureOnNullPointerException() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new NullPointerException());
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new NullPointerException()));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting, never()).recordFailure(any());
     }
 
@@ -145,9 +149,9 @@ class ChatModelAdapterTest {
     void shouldNotRecordFailureOnIllegalArgumentException() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new IllegalArgumentException("bad prompt format"));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new IllegalArgumentException("bad prompt format")));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting, never()).recordFailure(any());
     }
 
@@ -155,9 +159,9 @@ class ChatModelAdapterTest {
     void shouldNotRecordFailureOnGenericBusinessException() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new BusinessException(ErrorCode.CHAT_STREAM_ERROR, "parse error"));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new BusinessException(ErrorCode.CHAT_STREAM_ERROR, "parse error")));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting, never()).recordFailure(any());
     }
 
@@ -165,9 +169,9 @@ class ChatModelAdapterTest {
     void shouldNotRecordFailureOnEmptyMessage() {
         ChatModel chatModel = mock(ChatModel.class);
         when(chatModelRegistry.getWithModel(eq(provider), any())).thenReturn(chatModel);
-        when(chatModel.call(any(Prompt.class))).thenThrow(new RuntimeException(""));
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.error(new RuntimeException("")));
 
-        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()));
+        assertThrows(BusinessException.class, () -> adapter.chat(1L, null, messages(), List.of()).block());
         verify(modelRouting, never()).recordFailure(any());
     }
 
@@ -183,9 +187,9 @@ class ChatModelAdapterTest {
         when(chatModelRegistry.getWithModel(eq(fallback), any())).thenReturn(chatModel);
         ChatResponse response = mock(ChatResponse.class, RETURNS_DEEP_STUBS);
         when(response.getResult().getOutput().getText()).thenReturn("OK");
-        when(chatModel.call(any(Prompt.class))).thenReturn(response);
+        when(chatModel.stream(any(Prompt.class))).thenReturn(Flux.just(response));
 
-        adapter.chat(1L, null, messages(), List.of());
+        adapter.chat(1L, null, messages(), List.of()).block();
 
         verify(modelRouting).recordSuccess(eq(99L), anyLong());
         verify(modelRouting, never()).recordSuccess(eq(1L), anyLong());

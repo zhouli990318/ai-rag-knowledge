@@ -117,4 +117,31 @@ public class ChatOrchestratorConfig {
     /** 推荐问题提示词模板，{conversation} 为占位符 */
     @Builder.Default
     private String suggestionPrompt = SUGGEST_FOLLOW_UP.getTemplate();
+
+    /**
+     * 配置值范围校验，在属性绑定后调用。
+     */
+    public void validate() {
+        if (intentConfidenceThreshold < 0 || intentConfidenceThreshold > 1.0) {
+            throw new IllegalArgumentException("intentConfidenceThreshold must be between 0 and 1, got: " + intentConfidenceThreshold);
+        }
+        if (toolAutoExecuteThreshold < 0 || toolAutoExecuteThreshold > 1.0) {
+            throw new IllegalArgumentException("toolAutoExecuteThreshold must be between 0 and 1, got: " + toolAutoExecuteThreshold);
+        }
+        if (toolRetrievalThreshold < 0 || toolRetrievalThreshold > 1.0) {
+            throw new IllegalArgumentException("toolRetrievalThreshold must be between 0 and 1, got: " + toolRetrievalThreshold);
+        }
+        if (traceSampleRate < 0 || traceSampleRate > 1.0) {
+            throw new IllegalArgumentException("traceSampleRate must be between 0 and 1, got: " + traceSampleRate);
+        }
+        if (toolRetrievalTopK <= 0) {
+            throw new IllegalArgumentException("toolRetrievalTopK must be positive, got: " + toolRetrievalTopK);
+        }
+        if (rerankTopK <= 0) {
+            throw new IllegalArgumentException("rerankTopK must be positive, got: " + rerankTopK);
+        }
+        if (retrievalTimeoutSeconds <= 0) {
+            throw new IllegalArgumentException("retrievalTimeoutSeconds must be positive, got: " + retrievalTimeoutSeconds);
+        }
+    }
 }

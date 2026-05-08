@@ -5,7 +5,6 @@ import com.silver.ai.domain.chat.port.McpToolPort;
 import com.silver.ai.domain.chat.port.ToolIndexPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -13,7 +12,6 @@ import java.util.List;
  * 工具索引领域服务 — 负责 MCP 工具元数据的向量化索引和语义检索。
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class ToolIndexDomainService {
 

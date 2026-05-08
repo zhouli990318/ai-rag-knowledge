@@ -3,16 +3,11 @@ package com.silver.ai.application.service;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.model.ProviderType;
 import com.silver.ai.domain.provider.port.ChatModelPort;
+import com.silver.ai.domain.provider.port.EncryptionPort;
+import com.silver.ai.domain.provider.port.ModelCachePort;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
-import com.silver.ai.infrastructure.ai.ChatModelRegistry;
-import com.silver.ai.infrastructure.ai.EmbeddingModelRegistry;
 import com.silver.ai.shared.exception.BusinessException;
-import com.silver.ai.shared.util.CryptoUtil;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.test.util.ReflectionTestUtils;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -28,9 +23,10 @@ class ModelProviderAppServiceTest {
     @Test
     void createProviderShouldEncryptApiKeyBeforeSaving() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
+        EncryptionPort encryptionPort = mock(EncryptionPort.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
-                mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        ReflectionTestUtils.setField(service, "cryptoSecretKey", "unit-test-key");
+                mock(ModelCachePort.class), encryptionPort);
+        when(encryptionPort.encrypt("plain-key")).thenReturn("encrypted-key");
         when(repository.existsByName("provider-a")).thenReturn(Mono.just(false));
         when(repository.save(any(ModelProvider.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
 
@@ -38,16 +34,16 @@ class ModelProviderAppServiceTest {
                 "https://example.com", "gpt-4.1", "embed", 1536).block();
 
         assertNotNull(provider);
-        assertFalse("plain-key".equals(provider.getApiKey()));
-        assertEquals("plain-key", CryptoUtil.decrypt(provider.getApiKey(), "unit-test-key"));
+        assertEquals("encrypted-key", provider.getApiKey());
+        verify(encryptionPort).encrypt("plain-key");
     }
 
     @Test
-    void toggleProviderShouldFlipStateAndRefreshRegistries() {
+    void toggleProviderShouldFlipStateAndRefreshCache() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
-        ChatModelRegistry chatRegistry = mock(ChatModelRegistry.class);
-        EmbeddingModelRegistry embeddingRegistry = mock(EmbeddingModelRegistry.class);
-        ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class), chatRegistry, embeddingRegistry);
+        ModelCachePort modelCachePort = mock(ModelCachePort.class);
+        ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
+                modelCachePort, mock(EncryptionPort.class));
         ModelProvider provider = ModelProvider.builder().id(5L).providerType(ProviderType.OPENAI).enabled(true).build();
         when(repository.findById(5L)).thenReturn(Mono.just(provider));
         when(repository.save(any(ModelProvider.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
@@ -56,37 +52,31 @@ class ModelProviderAppServiceTest {
 
         assertFalse(provider.isEnabled());
         verify(repository).save(provider);
-        verify(chatRegistry).refresh(5L);
-        verify(embeddingRegistry).refresh(5L);
+        verify(modelCachePort).refreshCache(5L);
     }
 
     @Test
-        void testConnectionShouldBypassRoutingPortAndWrapSuccessfulResponse() {
+    void testConnectionShouldUseChatModelPortAndWrapSuccessfulResponse() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
-        ChatModelRegistry chatModelRegistry = mock(ChatModelRegistry.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, chatModelPort,
-            chatModelRegistry, mock(EmbeddingModelRegistry.class));
+                mock(ModelCachePort.class), mock(EncryptionPort.class));
         ModelProvider provider = ModelProvider.builder()
-            .id(2L)
-            .name("provider-a")
-            .providerType(ProviderType.OPENAI)
-            .enabled(true)
-            .defaultModel("gpt-4.1")
-            .build();
-        ChatModel chatModel = mock(ChatModel.class);
-        ChatResponse response = mock(ChatResponse.class, RETURNS_DEEP_STUBS);
+                .id(2L)
+                .name("provider-a")
+                .providerType(ProviderType.OPENAI)
+                .enabled(true)
+                .defaultModel("gpt-4.1")
+                .build();
 
         when(repository.findById(2L)).thenReturn(Mono.just(provider));
         when(repository.save(any(ModelProvider.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-        when(chatModelRegistry.getWithModel(eq(provider), eq("gpt-4.1"))).thenReturn(chatModel);
-        when(response.getResult().getOutput().getText()).thenReturn("OK");
-        when(chatModel.call(any(Prompt.class))).thenReturn(response);
+        when(chatModelPort.chat(eq(2L), eq("gpt-4.1"), any(), any())).thenReturn(Mono.just("OK"));
 
         String result = service.testConnection(2L).block();
 
         assertEquals("\u8fde\u63a5\u6210\u529f: OK", result);
-        verify(chatModelPort, never()).chat(any(), any(), any(), any());
+        verify(chatModelPort).chat(eq(2L), eq("gpt-4.1"), any(), any());
         verify(repository).save(provider);
         assertEquals(ModelProvider.HealthStatus.HEALTHY, provider.getHealthStatus());
     }
@@ -94,7 +84,7 @@ class ModelProviderAppServiceTest {
     @Test
     void getProviderTypesShouldExposeCapabilitiesForAllProviderTypes() {
         ModelProviderAppService service = new ModelProviderAppService(mock(ModelProviderRepository.class), mock(ChatModelPort.class),
-                mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
+                mock(ModelCachePort.class), mock(EncryptionPort.class));
 
         List<java.util.Map<String, Object>> result = service.getProviderTypes();
 
@@ -105,9 +95,10 @@ class ModelProviderAppServiceTest {
     @Test
     void createProviderShouldRejectDuplicateName() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
+        EncryptionPort encryptionPort = mock(EncryptionPort.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, mock(ChatModelPort.class),
-                mock(ChatModelRegistry.class), mock(EmbeddingModelRegistry.class));
-        ReflectionTestUtils.setField(service, "cryptoSecretKey", "unit-test-key");
+                mock(ModelCachePort.class), encryptionPort);
+        when(encryptionPort.encrypt(any())).thenReturn("encrypted");
         when(repository.save(any(ModelProvider.class)))
                 .thenReturn(Mono.error(new org.springframework.dao.DuplicateKeyException("uk_provider_name")));
 

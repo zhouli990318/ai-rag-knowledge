@@ -49,7 +49,13 @@ public class Conversation {
     private Integer suggestionVersion;
     private LocalDateTime suggestionUpdatedAt;
 
+    private static final int MAX_CONTENT_LENGTH = 64000;
+    private static final int MAX_TITLE_LENGTH = 50;
+
     public void addMessage(MessageRole role, String content) {
+        if (content != null && content.length() > MAX_CONTENT_LENGTH) {
+            content = content.substring(0, MAX_CONTENT_LENGTH);
+        }
         ChatMessage message = ChatMessage.builder()
                 .conversationId(this.id)
                 .role(role)
@@ -59,8 +65,9 @@ public class Conversation {
         this.updatedAt = LocalDateTime.now();
 
         // 自动设置标题（取第一条用户消息的前 50 个字符）
-        if (this.title == null && role == MessageRole.USER) {
-            this.title = content.length() > 50 ? content.substring(0, 50) + "..." : content;
+        if (this.title == null && role == MessageRole.USER && content != null) {
+            this.title = content.length() > MAX_TITLE_LENGTH
+                    ? content.substring(0, MAX_TITLE_LENGTH) + "..." : content;
         }
     }
 
@@ -72,6 +79,14 @@ public class Conversation {
             return new ArrayList<>(messages);
         }
         return new ArrayList<>(messages.subList(messages.size() - windowSize, messages.size()));
+    }
+
+    public List<Long> getMcpServerIds() {
+        return mcpServerIds == null ? List.of() : List.copyOf(mcpServerIds);
+    }
+
+    public List<String> getSuggestions() {
+        return suggestions == null ? List.of() : List.copyOf(suggestions);
     }
 
     public void enableRag(Long knowledgeBaseId) {

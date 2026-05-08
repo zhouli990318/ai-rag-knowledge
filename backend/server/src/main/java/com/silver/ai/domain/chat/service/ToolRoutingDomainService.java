@@ -5,10 +5,9 @@ import com.silver.ai.domain.chat.model.IntentResult;
 import com.silver.ai.domain.chat.model.ToolIndexEntry;
 import com.silver.ai.domain.chat.model.ToolMode;
 import com.silver.ai.domain.chat.port.McpToolPort;
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
 
@@ -21,7 +20,6 @@ import java.util.List;
  * - SPECIFIC: 仅注入用户指定的 mcpServerIds
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class ToolRoutingDomainService {
 
@@ -37,7 +35,7 @@ public class ToolRoutingDomainService {
             return ToolDecision.noTool();
         }
 
-        List<ToolCallback> callbacks;
+        List<ToolCallbackHandle> callbacks;
         if (effectiveMode == ToolMode.SPECIFIC) {
             if (mcpServerIds == null || mcpServerIds.isEmpty()) {
                 return ToolDecision.noTool();
@@ -63,7 +61,7 @@ public class ToolRoutingDomainService {
      * - 语义检索启用时 → 根据用户查询召回 topK 个相关工具
      * - 语义检索禁用时 → 全量注入（兼容旧行为）
      */
-    private List<ToolCallback> resolveAutoTools(String userQuery) {
+    private List<ToolCallbackHandle> resolveAutoTools(String userQuery) {
         if (config.isToolSemanticRetrievalEnabled() && userQuery != null && !userQuery.isBlank()) {
             List<ToolIndexEntry> relevant = toolIndexService.retrieveRelevantTools(
                     userQuery, config.getToolRetrievalTopK(), config.getToolRetrievalThreshold());
@@ -72,7 +70,7 @@ public class ToolRoutingDomainService {
                 List<Long> toolIds = relevant.stream()
                         .map(ToolIndexEntry::toolId)
                         .toList();
-                List<ToolCallback> callbacks = mcpToolPort.getToolCallbacksByToolIds(toolIds);
+                List<ToolCallbackHandle> callbacks = mcpToolPort.getToolCallbacksByToolIds(toolIds);
                 if (!callbacks.isEmpty()) {
                     log.debug("Semantic tool retrieval: {} relevant tools matched from {} candidates",
                             callbacks.size(), relevant.size());
@@ -87,7 +85,7 @@ public class ToolRoutingDomainService {
 
             // 语义检索无结果或回调为空 → fallback 到全量活跃工具
             if (config.isToolFallbackEnabled()) {
-                List<ToolCallback> fallback = mcpToolPort.getAllActiveToolCallbacks();
+                List<ToolCallbackHandle> fallback = mcpToolPort.getAllActiveToolCallbacks();
                 if (!fallback.isEmpty()) {
                     log.debug("Fallback: injecting all {} active tools", fallback.size());
                     return fallback;
@@ -101,7 +99,7 @@ public class ToolRoutingDomainService {
     }
 
     public record ToolDecision(
-            List<ToolCallback> toolCallbacks,
+            List<ToolCallbackHandle> toolCallbacks,
             boolean autoExecute
     ) {
         public static ToolDecision noTool() {

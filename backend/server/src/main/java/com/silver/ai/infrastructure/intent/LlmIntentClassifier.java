@@ -1,14 +1,14 @@
 package com.silver.ai.infrastructure.intent;
 
+import com.silver.ai.domain.chat.model.DomainMessage;
 import com.silver.ai.domain.chat.model.IntentResult;
+import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.chat.port.IntentClassifierPort;
 import com.silver.ai.domain.provider.port.ChatModelPort;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -68,8 +68,8 @@ public class LlmIntentClassifier implements IntentClassifierPort {
 
         return chatModelPort.chat(
                 intentProviderId, null,
-                List.of(new SystemMessage(INTENT_SYSTEM_PROMPT),
-                        new UserMessage(contextBuilder.toString())),
+                List.of(new DomainMessage(MessageRole.SYSTEM, INTENT_SYSTEM_PROMPT),
+                        new DomainMessage(MessageRole.USER, contextBuilder.toString())),
                 List.of()
         )
         .map(this::parseResponse)

@@ -4,7 +4,6 @@ import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.port.QueryRewriterPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -13,7 +12,6 @@ import java.util.List;
  * 查询规划领域服务 — 编排查询重写和子问题拆分。
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class QueryPlanningDomainService {
 

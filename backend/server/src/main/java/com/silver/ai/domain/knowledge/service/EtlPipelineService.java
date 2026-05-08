@@ -6,7 +6,6 @@ import com.silver.ai.domain.knowledge.model.EtlTask;
 import com.silver.ai.domain.knowledge.port.EtlTaskRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.InputStream;
@@ -16,7 +15,6 @@ import java.io.InputStream;
  * 包装 DocumentProcessingDomainService，增加 EtlTask 阶段记录。
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class EtlPipelineService {
 

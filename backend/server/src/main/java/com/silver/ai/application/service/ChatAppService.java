@@ -4,17 +4,13 @@ import com.silver.ai.domain.chat.model.*;
 import com.silver.ai.domain.chat.port.ChatTraceRepository;
 import com.silver.ai.domain.chat.port.ConversationRepository;
 import com.silver.ai.domain.provider.port.ChatModelPort;
-import com.silver.ai.infrastructure.ai.ChatMemoryManager;
-import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -28,8 +24,6 @@ public class ChatAppService {
     private final ConversationRepository conversationRepository;
     private final ChatOrchestrator orchestrator;
     private final ChatTraceRepository chatTraceRepository;
-    private final PromptTemplateEngine promptTemplateEngine;
-    private final ChatMemoryManager chatMemoryManager;
     private final SuggestionCache suggestionCache;
     private final ChatOrchestratorConfig orchestratorConfig;
 
@@ -121,7 +115,7 @@ public class ChatAppService {
             String summaryPrompt = orchestrator.buildSummaryPrompt(conversation);
             return chatModelPort.chat(
                     providerId, model,
-                    List.of(new org.springframework.ai.chat.messages.UserMessage(summaryPrompt)),
+                    List.of(new DomainMessage(MessageRole.USER, summaryPrompt)),
                     List.of())
                     .doOnSuccess(summary -> conversation.updateSummary(summary))
                     .thenReturn(conversation);
@@ -197,7 +191,10 @@ public class ChatAppService {
                 })
                 .doOnError(e -> log.debug("Prefetch suggestions failed: {}", e.getMessage()))
                 .onErrorResume(e -> Mono.empty())
-                .subscribe();
+                .subscribe(
+                        v -> {},
+                        e -> log.debug("Prefetch suggestions subscribe error: {}", e.getMessage())
+                );
     }
 
     private Mono<List<String>> computeSuggestions(Conversation conversation) {
@@ -245,7 +242,7 @@ public class ChatAppService {
         String model = auxProvider != null ? null : conversation.getModel();
         return chatModelPort.chat(
                 providerId, model,
-                List.of(new UserMessage(prompt)),
+                List.of(new DomainMessage(MessageRole.USER, prompt)),
                 List.of())
                 .map(response -> {
                     List<String> parsed = parseSuggestions(response);

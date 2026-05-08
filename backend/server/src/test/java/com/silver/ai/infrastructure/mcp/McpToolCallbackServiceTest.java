@@ -1,10 +1,10 @@
 package com.silver.ai.infrastructure.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.tool.ToolCallback;
 
 import java.util.List;
 
@@ -30,9 +30,9 @@ class McpToolCallbackServiceTest {
                 "gateway down"));
         when(gatewayClient.listTools(200L)).thenReturn(List.of(healthyTool));
 
-        List<ToolCallback> callbacks = service.getToolCallbacks(List.of(100L, 200L));
+        List<ToolCallbackHandle> callbacks = service.getToolCallbacks(List.of(100L, 200L));
 
         assertEquals(1, callbacks.size());
-        assertEquals("healthyTool", callbacks.get(0).getToolDefinition().name());
+        assertEquals("healthyTool", callbacks.get(0).getToolName());
     }
 }

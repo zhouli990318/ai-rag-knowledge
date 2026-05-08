@@ -1,10 +1,13 @@
 package com.silver.ai.infrastructure.ai;
 
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
+import com.silver.ai.domain.chat.model.DomainMessage;
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.domain.provider.port.ChatModelPort;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
 import com.silver.ai.domain.provider.port.ModelSelectionPort;
+import com.silver.ai.infrastructure.mcp.ToolCallbackHandleAdapter;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -37,21 +40,20 @@ public class ChatModelAdapter implements ChatModelPort {
     private final ChatOrchestratorConfig orchestratorConfig;
 
     @Override
-    public Flux<String> streamChat(Long providerId, String model, List<Message> messages,
-                                   List<ToolCallback> toolCallbacks) {
+    public Flux<String> streamChat(Long providerId, String model, List<DomainMessage> messages,
+                                   List<ToolCallbackHandle> toolCallbacks) {
         return Flux.defer(() -> {
             ModelProvider provider = modelSelection.selectProvider(providerId);
             ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
-            Prompt prompt = createPrompt(messages, toolCallbacks);
+            Prompt prompt = createPrompt(toSpringMessages(messages), ToolCallbackHandleAdapter.unwrapAll(toolCallbacks));
 
             long startTime = System.currentTimeMillis();
-            final long[] firstTokenTime = {0};
+            final java.util.concurrent.atomic.AtomicLong firstTokenTime = new java.util.concurrent.atomic.AtomicLong(0);
 
             return chatModel.stream(prompt)
                     .map(response -> {
-                        if (firstTokenTime[0] == 0) {
-                            firstTokenTime[0] = System.currentTimeMillis() - startTime;
-                            modelSelection.recordSuccess(provider.getId(), firstTokenTime[0]);
+                        if (firstTokenTime.compareAndSet(0, System.currentTimeMillis() - startTime)) {
+                            modelSelection.recordSuccess(provider.getId(), firstTokenTime.get());
                         }
                         if (response.getResult() != null && response.getResult().getOutput() != null) {
                             String text = response.getResult().getOutput().getText();
@@ -74,11 +76,11 @@ public class ChatModelAdapter implements ChatModelPort {
     }
 
     @Override
-    public Mono<String> chat(Long providerId, String model, List<Message> messages, List<ToolCallback> toolCallbacks) {
+    public Mono<String> chat(Long providerId, String model, List<DomainMessage> messages, List<ToolCallbackHandle> toolCallbacks) {
         return Mono.defer(() -> {
             ModelProvider provider = modelSelection.selectProvider(providerId);
             ChatModel chatModel = chatModelRegistry.getWithModel(provider, model);
-            Prompt prompt = createPrompt(messages, toolCallbacks);
+            Prompt prompt = createPrompt(toSpringMessages(messages), ToolCallbackHandleAdapter.unwrapAll(toolCallbacks));
 
             long startTime = System.currentTimeMillis();
 
@@ -201,5 +203,13 @@ public class ChatModelAdapter implements ChatModelPort {
                 .internalToolExecutionEnabled(true)
                 .toolCallbacks(toolCallbacks)
                 .build());
+    }
+
+    private List<Message> toSpringMessages(List<DomainMessage> domainMessages) {
+        return domainMessages.stream().map(dm -> (Message) switch (dm.role()) {
+            case USER -> new org.springframework.ai.chat.messages.UserMessage(dm.content());
+            case ASSISTANT -> new org.springframework.ai.chat.messages.AssistantMessage(dm.content());
+            case SYSTEM -> new org.springframework.ai.chat.messages.SystemMessage(dm.content());
+        }).toList();
     }
 }

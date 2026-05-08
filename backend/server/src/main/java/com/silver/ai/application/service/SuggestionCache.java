@@ -26,14 +26,12 @@ public class SuggestionCache {
 
     private final ConcurrentHashMap<Long, Entry> store = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> computing = new ConcurrentHashMap<>();
-    private RedissonClient redissonClient;
-    private ObjectMapper objectMapper = new ObjectMapper();
-
-    public SuggestionCache() {
-    }
+    private final RedissonClient redissonClient;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    public SuggestionCache(RedissonClient redissonClient, ObjectMapper objectMapper) {
+    public SuggestionCache(@org.springframework.lang.Nullable RedissonClient redissonClient,
+                           ObjectMapper objectMapper) {
         this.redissonClient = redissonClient;
         this.objectMapper = objectMapper;
     }
@@ -65,7 +63,7 @@ public class SuggestionCache {
             try {
                 redissonClient.getKeys().deleteByPattern(redisPattern(conversationId));
             } catch (Exception e) {
-                log.debug("Evict redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
+                log.warn("Evict redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
             }
         }
     }
@@ -100,7 +98,7 @@ public class SuggestionCache {
             }
             return Optional.of(List.copyOf(list));
         } catch (Exception e) {
-            log.debug("Read redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
+            log.warn("Read redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
             return Optional.empty();
         }
     }
@@ -114,7 +112,7 @@ public class SuggestionCache {
             String json = objectMapper.writeValueAsString(suggestions);
             redissonClient.getBucket(redisKey(conversationId, version)).set(json, TTL);
         } catch (Exception e) {
-            log.debug("Write redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
+            log.warn("Write redis suggestion cache failed for conversation {}: {}", conversationId, e.getMessage());
         }
     }
 

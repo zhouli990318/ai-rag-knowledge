@@ -3,13 +3,13 @@ package com.silver.ai.infrastructure.ai;
 import com.silver.ai.domain.chat.model.ChatMessage;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.Conversation;
+import com.silver.ai.domain.chat.model.DomainMessage;
+import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.chat.model.PromptTemplates;
+import com.silver.ai.domain.chat.port.ChatMemoryPort;
+import com.silver.ai.domain.knowledge.port.PromptRendererPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -21,10 +21,10 @@ import java.util.*;
 @Component
 @RequiredArgsConstructor
 @SuppressWarnings("null")
-public class ChatMemoryManager {
+public class ChatMemoryManager implements ChatMemoryPort {
 
     private final ChatOrchestratorConfig orchestratorConfig;
-    private final PromptTemplateEngine promptTemplateEngine;
+    private final PromptRendererPort promptRenderer;
 
     private static final int DEFAULT_MAX_CONTEXT_CHARS = 12000;
 
@@ -33,20 +33,20 @@ public class ChatMemoryManager {
      * <p>
      * 结构：SystemPrompt → [摘要段落] → 最近 N 轮消息
      */
-    public List<Message> buildMessages(Conversation conversation, String systemPrompt, int windowSize) {
+    public List<DomainMessage> buildMessages(Conversation conversation, String systemPrompt, int windowSize) {
         int maxChars = orchestratorConfig != null
                 ? orchestratorConfig.getMemoryMaxChars() : DEFAULT_MAX_CONTEXT_CHARS;
 
-        List<Message> messages = new ArrayList<>();
+        List<DomainMessage> messages = new ArrayList<>();
 
         // 1. 系统提示
         if (systemPrompt != null && !systemPrompt.isBlank()) {
-            messages.add(new SystemMessage(systemPrompt));
+            messages.add(new DomainMessage(MessageRole.SYSTEM, systemPrompt));
         }
 
         // 2. 摘要（如果有）
         if (conversation.getSummary() != null && !conversation.getSummary().isBlank()) {
-            messages.add(new SystemMessage(
+            messages.add(new DomainMessage(MessageRole.SYSTEM,
                     "以下是之前对话的摘要，请结合摘要理解用户的上下文：\n" + conversation.getSummary()));
         }
 
@@ -66,11 +66,7 @@ public class ChatMemoryManager {
         }
 
         for (ChatMessage message : retained) {
-            switch (message.getRole()) {
-                case USER -> messages.add(new UserMessage(message.getContent()));
-                case ASSISTANT -> messages.add(new AssistantMessage(message.getContent()));
-                case SYSTEM -> messages.add(new SystemMessage(message.getContent()));
-            }
+            messages.add(new DomainMessage(message.getRole(), message.getContent()));
         }
 
         return messages;
@@ -95,7 +91,7 @@ public class ChatMemoryManager {
         for (ChatMessage msg : history) {
             sb.append(msg.getRole().name()).append(": ").append(msg.getContent()).append("\n");
         }
-        return promptTemplateEngine.render(PromptTemplates.CONVERSATION_SUMMARY,
+        return promptRenderer.render(PromptTemplates.CONVERSATION_SUMMARY,
                 Map.of("conversation", sb.toString()));
     }
 

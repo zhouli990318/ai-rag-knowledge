@@ -60,6 +60,9 @@ public class ModelProvider {
 
     public void updateConfig(String name, String apiKey, String baseUrl,
                              String defaultModel, String embeddingModel, Integer embeddingDimensions) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("提供商名称不能为空");
+        }
         this.name = name;
         if (apiKey != null && !apiKey.isBlank()) {
             this.apiKey = apiKey;

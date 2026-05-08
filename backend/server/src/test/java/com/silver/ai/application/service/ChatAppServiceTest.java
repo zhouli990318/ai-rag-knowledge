@@ -2,15 +2,14 @@ package com.silver.ai.application.service;
 
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.Conversation;
+import com.silver.ai.domain.chat.model.DomainMessage;
+import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.chat.port.ChatTraceRepository;
 import com.silver.ai.domain.chat.port.ConversationRepository;
 import com.silver.ai.domain.provider.port.ChatModelPort;
-import com.silver.ai.infrastructure.ai.ChatMemoryManager;
-import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.messages.UserMessage;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -25,20 +24,18 @@ class ChatAppServiceTest {
 
     private static final ChatOrchestrator.OrchestrationResult DEFAULT_RESULT =
             new ChatOrchestrator.OrchestrationResult(
-                    List.of(new UserMessage("hello")), List.of());
+                    List.of(new DomainMessage(MessageRole.USER, "hello")), List.of());
 
     private ChatAppService createService(ChatModelPort chatModelPort,
                                           ConversationRepository conversationRepository,
                                           ChatOrchestrator orchestrator) {
         ChatTraceRepository traceRepo = mock(ChatTraceRepository.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
 
         when(traceRepo.save(any())).thenReturn(Mono.empty());
 
         return new ChatAppService(chatModelPort, conversationRepository, orchestrator,
-                traceRepo, promptTemplateEngine, chatMemoryManager,
-                new SuggestionCache(), new ChatOrchestratorConfig());
+                traceRepo,
+                new SuggestionCache(null, new com.fasterxml.jackson.databind.ObjectMapper()), new ChatOrchestratorConfig());
     }
 
     @Test
@@ -54,7 +51,7 @@ class ChatAppServiceTest {
                 .thenAnswer(inv -> Mono.empty());
         when(orchestrator.orchestrate(any(), anyString(), any(), any()))
                 .thenReturn(Mono.just(DEFAULT_RESULT));
-        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
+        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn(Mono.just("reply"));
 
         String response = service.chat(null, 1L, "model-x", "hello", null, null, null, null).block();
 
@@ -110,7 +107,7 @@ class ChatAppServiceTest {
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(orchestrator.orchestrate(any(), anyString(), any(), any()))
                 .thenReturn(Mono.just(DEFAULT_RESULT));
-        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
+        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn(Mono.just("reply"));
 
         String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of(), null).block();
 
@@ -131,7 +128,7 @@ class ChatAppServiceTest {
                 .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
         when(orchestrator.orchestrate(any(), anyString(), any(), any()))
                 .thenReturn(Mono.just(DEFAULT_RESULT));
-        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn("reply");
+        when(chatModelPort.chat(eq(1L), eq("model-x"), any(), any())).thenReturn(Mono.just("reply"));
 
         // Orchestration pipeline handles missing KB gracefully — chat still completes
         String response = service.chat(7L, 1L, "model-x", "hello", null, null, List.of(), null).block();

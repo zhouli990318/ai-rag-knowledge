@@ -5,6 +5,8 @@ import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.model.DocumentChunk;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.model.RetrievalConfig;
+import com.silver.ai.domain.knowledge.model.VectorDocument;
+import com.silver.ai.domain.knowledge.model.VectorMetadataKeys;
 import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
@@ -34,7 +36,6 @@ import java.util.Set;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@SuppressWarnings("null")
 public class KnowledgeBaseAppService {
 
     private final KnowledgeBaseRepository knowledgeBaseRepository;
@@ -81,7 +82,7 @@ public class KnowledgeBaseAppService {
     public Mono<Void> deleteKnowledgeBase(Long id) {
         return documentRepository.findByKnowledgeBaseId(id).collectList()
                 .flatMap(documents -> Mono.fromCallable(() -> {
-                    vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(id));
+                    vectorStorePort.deleteByMetadata(VectorMetadataKeys.KNOWLEDGE_BASE_ID, String.valueOf(id));
                     return documents;
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .flatMap(documents -> Flux.fromIterable(documents)
@@ -96,7 +97,7 @@ public class KnowledgeBaseAppService {
     public Mono<Document> uploadDocument(Long knowledgeBaseId, FilePart file) {
         return getKnowledgeBase(knowledgeBaseId)
                 .flatMap(kb -> {
-                    String fileName = file.filename();
+                    String fileName = sanitizeFileName(file.filename());
                     validateFileType(fileName);
                     return DataBufferUtils.join(file.content())
                             .map(dataBuffer -> {
@@ -134,9 +135,7 @@ public class KnowledgeBaseAppService {
                                 .flatMap(kb -> Mono.using(
                                         () -> new ByteArrayInputStream(fileBytes),
                                         is -> documentProcessingService.processDocument(currentDocument, is, chunkStrategy),
-                                        is -> {
-                                            try { is.close(); } catch (Exception ignored) {}
-                                        }
+                                        is -> { /* ByteArrayInputStream.close() is a no-op */ }
                                 ))
                 )
                 .onErrorResume(e -> {
@@ -157,7 +156,7 @@ public class KnowledgeBaseAppService {
                         return Mono.error(new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND));
                     }
                     return Mono.fromCallable(() -> {
-                                vectorStorePort.deleteByMetadata("document_id", String.valueOf(documentId));
+                                vectorStorePort.deleteByMetadata(VectorMetadataKeys.DOCUMENT_ID, String.valueOf(documentId));
                                 return true;
                             }).subscribeOn(Schedulers.boundedElastic())
                             .then(documentChunkRepository.deleteByDocumentId(documentId))
@@ -174,7 +173,7 @@ public class KnowledgeBaseAppService {
     public Mono<Void> rebuildVectors(Long knowledgeBaseId) {
         return getKnowledgeBase(knowledgeBaseId)
                 .flatMap(kb -> Mono.fromCallable(() -> {
-                            vectorStorePort.deleteByMetadata("knowledge_base_id", String.valueOf(knowledgeBaseId));
+                            vectorStorePort.deleteByMetadata(VectorMetadataKeys.KNOWLEDGE_BASE_ID, String.valueOf(knowledgeBaseId));
                             return kb;
                         }).subscribeOn(Schedulers.boundedElastic())
                         .flatMap(ignored ->
@@ -188,6 +187,7 @@ public class KnowledgeBaseAppService {
     // ===== Git Import =====
 
     public Mono<Void> importGitRepository(Long knowledgeBaseId, String repoUrl, String userName, String token) {
+        validateGitUrl(repoUrl);
         return getKnowledgeBase(knowledgeBaseId)
                 .flatMap(kb -> Mono.fromCallable(() -> {
                     Path tempDir = Files.createTempDirectory("git-import-");
@@ -213,7 +213,7 @@ public class KnowledgeBaseAppService {
 
     // ===== Search =====
 
-    public Mono<List<org.springframework.ai.document.Document>> searchKnowledge(Long knowledgeBaseId, String query, int topK) {
+    public Mono<List<VectorDocument>> searchKnowledge(Long knowledgeBaseId, String query, int topK) {
         return getKnowledgeBase(knowledgeBaseId)
                 .flatMap(kb -> Mono.fromCallable(() -> retrievalDomainService.search(kb, query, topK))
                         .subscribeOn(Schedulers.boundedElastic()));
@@ -266,10 +266,10 @@ public class KnowledgeBaseAppService {
                         return documentRepository.save(document).then();
                     }
                     return Mono.fromCallable(() -> {
-                                vectorStorePort.deleteByMetadata("document_id", String.valueOf(document.getId()));
-                                List<org.springframework.ai.document.Document> aiDocs = chunks.stream()
-                                        .map(this::toAiDocument).toList();
-                                vectorStorePort.addDocuments(aiDocs);
+                                vectorStorePort.deleteByMetadata(VectorMetadataKeys.DOCUMENT_ID, String.valueOf(document.getId()));
+                                List<VectorDocument> vectorDocs = chunks.stream()
+                                        .map(this::toVectorDocument).toList();
+                                vectorStorePort.addDocuments(vectorDocs);
                                 return chunks.size();
                             }).subscribeOn(Schedulers.boundedElastic())
                             .flatMap(chunkCount -> {
@@ -296,10 +296,8 @@ public class KnowledgeBaseAppService {
                 .then();
     }
 
-    private org.springframework.ai.document.Document toAiDocument(DocumentChunk chunk) {
-        var aiDoc = new org.springframework.ai.document.Document(chunk.getContent());
-        aiDoc.getMetadata().putAll(chunk.getMetadata());
-        return aiDoc;
+    private VectorDocument toVectorDocument(DocumentChunk chunk) {
+        return new VectorDocument(chunk.getContent(), chunk.getMetadata());
     }
 
     private boolean isCodeFile(String ext) {
@@ -313,6 +311,30 @@ public class KnowledgeBaseAppService {
         if (!SUPPORTED_EXTENSIONS.contains(ext) && !isCodeFile(ext)) {
             throw new BusinessException(ErrorCode.UNSUPPORTED_FILE_TYPE, ext);
         }
+    }
+
+    /**
+     * 校验 Git 仓库 URL，仅允许 http/https 协议，防止命令注入和本地文件访问。
+     */
+    private void validateGitUrl(String repoUrl) {
+        if (repoUrl == null || repoUrl.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "仓库地址不能为空");
+        }
+        String trimmed = repoUrl.trim().toLowerCase();
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "仓库地址必须以 http:// 或 https:// 开头");
+        }
+    }
+
+    /**
+     * 清理文件名中的路径遍历字符，防止目录穿越。
+     */
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null) return "unknown";
+        // 去掉路径分隔符，只保留文件名部分
+        String sanitized = fileName.replace("..", "").replace("/", "").replace("\\", "");
+        if (sanitized.isBlank()) return "unknown";
+        return sanitized;
     }
 
     private String getFileExtension(String fileName) {

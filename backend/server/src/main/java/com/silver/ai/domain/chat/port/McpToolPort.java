@@ -1,7 +1,7 @@
 package com.silver.ai.domain.chat.port;
 
-import com.silver.ai.infrastructure.mcp.McpToolDefinition;
-import org.springframework.ai.tool.ToolCallback;
+import com.silver.ai.domain.chat.model.ToolCallbackHandle;
+import com.silver.ai.domain.chat.model.ToolDefinition;
 
 import java.util.List;
 
@@ -14,20 +14,20 @@ public interface McpToolPort {
     /**
      * 获取指定 MCP 源的工具回调列表
      */
-    List<ToolCallback> getToolCallbacks(List<Long> sourceIds);
+    List<ToolCallbackHandle> getToolCallbacks(List<Long> sourceIds);
 
     /**
      * 获取所有活跃 MCP 源的工具回调列表
      */
-    List<ToolCallback> getAllActiveToolCallbacks();
+    List<ToolCallbackHandle> getAllActiveToolCallbacks();
 
     /**
      * 获取所有活跃 MCP 源的原始工具定义（用于索引）
      */
-    List<McpToolDefinition> getAllActiveToolDefinitions();
+    List<ToolDefinition> getAllActiveToolDefinitions();
 
     /**
      * 按工具 ID 列表获取对应的工具回调（语义检索后精确转换）
      */
-    List<ToolCallback> getToolCallbacksByToolIds(List<Long> toolIds);
+    List<ToolCallbackHandle> getToolCallbacksByToolIds(List<Long> toolIds);
 }

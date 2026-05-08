@@ -1,5 +1,6 @@
 package com.silver.ai.infrastructure.vectorstore;
 
+import com.silver.ai.domain.knowledge.model.VectorDocument;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
@@ -24,13 +25,16 @@ public class PgVectorStoreAdapter implements VectorStorePort {
     private final VectorStore vectorStore;
 
     @Override
-    public void addDocuments(List<Document> documents) {
+    public void addDocuments(List<VectorDocument> documents) {
         try {
             if (documents == null || documents.isEmpty()) {
                 throw new BusinessException(ErrorCode.INVALID_PARAMETER, "待写入向量的文档不能为空");
             }
-            vectorStore.add(documents);
+            List<Document> aiDocs = documents.stream().map(this::toAiDocument).toList();
+            vectorStore.add(aiDocs);
             log.debug("Added {} documents to vector store", documents.size());
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to add documents to vector store", e);
             throw new BusinessException(ErrorCode.VECTOR_STORE_ERROR, e.getMessage(), e);
@@ -38,7 +42,7 @@ public class PgVectorStoreAdapter implements VectorStorePort {
     }
 
     @Override
-    public List<Document> similaritySearch(String query, int topK, double threshold, Map<String, Object> filterMetadata) {
+    public List<VectorDocument> similaritySearch(String query, int topK, double threshold, Map<String, Object> filterMetadata) {
         try {
             var requestBuilder = SearchRequest.builder()
                     .query(query)
@@ -52,7 +56,8 @@ public class PgVectorStoreAdapter implements VectorStorePort {
                 }
             }
 
-            return vectorStore.similaritySearch(requestBuilder.build());
+            return vectorStore.similaritySearch(requestBuilder.build()).stream()
+                    .map(this::toVectorDocument).toList();
         } catch (Exception e) {
             log.error("Similarity search failed", e);
             throw new BusinessException(ErrorCode.VECTOR_STORE_ERROR, e.getMessage(), e);
@@ -87,5 +92,15 @@ public class PgVectorStoreAdapter implements VectorStorePort {
             combined = combined == null ? next : builder.and(combined, next);
         }
         return combined != null ? combined.build() : null;
+    }
+
+    private Document toAiDocument(VectorDocument doc) {
+        var aiDoc = new Document(doc.content());
+        aiDoc.getMetadata().putAll(doc.metadata());
+        return aiDoc;
+    }
+
+    private VectorDocument toVectorDocument(Document doc) {
+        return new VectorDocument(doc.getText(), doc.getMetadata());
     }
 }

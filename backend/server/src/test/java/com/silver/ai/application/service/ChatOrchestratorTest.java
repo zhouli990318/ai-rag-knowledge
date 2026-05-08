@@ -3,20 +3,21 @@ package com.silver.ai.application.service;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.ChatTraceContext;
 import com.silver.ai.domain.chat.model.Conversation;
+import com.silver.ai.domain.chat.model.DomainMessage;
 import com.silver.ai.domain.chat.model.IntentResult;
+import com.silver.ai.domain.chat.model.MessageRole;
 import com.silver.ai.domain.chat.model.PromptTemplates;
 import com.silver.ai.domain.chat.model.ToolMode;
+import com.silver.ai.domain.chat.port.ChatMemoryPort;
 import com.silver.ai.domain.chat.service.IntentDecisionDomainService;
 import com.silver.ai.domain.chat.service.QueryPlanningDomainService;
 import com.silver.ai.domain.chat.service.ToolRoutingDomainService;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
+import com.silver.ai.domain.knowledge.port.PromptRendererPort;
 import com.silver.ai.domain.knowledge.service.MultiPathRetrievalDomainService;
-import com.silver.ai.infrastructure.ai.ChatMemoryManager;
-import com.silver.ai.infrastructure.ai.PromptTemplateEngine;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.chat.messages.UserMessage;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
@@ -38,8 +39,8 @@ class ChatOrchestratorTest {
     void orchestrateShouldOffloadBlockingRetrievalAndToolRouting() {
         KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
         MultiPathRetrievalDomainService multiPathRetrieval = mock(MultiPathRetrievalDomainService.class);
-        PromptTemplateEngine promptTemplateEngine = mock(PromptTemplateEngine.class);
-        ChatMemoryManager chatMemoryManager = mock(ChatMemoryManager.class);
+        PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
+        ChatMemoryPort chatMemory = mock(ChatMemoryPort.class);
         IntentDecisionDomainService intentDecision = mock(IntentDecisionDomainService.class);
         QueryPlanningDomainService queryPlanning = mock(QueryPlanningDomainService.class);
         ToolRoutingDomainService toolRouting = mock(ToolRoutingDomainService.class);
@@ -48,8 +49,8 @@ class ChatOrchestratorTest {
         ChatOrchestrator orchestrator = new ChatOrchestrator(
                 knowledgeBaseRepository,
                 multiPathRetrieval,
-                promptTemplateEngine,
-                chatMemoryManager,
+                promptRenderer,
+                chatMemory,
                 intentDecision,
                 queryPlanning,
                 toolRouting,
@@ -73,7 +74,7 @@ class ChatOrchestratorTest {
         AtomicReference<String> retrievalThread = new AtomicReference<>();
         AtomicReference<String> toolThread = new AtomicReference<>();
 
-        when(chatMemoryManager.extractRecentContext(eq(conversation), eq(config.getRewriteContextRounds())))
+        when(chatMemory.extractRecentContext(eq(conversation), eq(config.getRewriteContextRounds())))
                 .thenReturn(List.of());
         when(intentDecision.detect(eq("hello"), anyList())).thenReturn(Mono.just(intentResult));
         when(queryPlanning.plan(eq("hello"), anyList())).thenReturn(Mono.just(queryPlan));
@@ -91,9 +92,9 @@ class ChatOrchestratorTest {
                     toolThread.set(Thread.currentThread().getName());
                     return ToolRoutingDomainService.ToolDecision.noTool();
                 });
-        when(promptTemplateEngine.render(PromptTemplates.GENERAL_SYSTEM)).thenReturn("system");
-        when(chatMemoryManager.buildMessages(eq(conversation), anyString(), eq(config.getMemoryFullRounds())))
-                .thenReturn(List.of(new UserMessage("hello")));
+        when(promptRenderer.render(PromptTemplates.GENERAL_SYSTEM)).thenReturn("system");
+        when(chatMemory.buildMessages(eq(conversation), anyString(), eq(config.getMemoryFullRounds())))
+                .thenReturn(List.of(new DomainMessage(MessageRole.USER, "hello")));
 
         StepVerifier.create(Mono.defer(() -> orchestrator.orchestrate(conversation, "hello", null, trace))
                         .subscribeOn(Schedulers.parallel()))

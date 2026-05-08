@@ -10,7 +10,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -23,7 +22,6 @@ import java.util.Map;
  * 工具调用领域服务 — 根据 ToolMapping 路由并执行实际 API 调用
  */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class ToolInvocationDomainService {
 
