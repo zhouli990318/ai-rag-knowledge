@@ -6,20 +6,14 @@ import {
 } from '@mui/material';
 import { ExpandMoreOutlined as ExpandMore, ExpandLessOutlined as ExpandLess, CheckCircleOutlined, ErrorOutlineOutlined } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
-import { traceApi, ChatTrace, TraceSpan } from '../api/orchestrationApi';
-import { chatApi } from '../api/chatApi';
-import { Conversation } from '../api/types';
-
-const serifFont = '"Noto Serif SC", "Source Han Serif SC", serif';
-
-const glassCard = {
-  borderRadius: '12px',
-  backgroundColor: 'rgba(255,255,255,0.72)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-  border: '1px solid rgba(224,221,216,0.5)',
-  boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-};
+import { traceApi } from '@/entities/orchestration/api/orchestrationApi';
+import type { ChatTrace, TraceSpan } from '@/entities/orchestration/model/types';
+import { chatApi } from '@/entities/chat/api/chatApi';
+import type { Conversation } from '@/entities/chat/model/types';
+import { serifFont } from '@/shared/theme/ThemeProvider';
+import { getGlassCard } from '@/shared/theme/tokens';
+import { traceStageColor, ui } from '@/shared/theme/semanticColors';
+import { useThemeStore } from '@/shared/stores/themeStore';
 
 const stageLabels: Record<string, string> = {
   REWRITE: '查询重写',
@@ -31,27 +25,20 @@ const stageLabels: Record<string, string> = {
   PERSIST: '持久化',
 };
 
-const stageColor = (stage: string, success: boolean): string => {
-  if (!success) return '#C84B31';
-  const map: Record<string, string> = {
-    REWRITE: '#4A7FB5', INTENT: '#4A7FB5', RETRIEVAL: '#2C6E49',
-    RERANK: '#4A7FB5', TOOL: '#C89B3C', GENERATION: '#2C6E49', PERSIST: '#8B8B8B',
-  };
-  return map[stage] || '#4A4A4A';
-};
+const stageColor = traceStageColor;
 
 function SpanRow({ span }: { span: TraceSpan }) {
   const [open, setOpen] = useState(false);
   const color = stageColor(span.stage, span.success);
   return (
     <>
-      <TableRow sx={{ '&:hover': { backgroundColor: 'rgba(245,243,238,0.5)' } }}>
+      <TableRow sx={{ '&:hover': { backgroundColor: ui.hoverBg } }}>
         <TableCell>
           <Chip label={stageLabels[span.stage] || span.stage} size="small"
             sx={{ borderColor: color, color, fontWeight: 500 }} variant="outlined" />
         </TableCell>
         <TableCell>
-          <Typography sx={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: span.durationMs > 500 ? '#C84B31' : '#2C2C2C' }}>
+          <Typography sx={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: span.durationMs > 500 ? ui.accentRed : ui.textPrimary }}>
             {span.durationMs}ms
           </Typography>
         </TableCell>
@@ -60,7 +47,7 @@ function SpanRow({ span }: { span: TraceSpan }) {
             display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.25,
             borderRadius: '4px',
             backgroundColor: span.success ? 'rgba(44,110,73,0.1)' : 'rgba(200,75,49,0.1)',
-            color: span.success ? '#2C6E49' : '#C84B31',
+            color: span.success ? ui.textPrimary : ui.accentRed,
             fontSize: 12, fontWeight: 500,
           }}>
             {span.success
@@ -71,7 +58,7 @@ function SpanRow({ span }: { span: TraceSpan }) {
         </TableCell>
         <TableCell>
           {Object.keys(span.attributes || {}).length > 0 && (
-            <IconButton size="small" onClick={() => setOpen(!open)} sx={{ color: '#8B8B8B' }}>
+            <IconButton size="small" onClick={() => setOpen(!open)} sx={{ color: ui.textMuted }}>
               {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
             </IconButton>
           )}
@@ -81,14 +68,14 @@ function SpanRow({ span }: { span: TraceSpan }) {
         <TableRow>
           <TableCell colSpan={4} sx={{ py: 0 }}>
             <Collapse in={open}>
-              <Box sx={{ p: 1.5, backgroundColor: 'rgba(245,243,238,0.5)', borderRadius: '8px', my: 0.5 }}>
+              <Box sx={{ p: 1.5, backgroundColor: ui.hoverBg, borderRadius: '8px', my: 0.5 }}>
                 {Object.entries(span.attributes || {}).map(([k, v]) => (
-                  <Typography key={k} variant="caption" display="block" sx={{ color: '#4A4A4A', lineHeight: 1.8 }}>
-                    <strong style={{ color: '#2C2C2C' }}>{k}:</strong> {v}
+                  <Typography key={k} variant="caption" display="block" sx={{ color: ui.textSecondary, lineHeight: 1.8 }}>
+                    <strong style={{ color: ui.textPrimary }}>{k}:</strong> {v}
                   </Typography>
                 ))}
                 {span.errorMessage && (
-                  <Typography variant="caption" sx={{ color: '#C84B31' }}>
+                  <Typography variant="caption" sx={{ color: ui.accentRed }}>
                     <strong>Error:</strong> {span.errorMessage}
                   </Typography>
                 )}
@@ -102,6 +89,8 @@ function SpanRow({ span }: { span: TraceSpan }) {
 }
 
 export default function TracePage() {
+  const mode = useThemeStore((s) => s.mode);
+  const glassCard = getGlassCard(mode);
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [traces, setTraces] = useState<ChatTrace[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,11 +106,10 @@ export default function TracePage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await traceApi.getByConversation(convId);
-      const data = res.data.data || [];
-      setTraces(data);
+      const data = await traceApi.getByConversation(convId);
+      setTraces(data || []);
       // 默认展开最新 trace
-      if (data.length > 0) setExpandedTrace(data[0].traceId);
+      if (data && data.length > 0) setExpandedTrace(data[0].traceId);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -139,7 +127,7 @@ export default function TracePage() {
 
   return (
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-      <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C', mb: 2.5 }}>
+      <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: ui.textPrimary, mb: 2.5 }}>
         墨迹溯源
       </Typography>
 
@@ -163,11 +151,11 @@ export default function TracePage() {
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
       ) : !selectedConv ? (
         <Box sx={{ ...glassCard, p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: '#8B8B8B', fontFamily: serifFont }}>选择一个会话查看其全链路追踪</Typography>
+          <Typography sx={{ color: ui.textMuted, fontFamily: serifFont }}>选择一个会话查看其全链路追踪</Typography>
         </Box>
       ) : traces.length === 0 ? (
         <Box sx={{ ...glassCard, p: 4, textAlign: 'center' }}>
-          <Typography sx={{ color: '#8B8B8B', fontFamily: serifFont }}>该会话暂无追踪记录</Typography>
+          <Typography sx={{ color: ui.textMuted, fontFamily: serifFont }}>该会话暂无追踪记录</Typography>
         </Box>
       ) : (
         <Stack spacing={2}>
@@ -175,15 +163,15 @@ export default function TracePage() {
             <Box key={trace.traceId} sx={{ ...glassCard, p: 2.5 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                 <Box>
-                  <Typography sx={{ fontFamily: 'monospace', fontSize: 13, color: '#4A4A4A', letterSpacing: 0.5 }}>
+                  <Typography sx={{ fontFamily: 'monospace', fontSize: 13, color: ui.textSecondary, letterSpacing: 0.5 }}>
                     {trace.traceId}
                   </Typography>
-                  <Typography sx={{ fontSize: 12, color: '#8B8B8B', mt: 0.25 }}>
-                    总耗时 <strong style={{ color: '#C84B31' }}>{trace.totalDurationMs}ms</strong> · {new Date(trace.createdAt).toLocaleString()}
+                  <Typography sx={{ fontSize: 12, color: ui.textMuted, mt: 0.25 }}>
+                    总耗时 <strong style={{ color: ui.accentRed }}>{trace.totalDurationMs}ms</strong> · {new Date(trace.createdAt).toLocaleString()}
                   </Typography>
                 </Box>
                 <IconButton onClick={() => setExpandedTrace(expandedTrace === trace.traceId ? null : trace.traceId)}
-                  sx={{ color: '#8B8B8B' }}>
+                  sx={{ color: ui.textMuted }}>
                   {expandedTrace === trace.traceId ? <ExpandLess /> : <ExpandMore />}
                 </IconButton>
               </Box>
@@ -208,10 +196,10 @@ export default function TracePage() {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>阶段</TableCell>
-                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>耗时</TableCell>
-                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>状态</TableCell>
-                        <TableCell sx={{ fontWeight: 600, color: '#4A4A4A', fontSize: 13 }}>详情</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: ui.textSecondary, fontSize: 13 }}>阶段</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: ui.textSecondary, fontSize: 13 }}>耗时</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: ui.textSecondary, fontSize: 13 }}>状态</TableCell>
+                        <TableCell sx={{ fontWeight: 600, color: ui.textSecondary, fontSize: 13 }}>详情</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>

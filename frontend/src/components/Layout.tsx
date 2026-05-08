@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Box, Typography, useMediaQuery, useTheme,
   BottomNavigation, BottomNavigationAction,
@@ -27,13 +28,13 @@ import {
   VisibilityOutlined as ImmersiveOffIcon,
   CloseOutlined as CloseIcon,
 } from '@mui/icons-material';
-import { InkLogo } from './ink';
-import InkBreadcrumb from './ink/InkBreadcrumb';
-import ChatConfig from '../pages/chat/ChatConfig';
-import { ink, radius, serifFont, sansFont, getInk, useInk } from '../theme/ThemeProvider';
-import { useThemeStore } from '../stores/themeStore';
-import sidebarInkPainting from '../assets/images/sidebar-ink-painting.webp';
-import mainInkLandscape from '../assets/images/main-ink-landscape.webp';
+import { InkLogo } from '@/shared/ui/ink';
+import { InkBreadcrumb } from '@/shared/ui/ink';
+import { ChatConfig } from '@/widgets/chat';
+import { ink, radius, serifFont, sansFont, getInk, useInk } from '@/shared/theme/ThemeProvider';
+import { useThemeStore } from '@/shared/stores/themeStore';
+import sidebarInkPainting from '@/shared/assets/images/sidebar-ink-painting.webp';
+import mainInkLandscape from '@/shared/assets/images/main-ink-landscape.webp';
 
 /* ── 导航菜单配置 ── */
 const primaryNav = [
@@ -493,26 +494,44 @@ export default function Layout() {
               </Box>
             );
           })()}
-          <Outlet />
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.15 }}
+            style={{ display: 'contents' }}
+          >
+            <Outlet />
+          </motion.div>
         </Box>
 
         {/* 右侧配置面板（仅对话页） */}
-        {isChat && configOpen && (
-          <Box sx={{
-            width: PANEL_WIDTH, flexShrink: 0,
-            p: 1.5, pt: 7,
-            height: '100%', overflow: 'auto',
-            position: 'relative', zIndex: 1,
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 0.5 }}>
-              <Typography variant="h6" sx={{ fontFamily: serifFont, fontSize: 16 }}>对话配置</Typography>
-              <IconButton size="small" onClick={() => setConfigOpen(false)} sx={{ color: di.lightGray }}>
-                <CloseIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </Box>
-            <ChatConfig />
-          </Box>
-        )}
+        <AnimatePresence initial={false}>
+          {isChat && configOpen && (
+            <motion.div
+              key="config-panel"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: PANEL_WIDTH, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+              style={{ overflow: 'hidden', flexShrink: 0, height: '100%', position: 'relative', zIndex: 1 }}
+            >
+              <Box sx={{
+                width: PANEL_WIDTH,
+                p: 1.5, pt: 7,
+                height: '100%', overflow: 'auto',
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, px: 0.5 }}>
+                  <Typography variant="h6" sx={{ fontFamily: serifFont, fontSize: 16 }}>对话配置</Typography>
+                  <IconButton size="small" onClick={() => setConfigOpen(false)} sx={{ color: di.lightGray }}>
+                    <CloseIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </Box>
+                <ChatConfig />
+              </Box>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Box>
     </Box>
   );

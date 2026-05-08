@@ -1,31 +1,30 @@
 import {
   Box, Typography, Stack, TextField, FormControlLabel,
-  Button, Alert, Snackbar, MenuItem, Select, InputLabel, FormControl,
+  Button, Alert, Snackbar, MenuItem, Select, FormControl,
   CircularProgress, Grid, Tabs, Tab,
 } from '@mui/material';
-import { InkSwitch } from '../components/ink';
+import { InkSwitch } from '@/shared/ui/ink';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { settingsApi } from '../api/settingsApi';
-import { providerApi } from '../api/providerApi';
-import { SystemSettings } from '../api/types';
-import { useInk } from '../theme/ThemeProvider';
+import { settingsApi } from '@/entities/settings/api/settingsApi';
+import { providerApi } from '@/entities/provider/api/providerApi';
+import type { SystemSettings } from '@/entities/settings/model/types';
+import { useInk, serifFont, radius } from '@/shared/theme/ThemeProvider';
 import { useState, useEffect } from 'react';
-const serifFont = '"Noto Serif SC", "Source Han Serif SC", serif';
-
-const getSolidCard = (isDark: boolean) => ({
-  p: 2.5,
-  borderRadius: '12px',
-  backgroundColor: isDark ? '#2A2826' : '#FFFFFF',
-  border: `1px solid ${isDark ? '#3A3A3A' : '#E5E5E5'}`,
-  boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-});
 
 const TAB_KEY = 'system-settings-tab';
 
 export default function SystemSettingsPage() {
   const queryClient = useQueryClient();
   const di = useInk();
-  const solidCard = getSolidCard(di.cream === '#1A1A1A');
+  const cardSx = {
+    p: 2.5,
+    borderRadius: `${radius.md + 2}px`,
+    backgroundColor: di.glassBg,
+    backdropFilter: 'blur(12px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+    border: `1px solid ${di.glassBorder}`,
+    boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
+  };
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem(TAB_KEY);
     return saved ? Number(saved) : 0;
@@ -74,19 +73,23 @@ export default function SystemSettingsPage() {
     setForm((prev) => prev ? { ...prev, [key]: value } : prev);
 
   const numField = (label: string, key: keyof SystemSettings, props?: Record<string, unknown>) => (
-    <TextField
-      label={label} type="number" size="small" fullWidth
-      InputLabelProps={{ shrink: true }}
-      value={form[key]}
-      onChange={(e) => set(key, Number(e.target.value) as never)}
-      {...props}
-    />
+    <Box>
+      <Typography sx={{ fontSize: 13, color: di.lightGray, mb: 0.5 }}>{label}</Typography>
+      <TextField
+        type="number" size="small" fullWidth
+        value={form[key]}
+        onChange={(e) => set(key, Number(e.target.value) as never)}
+        {...props}
+      />
+    </Box>
   );
 
   const switchField = (label: string, key: keyof SystemSettings) => (
     <FormControlLabel
       control={<InkSwitch checked={form[key] as boolean} onChange={(_, v) => set(key, v as never)} />}
-      label={<Typography sx={{ fontSize: 14 }}>{label}</Typography>}
+      label={<Typography sx={{ fontSize: 14, color: di.black }}>{label}</Typography>}
+      sx={{ ml: 0, mr: 0, justifyContent: 'space-between', width: '100%' }}
+      labelPlacement="start"
     />
   );
 
@@ -138,7 +141,7 @@ export default function SystemSettingsPage() {
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('会话记忆')}
                 <Stack spacing={1.5}>
                   {numField('完整轮数', 'memoryFullRounds', { inputProps: { min: 1 } })}
@@ -150,7 +153,7 @@ export default function SystemSettingsPage() {
           </Grid>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('查询重写')}
                 <Stack spacing={1.5}>
                   {switchField('启用查询重写', 'rewriteEnabled')}
@@ -167,7 +170,7 @@ export default function SystemSettingsPage() {
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('模型路由')}
                 <Stack spacing={1.5}>
                   {switchField('启用模型降级', 'modelFallbackEnabled')}
@@ -179,7 +182,7 @@ export default function SystemSettingsPage() {
           </Grid>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('意图识别')}
                 <Stack spacing={1.5}>
                   {switchField('启用意图识别', 'intentEnabled')}
@@ -196,7 +199,7 @@ export default function SystemSettingsPage() {
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('检索')}
                 <Stack spacing={1.5}>
                   {switchField('启用多路召回', 'multiPathRetrievalEnabled')}
@@ -205,7 +208,7 @@ export default function SystemSettingsPage() {
                   {numField('去重前缀长度', 'deduplicatePrefixLength', { inputProps: { min: 0 } })}
                 </Stack>
               </Box>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('链路追踪')}
                 <Stack spacing={1.5}>
                   {switchField('启用追踪', 'traceEnabled')}
@@ -216,7 +219,7 @@ export default function SystemSettingsPage() {
           </Grid>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('工具调用')}
                 <Stack spacing={1.5}>
                   {numField('自动执行置信度阈值', 'toolAutoExecuteThreshold', { inputProps: { step: 0.1, min: 0, max: 1 } })}
@@ -226,29 +229,32 @@ export default function SystemSettingsPage() {
                   {switchField('启用工具降级', 'toolFallbackEnabled')}
                 </Stack>
               </Box>
-              <Box sx={solidCard}>
+              <Box sx={cardSx}>
                 {sectionTitle('辅助任务')}
                 <Stack spacing={1.5}>
-                  <FormControl size="small" fullWidth>
-                    <InputLabel>辅助 Provider</InputLabel>
-                    <Select
-                      label="辅助 Provider"
-                      value={form.auxiliaryProviderId ?? ''}
-                      onChange={(e) => set('auxiliaryProviderId', e.target.value === '' ? null : Number(e.target.value))}
-                    >
-                      <MenuItem value="">跟随对话 Provider</MenuItem>
-                      {providers?.filter((p) => p.enabled).map((p) => (
-                        <MenuItem key={p.id} value={p.id}>{p.name} ({p.defaultModel})</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <TextField
-                    label="推荐问题提示词"
-                    multiline rows={5} size="small" fullWidth
-                    value={form.suggestionPrompt}
-                    onChange={(e) => set('suggestionPrompt', e.target.value)}
-                    helperText="使用 {conversation} 作为对话上下文占位符"
-                  />
+                  <Box>
+                    <Typography sx={{ fontSize: 13, color: di.lightGray, mb: 0.5 }}>辅助 Provider</Typography>
+                    <FormControl size="small" fullWidth>
+                      <Select
+                        value={form.auxiliaryProviderId ?? ''}
+                        onChange={(e) => set('auxiliaryProviderId', e.target.value === '' ? null : Number(e.target.value))}
+                      >
+                        <MenuItem value="">跟随对话 Provider</MenuItem>
+                        {providers?.filter((p) => p.enabled).map((p) => (
+                          <MenuItem key={p.id} value={p.id}>{p.name} ({p.defaultModel})</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontSize: 13, color: di.lightGray, mb: 0.5 }}>推荐问题提示词</Typography>
+                    <TextField
+                      multiline rows={5} size="small" fullWidth
+                      value={form.suggestionPrompt}
+                      onChange={(e) => set('suggestionPrompt', e.target.value)}
+                      helperText="使用 {conversation} 作为对话上下文占位符"
+                    />
+                  </Box>
                 </Stack>
               </Box>
             </Stack>

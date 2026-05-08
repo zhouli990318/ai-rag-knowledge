@@ -10,30 +10,18 @@ import {
   AddOutlined as Add, DeleteOutlined as Delete,
   AccountTreeOutlined as AccountTreeIcon,
 } from '@mui/icons-material';
-import { intentTreeApi, IntentNode } from '../api/orchestrationApi';
-import { InkEmptyState } from '../components/ink';
-
-const serifFont = '"Noto Serif SC", "Source Han Serif SC", serif';
-
-const glassCard = {
-  borderRadius: '12px',
-  backgroundColor: 'rgba(255,255,255,0.72)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-  border: '1px solid rgba(224,221,216,0.5)',
-  boxShadow: '0 2px 12px rgba(0,0,0,0.04)',
-};
-
-const routingColors: Record<string, { bg: string; color: string; border: string }> = {
-  RETRIEVAL: { bg: 'rgba(91,112,101,0.1)', color: '#5B7065', border: '#5B7065' },
-  TOOL:      { bg: 'rgba(139,105,20,0.1)', color: '#8B6914', border: '#8B6914' },
-  DIRECT:    { bg: 'rgba(139,139,139,0.1)', color: '#8B8B8B', border: '#8B8B8B' },
-  HYBRID:    { bg: 'rgba(74,111,165,0.1)', color: '#4A6FA5', border: '#4A6FA5' },
-};
-
+import { intentTreeApi } from '@/entities/orchestration/api/orchestrationApi';
+import type { IntentNode } from '@/entities/orchestration/model/types';
+import { InkEmptyState } from '@/shared/ui/ink';
+import { serifFont } from '@/shared/theme/ThemeProvider';
+import { getGlassCard } from '@/shared/theme/tokens';
+import { routingColors, ui } from '@/shared/theme/semanticColors';
+import { useThemeStore } from '@/shared/stores/themeStore';
 const levelLabels = ['领域', '类目', '话题'];
 
 export default function IntentTreePage() {
+  const mode = useThemeStore((s) => s.mode);
+  const glassCard = getGlassCard(mode);
   const [nodes, setNodes] = useState<IntentNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +34,8 @@ export default function IntentTreePage() {
   const loadTree = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await intentTreeApi.getTree();
-      setNodes(res.data.data || []);
+      const data = await intentTreeApi.getTree();
+      setNodes(data || []);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -95,13 +83,13 @@ export default function IntentTreePage() {
         <Box sx={{
           display: 'flex', alignItems: 'center', gap: 1, py: 1, px: 2,
           ml: depth * 2.5,
-          borderLeft: depth > 0 ? '2px solid rgba(224,221,216,0.6)' : 'none',
-          '&:hover': { backgroundColor: 'rgba(245,243,238,0.5)', borderRadius: '0 8px 8px 0' },
+          borderLeft: depth > 0 ? `2px solid ${ui.tableBorder}` : 'none',
+          '&:hover': { backgroundColor: ui.hoverBg, borderRadius: '0 8px 8px 0' },
           transition: 'background-color 150ms',
         }}>
           {/* 展开/折叠按钮 */}
           {hasChildren ? (
-            <IconButton size="small" onClick={() => toggleCollapse(node.id)} sx={{ color: '#8B8B8B', width: 28, height: 28 }}>
+            <IconButton size="small" onClick={() => toggleCollapse(node.id)} sx={{ color: ui.textMuted, width: 28, height: 28 }}>
               {isCollapsed ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
             </IconButton>
           ) : (
@@ -110,7 +98,7 @@ export default function IntentTreePage() {
 
           {/* 层级标签 */}
           <Typography sx={{
-            fontSize: 11, color: '#8B8B8B', fontWeight: 500,
+            fontSize: 11, color: ui.textMuted, fontWeight: 500,
             backgroundColor: 'rgba(224,221,216,0.3)', px: 0.8, py: 0.1, borderRadius: '3px',
             minWidth: 32, textAlign: 'center',
           }}>
@@ -118,7 +106,7 @@ export default function IntentTreePage() {
           </Typography>
 
           {/* 节点名称 */}
-          <Typography sx={{ fontWeight: 600, fontSize: 14, color: '#2C2C2C', flex: 1 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 14, color: ui.textPrimary, flex: 1 }}>
             {node.name}
           </Typography>
 
@@ -135,7 +123,7 @@ export default function IntentTreePage() {
           <Box sx={{
             display: 'inline-flex', px: 0.8, py: 0.2, borderRadius: '4px',
             backgroundColor: node.status === 'PUBLISHED' ? 'rgba(44,110,73,0.1)' : 'rgba(139,139,139,0.1)',
-            color: node.status === 'PUBLISHED' ? '#2C6E49' : '#8B8B8B',
+            color: node.status === 'PUBLISHED' ? ui.textPrimary : ui.textMuted,
             fontSize: 11, fontWeight: 500,
           }}>
             {node.status === 'PUBLISHED' ? '已发布' : '草稿'}
@@ -143,14 +131,14 @@ export default function IntentTreePage() {
 
           {/* 描述 */}
           {node.description && (
-            <Typography sx={{ fontSize: 12, color: '#8B8B8B', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Typography sx={{ fontSize: 12, color: ui.textMuted, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {node.description}
             </Typography>
           )}
 
           {/* 删除 */}
           <IconButton size="small" onClick={() => handleDelete(node.id)}
-            sx={{ color: '#8B8B8B', '&:hover': { color: '#C84B31' }, width: 28, height: 28 }}>
+            sx={{ color: ui.textMuted, '&:hover': { color: ui.accentRed }, width: 28, height: 28 }}>
             <Delete fontSize="small" />
           </IconButton>
         </Box>
@@ -170,7 +158,7 @@ export default function IntentTreePage() {
   return (
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: '#2C2C2C' }}>
+        <Typography variant="h5" sx={{ fontFamily: serifFont, fontWeight: 700, letterSpacing: 2, color: ui.textPrimary }}>
           意图决策
         </Typography>
         <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}

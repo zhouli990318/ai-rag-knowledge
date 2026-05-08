@@ -4,8 +4,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SnackbarProvider } from 'notistack';
 import App from './App';
-import ThemeProvider from './theme/ThemeProvider';
-import './styles/global.css';
+import ThemeProvider from '@/shared/theme/ThemeProvider';
+import '@/shared/styles/global.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

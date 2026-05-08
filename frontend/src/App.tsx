@@ -1,16 +1,16 @@
 import { lazy, Suspense, Component, ReactNode } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Button } from '@mui/material';
-import Layout from './components/Layout';
-import ChatPage from './pages/ChatPage';
+import Layout from '@/components/Layout';
+import ChatPage from '@/pages/ChatPage';
 
-const KnowledgePage = lazy(() => import('./pages/KnowledgePage'));
-const McpPage = lazy(() => import('./pages/McpPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const IntentTreePage = lazy(() => import('./pages/IntentTreePage'));
-const IngestMonitorPage = lazy(() => import('./pages/IngestMonitorPage'));
-const TracePage = lazy(() => import('./pages/TracePage'));
-const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
+const KnowledgePage = lazy(() => import('@/pages/KnowledgePage'));
+const McpPage = lazy(() => import('@/pages/McpPage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const IntentTreePage = lazy(() => import('@/pages/IntentTreePage'));
+const IngestMonitorPage = lazy(() => import('@/pages/IngestMonitorPage'));
+const TracePage = lazy(() => import('@/pages/TracePage'));
+const SystemSettingsPage = lazy(() => import('@/pages/SystemSettingsPage'));
 
 function PageFallback() {
   return (
@@ -47,7 +47,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/chat" replace />} />
-        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/chat" element={<InkErrorBoundary><ChatPage /></InkErrorBoundary>} />
         <Route path="/knowledge" element={<InkErrorBoundary><Suspense fallback={<PageFallback />}><KnowledgePage /></Suspense></InkErrorBoundary>} />
         <Route path="/mcp" element={<InkErrorBoundary><Suspense fallback={<PageFallback />}><McpPage /></Suspense></InkErrorBoundary>} />
         <Route path="/settings" element={<InkErrorBoundary><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></InkErrorBoundary>} />

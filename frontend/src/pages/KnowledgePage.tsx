@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  Box, Typography, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, TextField, IconButton, Grid, LinearProgress,
+  Box, Typography, Button, IconButton, Grid, LinearProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import {
   AddOutlined as Add, DeleteOutlined as Delete, UploadOutlined as Upload,
@@ -10,111 +10,26 @@ import {
   ChevronRightOutlined as ChevronRight,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { knowledgeApi } from '../api/knowledgeApi';
-import { KnowledgeBase, KbDocument, SearchResult } from '../api/types';
+import { knowledgeApi } from '@/entities/knowledge/api/knowledgeApi';
+import type { KnowledgeBase, KbDocument, SearchResult } from '@/entities/knowledge/model/types';
 import { useSnackbar } from 'notistack';
 import { useDropzone } from 'react-dropzone';
-import { InkBadge, InkSearchBar, InkActionSheet, InkEmptyState } from '../components/ink';
+import { InkBadge, InkSearchBar, InkActionSheet, InkEmptyState } from '@/shared/ui/ink';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useInk } from '@/shared/theme/ThemeProvider';
+import { kbGradients, ui } from '@/shared/theme/semanticColors';
+import { CreateKnowledgeBaseDialog, GitImportDialog } from '@/widgets/knowledge';
+import type { KnowledgeFormState } from '@/widgets/knowledge';
 
 // Generate a gradient from KB name
 function nameGradient(name: string): string {
-  const gradients = [
-    'linear-gradient(135deg, #4A4A4A, #2C2C2C)',
-    'linear-gradient(135deg, #C84B31, #A03B26)',
-    'linear-gradient(135deg, #5B7065, #4A5D53)',
-    'linear-gradient(135deg, #8B8B8B, #6B6B6B)',
-    'linear-gradient(135deg, #5B7065, #3D4D43)',
-    'linear-gradient(135deg, #C84B31, #8B3522)',
-    'linear-gradient(135deg, #4A4A4A, #6B6B6B)',
-  ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return gradients[Math.abs(hash) % gradients.length];
+  return kbGradients[Math.abs(hash) % kbGradients.length];
 }
 
 function statusType(s: string) {
   switch (s) { case 'INDEXED': return 'success' as const; case 'PROCESSING': return 'warning' as const; case 'FAILED': return 'error' as const; default: return 'default' as const; }
-}
-
-type KnowledgeFormState = {
-  name: string;
-  description: string;
-  chunkSize: number;
-  chunkOverlap: number;
-};
-
-function CreateKnowledgeBaseDialog({
-  open,
-  loading,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  loading: boolean;
-  onClose: () => void;
-  onSubmit: (payload: KnowledgeFormState) => void;
-}) {
-  const [form, setForm] = useState<KnowledgeFormState>({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 });
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setForm({ name: '', description: '', chunkSize: 800, chunkOverlap: 200 });
-  }, [open]);
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>新建知识库</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
-        <TextField label="名称" required value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))} />
-        <TextField label="描述" multiline rows={2} value={form.description} onChange={(e) => setForm((current) => ({ ...current, description: e.target.value }))} />
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <TextField type="number" label="分块大小" value={form.chunkSize} onChange={(e) => setForm((current) => ({ ...current, chunkSize: Number(e.target.value) }))} />
-          <TextField type="number" label="分块重叠" value={form.chunkOverlap} onChange={(e) => setForm((current) => ({ ...current, chunkOverlap: Number(e.target.value) }))} />
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(form)} disabled={loading} sx={{ borderRadius: 4 }}>创建</Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-function GitImportDialog({
-  open,
-  loading,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  loading: boolean;
-  onClose: () => void;
-  onSubmit: (gitUrl: string) => void;
-}) {
-  const [gitUrl, setGitUrl] = useState('');
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setGitUrl('');
-  }, [open]);
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Git 仓库导入</DialogTitle>
-      <DialogContent sx={{ pt: '16px !important' }}>
-        <TextField fullWidth label="Git 仓库 URL" value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} placeholder="https://github.com/..." />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>取消</Button>
-        <Button variant="contained" onClick={() => onSubmit(gitUrl)} disabled={loading} sx={{ borderRadius: 4 }}>导入</Button>
-      </DialogActions>
-    </Dialog>
-  );
 }
 
 export default function KnowledgePage() {
@@ -137,7 +52,7 @@ export default function KnowledgePage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => knowledgeApi.create(data),
+    mutationFn: knowledgeApi.create,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] }); setCreateOpen(false); enqueueSnackbar('创建成功', { variant: 'success' }); },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '创建失败', { variant: 'error' }),
   });
@@ -205,8 +120,6 @@ export default function KnowledgePage() {
         <Typography variant="h5" sx={{ fontFamily: '"Noto Serif SC", serif' }}>知识库</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog} sx={{
           borderRadius: 4,
-          backgroundImage: 'linear-gradient(135deg, #4A4A4A, #3A3A3A)',
-          '&:hover': { backgroundImage: 'linear-gradient(135deg, #C84B31, #A83D27)' },
         }}>
           新建
         </Button>
@@ -237,8 +150,8 @@ export default function KnowledgePage() {
                       cursor: 'pointer',
                       borderRadius: 4,
                       overflow: 'hidden',
-                      border: isActive ? '1.5px solid rgba(200,75,49,0.5)' : '1px solid rgba(224,221,216,0.45)',
-                      backgroundColor: 'rgba(255,255,255,0.72)',
+                      border: isActive ? `1.5px solid rgba(200,75,49,0.5)` : `1px solid ${ui.tableBorder}`,
+                      backgroundColor: ui.cardBg,
                       backdropFilter: 'blur(12px)',
                       WebkitBackdropFilter: 'blur(12px)',
                       boxShadow: isActive
@@ -286,7 +199,7 @@ export default function KnowledgePage() {
             transition={{ duration: 0.25 }}
           >
             <Box sx={{
-              backgroundColor: 'rgba(255,255,255,0.72)',
+              backgroundColor: '#f7f2e6',
               backdropFilter: 'blur(12px)',
               WebkitBackdropFilter: 'blur(12px)',
               borderRadius: 4, p: 2.5,
@@ -308,14 +221,14 @@ export default function KnowledgePage() {
 
               {/* Upload zone */}
               <Box {...getRootProps()} sx={{
-                border: `2px dashed ${isDragActive ? '#C84B31' : '#E0DDD8'}`,
+                border: `2px dashed ${isDragActive ? ui.accentRed : ui.border}`,
                 borderRadius: 2, p: 4, textAlign: 'center', mb: 2.5, cursor: 'pointer',
                 backgroundColor: isDragActive ? 'rgba(200,75,49,0.04)' : 'transparent',
                 transition: 'all 200ms',
               }}>
                 <input {...getInputProps()} />
-                <Upload sx={{ fontSize: 36, color: isDragActive ? '#C84B31' : 'text.disabled', mb: 0.5 }} />
-                <Typography sx={{ fontSize: 15, color: isDragActive ? '#C84B31' : 'text.secondary' }}>
+                <Upload sx={{ fontSize: 36, color: isDragActive ? ui.accentRed : 'text.disabled', mb: 0.5 }} />
+                <Typography sx={{ fontSize: 15, color: isDragActive ? ui.accentRed : 'text.secondary' }}>
                   拖拽文件到此处或点击上传
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>支持 PDF, TXT, MD, DOCX</Typography>
@@ -329,14 +242,14 @@ export default function KnowledgePage() {
               </Box>
               {searchResults.length > 0 && (
                 <Box sx={{
-                  backgroundColor: 'rgba(245,243,238,0.6)',
+                  backgroundColor: ui.hoverBg,
                   borderRadius: 2, p: 2, mb: 2.5, maxHeight: 240, overflow: 'auto',
-                  border: '1px solid #E0DDD8',
+                  border: `1px solid ${ui.border}`,
                 }}>
                   {searchResults.map((r, i) => (
                     <Box key={i} sx={{
                       py: 1.5,
-                      borderBottom: i < searchResults.length - 1 ? '0.5px solid #E0DDD8' : 'none',
+                      borderBottom: i < searchResults.length - 1 ? `0.5px solid ${ui.border}` : 'none',
                     }}>
                       <Typography sx={{ fontSize: 14, mb: 0.5, lineHeight: 1.4 }}>{r.content}</Typography>
                       <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{JSON.stringify(r.metadata)}</Typography>
@@ -350,9 +263,9 @@ export default function KnowledgePage() {
                 文档 ({documents.length})
               </Typography>
               <Box sx={{
-                backgroundColor: 'rgba(245,243,238,0.6)',
+                backgroundColor: ui.hoverBg,
                 borderRadius: 2, overflow: 'hidden',
-                border: '1px solid #E0DDD8',
+                border: `1px solid ${ui.border}`,
               }}>
                 {documents.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: 'center' }}>
@@ -363,7 +276,7 @@ export default function KnowledgePage() {
                     <Box key={d.id} sx={{
                       display: 'flex', alignItems: 'center', gap: 1.5,
                       px: 2, py: 1.5,
-                      borderBottom: i < documents.length - 1 ? '0.5px solid #E0DDD8' : 'none',
+                      borderBottom: i < documents.length - 1 ? `0.5px solid ${ui.border}` : 'none',
                     }}>
                       <Description sx={{ fontSize: 20, color: 'text.secondary' }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -375,7 +288,7 @@ export default function KnowledgePage() {
                         </Typography>
                       </Box>
                       <InkBadge label={d.status} status={statusType(d.status)} dot />
-                      <IconButton size="small" onClick={() => deleteDocMutation.mutate(d.id)} sx={{ color: 'text.secondary', '&:hover': { color: '#C84B31' } }}>
+                      <IconButton size="small" onClick={() => deleteDocMutation.mutate(d.id)} sx={{ color: 'text.secondary', '&:hover': { color: ui.accentRed } }}>
                         <Delete sx={{ fontSize: 18 }} />
                       </IconButton>
                     </Box>
@@ -410,7 +323,7 @@ export default function KnowledgePage() {
       {/* Rebuild confirm */}
       <Dialog open={rebuildOpen} onClose={() => !rebuildMutation.isPending && setRebuildOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>重建向量库</DialogTitle>
-        <DialogContent sx={{ pt: '16px !important' }}>
+        <DialogContent>
           <Typography sx={{ fontSize: 15, color: 'text.secondary' }}>
             将删除当前知识库已有向量，并基于已保存的文本分片重新向量化。不会删除文档记录。
           </Typography>

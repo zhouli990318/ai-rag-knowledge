@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { chatApi } from '../api/chatApi';
-import { useChatStore } from '../stores/chatStore';
-import { useChatConfigStore } from '../stores/chatConfigStore';
-import { ChatMessage, Conversation } from '../api/types';
+import { chatApi } from '@/entities/chat/api/chatApi';
+import { useStreamStore } from '@/features/stream';
+import { useChatConfigStore } from '@/features/chat';
+import type { ChatMessage, Conversation } from '@/entities/chat/model/types';
 import { useSnackbar } from 'notistack';
-import ConversationList from './chat/ConversationList';
-import ChatInput from './chat/ChatInput';
-import MessageArea from './chat/MessageArea';
+import { ConversationList, ChatInput, MessageArea } from '@/widgets/chat';
 
 type DisplayMessage = Pick<ChatMessage, 'role' | 'content'> & {
   id: number | string;
@@ -24,10 +22,19 @@ export default function ChatPage() {
     streaming, streamContent, streamConversationId, optimisticUserMessage,
     preStreamMessageCount,
     startStream, stopStream, clearStream,
-  } = useChatStore();
+  } = useStreamStore();
   const { selectedProvider, selectedKb, setSelectedProvider, setSelectedKb, resetConfig, toolMode, selectedMcpServers } = useChatConfigStore();
 
   const [input, setInput] = useState('');
+
+  // Abort stream on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (useStreamStore.getState().streaming) {
+        stopStream();
+      }
+    };
+  }, [stopStream]);
 
   // Clear stream state when switching conversations (different from current stream)
   useEffect(() => {
@@ -131,7 +138,7 @@ export default function ChatPage() {
       : '';
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Top conversation tabs */}
       <ConversationList
         conversations={conversations}
@@ -142,14 +149,16 @@ export default function ChatPage() {
         isLoading={convsLoading}
       />
 
-      {/* Message area */}
-      <MessageArea messages={messages} streamContent={visibleStreamContent} streaming={streaming && visibleStreamContent !== ''} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
-
-      {/* Input - 悬浮在底部 */}
-      <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10, pointerEvents: 'none' }}>
-        <Box sx={{ pointerEvents: 'auto' }}>
-          <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
+      {/* Message area — centered with max width */}
+      <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ maxWidth: 900, mx: 'auto', width: '100%', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <MessageArea messages={messages} streamContent={visibleStreamContent} streaming={streaming && visibleStreamContent !== ''} conversationId={activeConversationId} onNewChat={resetDraft} onSuggestedClick={setInput} />
         </Box>
+      </Box>
+
+      {/* Input — centered with max width */}
+      <Box sx={{ maxWidth: 900, mx: 'auto', width: '100%' }}>
+        <ChatInput value={input} onChange={setInput} onSend={handleSend} streaming={streaming} onStop={handleStop} />
       </Box>
     </Box>
   );
