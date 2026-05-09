@@ -10,6 +10,6 @@ export const providerApi = {
   update: (id: number, data: Record<string, unknown>) => api.put<ApiResponse<Provider>>(`${BASE}/${id}`, data).then((r) => r.data.data),
   delete: (id: number) => api.delete(`${BASE}/${id}`),
   types: () => api.get<ApiResponse<ProviderType[]>>(`${BASE}/types`).then((r) => r.data.data),
-  test: (id: number) => api.post<ApiResponse<string>>(`${BASE}/${id}/test`).then((r) => r.data.data),
+  validate: (id: number) => api.post<ApiResponse<string>>(`${BASE}/${id}/validate`).then((r) => r.data.data),
   toggle: (id: number) => api.put<ApiResponse<Provider>>(`${BASE}/${id}/toggle`).then((r) => r.data.data),
 };

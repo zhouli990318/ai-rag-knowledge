@@ -2,7 +2,7 @@ spring:
   application:
     name: mcp-gateway
   profiles:
-    active: dev,local
+    active: ${SPRING_PROFILES_ACTIVE:dev,local}
   main:
     web-application-type: reactive
   codec:

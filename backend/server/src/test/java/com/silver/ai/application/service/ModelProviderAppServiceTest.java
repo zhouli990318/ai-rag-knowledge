@@ -56,7 +56,7 @@ class ModelProviderAppServiceTest {
     }
 
     @Test
-    void testConnectionShouldUseChatModelPortAndWrapSuccessfulResponse() {
+    void validateConnectionShouldUseChatModelPortAndWrapSuccessfulResponse() {
         ModelProviderRepository repository = mock(ModelProviderRepository.class);
         ChatModelPort chatModelPort = mock(ChatModelPort.class);
         ModelProviderAppService service = new ModelProviderAppService(repository, chatModelPort,
@@ -73,7 +73,7 @@ class ModelProviderAppServiceTest {
         when(repository.save(any(ModelProvider.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
         when(chatModelPort.chat(eq(2L), eq("gpt-4.1"), any(), any())).thenReturn(Mono.just("OK"));
 
-        String result = service.testConnection(2L).block();
+        String result = service.validateConnection(2L).block();
 
         assertEquals("\u8fde\u63a5\u6210\u529f: OK", result);
         verify(chatModelPort).chat(eq(2L), eq("gpt-4.1"), any(), any());

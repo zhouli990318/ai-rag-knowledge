@@ -174,8 +174,8 @@ public class McpGatewayController {
                 );
     }
 
-    @PostMapping("/tools/{id}/test")
-    public Mono<ApiResponse<String>> testTool(@PathVariable Long id, @RequestBody ToolInvokeRequest req) {
+    @PostMapping("/tools/{id}/invoke")
+    public Mono<ApiResponse<String>> invokeTool(@PathVariable Long id, @RequestBody ToolInvokeRequest req) {
         return mcpService.invokeTool(id, req.getArguments())
                 .map(ApiResponse::ok);
     }

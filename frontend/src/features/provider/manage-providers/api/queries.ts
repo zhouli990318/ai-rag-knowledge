@@ -72,11 +72,11 @@ export function useToggleProvider() {
   });
 }
 
-export function useTestProvider() {
+export function useValidateProvider() {
   const { enqueueSnackbar } = useSnackbar();
 
   return useMutation({
-    mutationFn: providerApi.test,
+    mutationFn: providerApi.validate,
     onSuccess: (data) => enqueueSnackbar(`连接成功: ${data}`, { variant: 'success' }),
     onError: () => enqueueSnackbar('连接失败', { variant: 'error' }),
   });

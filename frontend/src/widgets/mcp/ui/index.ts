@@ -4,6 +4,6 @@ export { default as CreateEditSourceDialog } from './CreateEditSourceDialog';
 export type { SourceFormState } from './CreateEditSourceDialog';
 export { default as EditToolDialog } from './EditToolDialog';
 export type { ToolUpdatePayload } from './EditToolDialog';
-export { default as TestToolDrawer } from './TestToolDrawer';
+export { default as InvokeToolDrawer } from './InvokeToolDrawer';
 export { parseParameterRows, buildParameterSchema, DEFAULT_PARAMETER_SCHEMA } from './helpers';
 export type { ParameterRow } from './helpers';

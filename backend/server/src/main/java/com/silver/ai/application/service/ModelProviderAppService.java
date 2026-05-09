@@ -88,15 +88,18 @@ public class ModelProviderAppService {
                 .then();
     }
 
-    public Mono<String> testConnection(Long id) {
+    private static final String VALIDATION_PROMPT = "Please confirm connectivity by responding with 'OK'.";
+    private static final String VALIDATION_SUCCESS_PREFIX = "连接成功: ";
+
+    public Mono<String> validateConnection(Long id) {
         return getProvider(id).flatMap(provider ->
                 chatModelPort.chat(provider.getId(), provider.getDefaultModel(),
-                                List.of(new DomainMessage(MessageRole.USER, "Hello, reply with 'OK' only.")),
+                                List.of(new DomainMessage(MessageRole.USER, VALIDATION_PROMPT)),
                                 List.of())
                         .flatMap(response -> {
                             provider.markHealthy(0);
                             return providerRepository.save(provider)
-                                    .thenReturn("连接成功: " + response);
+                                    .thenReturn(VALIDATION_SUCCESS_PREFIX + response);
                         })
                         .onErrorResume(error -> {
                             provider.markUnhealthy();

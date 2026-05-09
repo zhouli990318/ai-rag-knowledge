@@ -1,6 +1,7 @@
 package com.silver.ai.infrastructure.mcp;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -15,9 +16,11 @@ public class McpToolGatewayClient {
 
     private final WebClient webClient;
 
-    private static final Duration BLOCK_TIMEOUT = Duration.ofSeconds(10);
+    private final Duration blockTimeout;
 
-    public McpToolGatewayClient(McpGatewayProperties properties, WebClient.Builder webClientBuilder) {
+    public McpToolGatewayClient(McpGatewayProperties properties, WebClient.Builder webClientBuilder,
+                                @Value("${app.mcp-gateway.block-timeout-seconds:10}") int blockTimeoutSeconds) {
+        this.blockTimeout = Duration.ofSeconds(blockTimeoutSeconds);
         String baseUrl = properties.baseUrl();
         if (baseUrl != null) {
             baseUrl = baseUrl.trim();
@@ -36,7 +39,7 @@ public class McpToolGatewayClient {
                 .uri("/sources/{sourceId}/tools", sourceId)
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<McpToolDefinition>>>() {})
-                .block(BLOCK_TIMEOUT);
+                .block(blockTimeout);
         if (body == null || body.data() == null) {
             return Collections.emptyList();
         }
@@ -49,7 +52,7 @@ public class McpToolGatewayClient {
                     .uri("/sources")
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<List<ApiSourceLite>>>() {})
-                    .block(BLOCK_TIMEOUT);
+                    .block(blockTimeout);
             if (body == null || body.data() == null) {
                 return Collections.emptyList();
             }
@@ -67,11 +70,11 @@ public class McpToolGatewayClient {
 
     public String invokeTool(Long toolId, String arguments) {
         McpGatewayResponse<String> body = webClient.post()
-                .uri("/tools/{toolId}/test", toolId)
+                .uri("/tools/{toolId}/invoke", toolId)
                 .bodyValue(new ToolInvokeRequest(arguments))
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<McpGatewayResponse<String>>() {})
-                .block(BLOCK_TIMEOUT);
+                .block(blockTimeout);
         if (body == null) {
             return "[MCP 工具调用失败: 无响应]";
         }

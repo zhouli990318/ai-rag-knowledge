@@ -18,7 +18,7 @@ import { motion } from 'framer-motion';
 import { methodColors, ui } from '@/shared/theme/semanticColors';
 import {
   MonacoEditor, MobileTextarea,
-  CreateEditSourceDialog, EditToolDialog, TestToolDrawer,
+  CreateEditSourceDialog, EditToolDialog, InvokeToolDrawer,
   parseParameterRows, buildParameterSchema, DEFAULT_PARAMETER_SCHEMA,
 } from '@/widgets/mcp';
 import type { SourceFormState, ToolUpdatePayload } from '@/widgets/mcp';
@@ -32,7 +32,7 @@ export default function McpPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<McpApiSource | null>(null);
-  const [testTool, setTestTool] = useState<McpToolMapping | null>(null);
+  const [toolToInvoke, setToolToInvoke] = useState<McpToolMapping | null>(null);
   const [parseMode, setParseMode] = useState<string | number>('paste');
   const [specContent, setSpecContent] = useState('');
   const [specUrl, setSpecUrl] = useState('');
@@ -297,7 +297,7 @@ export default function McpPage() {
               </Box>
             ) : (
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <TextField size="small" fullWidth value={specUrl} onChange={(e) => setSpecUrl(e.target.value)} placeholder="https://petstore.swagger.io/v2/swagger.json" />
+                <TextField size="small" fullWidth value={specUrl} onChange={(e) => setSpecUrl(e.target.value)} placeholder="https://api.example.com/v3/openapi.json" />
                 <Button variant="outlined" onClick={() => parseMutation.mutate({ openApiUrl: specUrl })} disabled={parseMutation.isPending} sx={{ borderRadius: 4 }}>导入</Button>
               </Box>
             )}
@@ -346,7 +346,7 @@ export default function McpPage() {
                   <InkSwitch checked={t.enabled} onChange={(_, v) => toggleToolMutation.mutate({ id: t.id, enabled: v })} />
                   {/* Actions */}
                   <IconButton size="small" onClick={() => setEditingTool(t)}><Edit sx={{ fontSize: 18 }} /></IconButton>
-                  <IconButton size="small" onClick={() => setTestTool(t)}><PlayArrow sx={{ fontSize: 18 }} /></IconButton>
+                  <IconButton size="small" onClick={() => setToolToInvoke(t)}><PlayArrow sx={{ fontSize: 18 }} /></IconButton>
                 </Box>
               ))
             )}
@@ -374,11 +374,11 @@ export default function McpPage() {
         onSubmit={(payload) => editingTool && updateToolMutation.mutate({ id: editingTool.id, data: payload })}
       />
 
-      <TestToolDrawer
-        open={testTool !== null}
-        toolId={testTool?.id || null}
+      <InvokeToolDrawer
+        open={toolToInvoke !== null}
+        toolId={toolToInvoke?.id || null}
         EditorComponent={CodeEditor}
-        onClose={() => setTestTool(null)}
+        onClose={() => setToolToInvoke(null)}
       />
     </Box>
   );

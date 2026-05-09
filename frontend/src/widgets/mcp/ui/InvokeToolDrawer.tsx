@@ -13,7 +13,7 @@ interface Props {
   onClose: () => void;
 }
 
-export default function TestToolDrawer({ open, toolId, EditorComponent, onClose }: Props) {
+export default function InvokeToolDrawer({ open, toolId, EditorComponent, onClose }: Props) {
   const [args, setArgs] = useState('{}');
   const [result, setResult] = useState('');
 
@@ -23,8 +23,8 @@ export default function TestToolDrawer({ open, toolId, EditorComponent, onClose 
     setResult('');
   }, [open, toolId]);
 
-  const testToolMutation = useMutation({
-    mutationFn: (payload: { id: number; args: string }) => mcpGatewayApi.testTool(payload.id, payload.args),
+  const invokeToolMutation = useMutation({
+    mutationFn: (payload: { id: number; args: string }) => mcpGatewayApi.invokeTool(payload.id, payload.args),
     onSuccess: (data) => setResult(typeof data === 'string' ? data : JSON.stringify(data, null, 2)),
     onError: (error: any) => setResult('Error: ' + (error.message || 'Unknown')),
   });
@@ -44,9 +44,9 @@ export default function TestToolDrawer({ open, toolId, EditorComponent, onClose 
         variant="contained"
         startIcon={<PlayArrow />}
         fullWidth
-        onClick={() => toolId && testToolMutation.mutate({ id: toolId, args })}
+        onClick={() => toolId && invokeToolMutation.mutate({ id: toolId, args })}
         sx={{ mt: 2, borderRadius: 4 }}
-        disabled={testToolMutation.isPending || !toolId}
+        disabled={invokeToolMutation.isPending || !toolId}
       >
         执行
       </Button>

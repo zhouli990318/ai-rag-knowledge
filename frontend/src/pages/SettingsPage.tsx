@@ -53,8 +53,8 @@ export default function SettingsPage() {
     onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ['providers'] }); enqueueSnackbar(data.enabled ? '已启用' : '已停用', { variant: 'success' }); },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '操作失败', { variant: 'error' }),
   });
-  const testMutation = useMutation({
-    mutationFn: providerApi.test,
+  const validateMutation = useMutation({
+    mutationFn: providerApi.validate,
     onSuccess: (data) => enqueueSnackbar(`连接成功: ${data}`, { variant: 'success' }),
     onError: () => enqueueSnackbar('连接失败', { variant: 'error' }),
   });
@@ -142,8 +142,8 @@ export default function SettingsPage() {
                     onClick={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
                   >
-                    <IconButton size="small" onClick={() => testMutation.mutate(p.id)}
-                      sx={{ color: testMutation.isPending ? di.lightGray : di.teal }}>
+                    <IconButton size="small" onClick={() => validateMutation.mutate(p.id)}
+                      sx={{ color: validateMutation.isPending ? di.lightGray : di.teal }}>
                       <CheckCircle sx={{ fontSize: 20 }} />
                     </IconButton>
 

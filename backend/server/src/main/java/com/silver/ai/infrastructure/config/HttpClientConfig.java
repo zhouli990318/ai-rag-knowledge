@@ -22,13 +22,16 @@ public class HttpClientConfig {
     @Value("${spring.http.codecs.max-in-memory-size:100MB}")
     private String maxInMemorySize;
 
+    @Value("${app.http.response-timeout-seconds:120}")
+    private int responseTimeoutSeconds;
+
     @Bean
     public WebClient.Builder webClientBuilder() {
         int maxBytes = parseMaxInMemorySize(maxInMemorySize);
 
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30_000)
-                .responseTimeout(Duration.ofSeconds(120));
+                .responseTimeout(Duration.ofSeconds(responseTimeoutSeconds));
 
         ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxBytes))
@@ -47,7 +50,7 @@ public class HttpClientConfig {
     public RestClient.Builder restClientBuilder() {
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30_000)
-                .responseTimeout(Duration.ofSeconds(120));
+                .responseTimeout(Duration.ofSeconds(responseTimeoutSeconds));
 
         return RestClient.builder()
                 .requestFactory(new ReactorClientHttpRequestFactory(httpClient));

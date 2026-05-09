@@ -23,8 +23,8 @@ public class ToolIndexController {
     /**
      * 手动触发 MCP 工具索引重建
      */
-    @PostMapping("/reindex")
-    public Mono<ApiResponse<String>> reindex() {
+    @PostMapping("/rebuild")
+    public Mono<ApiResponse<String>> rebuild() {
         return Mono.fromRunnable(toolIndexDomainService::reindexAll)
                 .subscribeOn(Schedulers.boundedElastic())
                 .thenReturn(ApiResponse.ok("Tool index rebuild triggered"));

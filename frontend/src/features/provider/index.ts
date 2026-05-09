@@ -1,1 +1,1 @@
-export { useProviders, useProviderTypes, useCreateProvider, useUpdateProvider, useDeleteProvider, useToggleProvider, useTestProvider } from './manage-providers';
+export { useProviders, useProviderTypes, useCreateProvider, useUpdateProvider, useDeleteProvider, useToggleProvider, useValidateProvider } from './manage-providers';

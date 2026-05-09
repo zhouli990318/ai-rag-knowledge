@@ -51,8 +51,8 @@ export function useUpdateTool() {
   });
 }
 
-export function useTestTool() {
+export function useInvokeTool() {
   return useMutation({
-    mutationFn: (payload: { id: number; args: string }) => mcpGatewayApi.testTool(payload.id, payload.args),
+    mutationFn: (payload: { id: number; args: string }) => mcpGatewayApi.invokeTool(payload.id, payload.args),
   });
 }

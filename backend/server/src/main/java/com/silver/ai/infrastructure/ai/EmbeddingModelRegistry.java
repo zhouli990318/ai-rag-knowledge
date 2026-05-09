@@ -93,7 +93,8 @@ public class EmbeddingModelRegistry {
         try {
             return CryptoUtil.decrypt(encryptedKey, cryptoSecretKey);
         } catch (Exception e) {
-            return encryptedKey;
+            log.error("API Key 解密失败，请检查密钥配置是否正确", e);
+            throw new IllegalStateException("API Key 解密失败", e);
         }
     }
 

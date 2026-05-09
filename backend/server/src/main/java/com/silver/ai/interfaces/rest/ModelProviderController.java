@@ -56,8 +56,8 @@ public class ModelProviderController {
         return providerAppService.toggleProvider(id).then(Mono.fromCallable(ApiResponse::ok));
     }
 
-    @PostMapping("/{id}/test")
-    public Mono<ApiResponse<String>> testConnection(@PathVariable Long id) {
-        return providerAppService.testConnection(id).map(ApiResponse::ok);
+    @PostMapping("/{id}/validate")
+    public Mono<ApiResponse<String>> validateConnection(@PathVariable Long id) {
+        return providerAppService.validateConnection(id).map(ApiResponse::ok);
     }
 }

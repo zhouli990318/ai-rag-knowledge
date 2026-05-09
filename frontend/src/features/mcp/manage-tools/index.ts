@@ -1,1 +1,1 @@
-export { useTools, useParseSpec, useToggleTool, useUpdateTool, useTestTool } from './api/queries';
+export { useTools, useParseSpec, useToggleTool, useUpdateTool, useInvokeTool } from './api/queries';
