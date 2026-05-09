@@ -53,7 +53,8 @@ public class ChatModelAdapter implements ChatModelPort {
             return chatModel.stream(prompt)
                     .map(response -> {
                         if (firstTokenTime.compareAndSet(0, System.currentTimeMillis() - startTime)) {
-                            modelSelection.recordSuccess(provider.getId(), firstTokenTime.get());
+                            modelSelection.recordSuccess(provider.getId(), firstTokenTime.get()).subscribe(
+                                    null, e -> log.warn("Record success failed for provider {}", provider.getId(), e));
                         }
                         if (response.getResult() != null && response.getResult().getOutput() != null) {
                             String text = response.getResult().getOutput().getText();
@@ -97,7 +98,8 @@ public class ChatModelAdapter implements ChatModelPort {
                     .map(StringBuilder::toString)
                     .doOnSuccess(result -> {
                         long duration = System.currentTimeMillis() - startTime;
-                        modelSelection.recordSuccess(provider.getId(), duration);
+                        modelSelection.recordSuccess(provider.getId(), duration).subscribe(
+                                null, e -> log.warn("Record success failed for provider {}", provider.getId(), e));
                     })
                     .doOnError(e -> recordFailureIfProviderIssue(provider.getId(), e));
         })
@@ -117,7 +119,8 @@ public class ChatModelAdapter implements ChatModelPort {
             return;
         }
         logResponseBodyIfPresent(error);
-        modelSelection.recordFailure(providerId);
+        modelSelection.recordFailure(providerId).subscribe(
+                null, e -> log.warn("Record failure failed for provider {}", providerId, e));
     }
 
     /**

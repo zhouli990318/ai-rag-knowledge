@@ -81,6 +81,7 @@ public class SourceScopedMcpServerRegistry {
 
     private final ConcurrentMap<Long, RegisteredSourceServer> servers = new ConcurrentHashMap<>();
     private final StampedLock stampedLock = new StampedLock();
+    private static final Duration BLOCK_TIMEOUT = Duration.ofSeconds(10);
 
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
@@ -92,7 +93,8 @@ public class SourceScopedMcpServerRegistry {
         long stamp = stampedLock.writeLock();
         try {
             java.util.Set<Long> activeSourceIds = new java.util.HashSet<>();
-            apiSourceRepository.findByActive(true).collectList().blockOptional().orElse(java.util.List.of()).forEach(source -> {
+            apiSourceRepository.findByActive(true).collectList()
+                    .timeout(BLOCK_TIMEOUT).blockOptional().orElse(java.util.List.of()).forEach(source -> {
                 if (source == null || source.getId() == null) {
                     return;
                 }
@@ -208,6 +210,7 @@ public class SourceScopedMcpServerRegistry {
                     try {
                         apiSourceRepository.findById(sourceId)
                                 .filter(ApiSource::isActive)
+                                .timeout(BLOCK_TIMEOUT)
                                 .blockOptional()
                                 .ifPresent(this::refreshSourceInternal);
                     } catch (RuntimeException ex) {

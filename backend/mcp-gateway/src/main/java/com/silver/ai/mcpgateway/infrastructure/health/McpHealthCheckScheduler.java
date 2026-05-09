@@ -64,7 +64,11 @@ public class McpHealthCheckScheduler {
                 .filter(source -> canProbe(source.getId()))
                 .flatMap(this::probeAndPersist, Math.max(1, properties.getProbeConcurrency()))
                 .doOnError(e -> log.warn("Health check run failed: {}", e.getMessage()))
-                .subscribe();
+                .subscribe(
+                        null,
+                        e -> log.error("Health check subscribe error: {}", e.getMessage()),
+                        () -> log.debug("Health check run completed")
+                );
     }
 
     /**
@@ -150,7 +154,11 @@ public class McpHealthCheckScheduler {
                             saved.getId(), saved.getName()))
                     .doOnError(e -> log.warn("Failed to refresh registry for recovered source {}",
                             saved.getId(), e))
-                    .subscribe();
+                    .subscribe(
+                            null,
+                            e -> log.error("Registry refresh subscribe error for source {}: {}",
+                                    saved.getId(), e.getMessage())
+                    );
         }
 
         // 连续失败达阈值：自动 deactivate
@@ -161,12 +169,16 @@ public class McpHealthCheckScheduler {
             log.warn("MCP source {} [{}] reached {} consecutive failures, auto-deactivating",
                     saved.getId(), saved.getName(), saved.getConsecutiveFailures());
             saved.deactivate();
+            nextProbeAt.remove(saved.getId());
             apiSourceRepository.save(saved)
-                    .doOnSuccess(s -> registry.removeSourceAsync(s.getId())
-                            .doOnError(e -> log.warn("Failed to remove deactivated source {} from registry",
-                                    s.getId(), e))
-                            .subscribe())
-                    .subscribe();
+                    .flatMap(s -> registry.removeSourceAsync(s.getId()))
+                    .doOnError(e -> log.warn("Failed to deactivate/remove source {} from registry",
+                            saved.getId(), e))
+                    .subscribe(
+                            null,
+                            e -> log.error("Deactivate subscribe error for source {}: {}",
+                                    saved.getId(), e.getMessage())
+                    );
         }
     }
 }

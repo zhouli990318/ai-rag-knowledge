@@ -117,6 +117,7 @@ export default function McpPage() {
     queryKey: ['mcp-health'],
     queryFn: mcpGatewayApi.listSourcesHealth,
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
   const healthMap = new Map(sourceHealth.map((h) => [h.id, h]));
 

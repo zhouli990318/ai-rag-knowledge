@@ -2,6 +2,8 @@ package com.silver.ai.infrastructure.ai;
 
 import com.silver.ai.domain.provider.model.ModelProvider;
 import com.silver.ai.shared.util.CryptoUtil;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.MetadataMode;
@@ -20,7 +22,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * EmbeddingModel 工厂与注册表
@@ -36,15 +38,18 @@ public class EmbeddingModelRegistry {
     @Value("${app.crypto.secret-key}")
     private String cryptoSecretKey;
 
-    private final ConcurrentHashMap<String, EmbeddingModel> cache = new ConcurrentHashMap<>();
+    private final Cache<String, EmbeddingModel> cache = Caffeine.newBuilder()
+            .maximumSize(20)
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .build();
 
     public EmbeddingModel getOrCreate(ModelProvider provider) {
         String cacheKey = provider.getId() + ":" + provider.getEmbeddingModel();
-        return cache.computeIfAbsent(cacheKey, k -> createEmbeddingModel(provider));
+        return cache.get(cacheKey, k -> createEmbeddingModel(provider));
     }
 
     public void refresh(Long providerId) {
-        cache.entrySet().removeIf(entry -> entry.getKey().startsWith(providerId + ":"));
+        cache.asMap().entrySet().removeIf(entry -> entry.getKey().startsWith(providerId + ":"));
     }
 
     private EmbeddingModel createEmbeddingModel(ModelProvider provider) {

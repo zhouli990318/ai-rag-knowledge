@@ -49,6 +49,7 @@ export default memo(function ChatConfig() {
     queryKey: ['mcp-health'],
     queryFn: mcpGatewayApi.listSourcesHealth,
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 
   const enabledProviders = providers.filter((p: Provider) => p.enabled);

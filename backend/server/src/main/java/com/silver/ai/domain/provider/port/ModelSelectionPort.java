@@ -1,6 +1,7 @@
 package com.silver.ai.domain.provider.port;
 
 import com.silver.ai.domain.provider.model.ModelProvider;
+import reactor.core.publisher.Mono;
 
 /**
  * 模型选择端口 — 领域层定义，领域服务实现。
@@ -16,10 +17,10 @@ public interface ModelSelectionPort {
     /**
      * 记录调用成功
      */
-    void recordSuccess(Long providerId, long firstTokenMs);
+    Mono<Void> recordSuccess(Long providerId, long firstTokenMs);
 
     /**
      * 记录调用失败
      */
-    void recordFailure(Long providerId);
+    Mono<Void> recordFailure(Long providerId);
 }

@@ -8,6 +8,7 @@ import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
 
 import java.util.Comparator;
 import java.util.List;
@@ -74,27 +75,29 @@ public class ModelRoutingDomainService implements ModelSelectionPort {
      * 记录调用成功（更新健康状态和首包延迟）。
      */
     @Override
-    public void recordSuccess(Long providerId, long firstTokenMs) {
-        providerRepository.findById(providerId)
+    public Mono<Void> recordSuccess(Long providerId, long firstTokenMs) {
+        return providerRepository.findById(providerId)
                 .flatMap(provider -> {
                     provider.markHealthy(firstTokenMs);
                     return providerRepository.save(provider);
                 })
                 .doOnError(e -> log.warn("Failed to record success for provider {}: {}", providerId, e.getMessage()))
-                .subscribe();
+                .onErrorResume(e -> Mono.empty())
+                .then();
     }
 
     /**
      * 记录调用失败（更新故障计数）。
      */
     @Override
-    public void recordFailure(Long providerId) {
-        providerRepository.findById(providerId)
+    public Mono<Void> recordFailure(Long providerId) {
+        return providerRepository.findById(providerId)
                 .flatMap(provider -> {
                     provider.markUnhealthy();
                     return providerRepository.save(provider);
                 })
                 .doOnError(e -> log.warn("Failed to record failure for provider {}: {}", providerId, e.getMessage()))
-                .subscribe();
+                .onErrorResume(e -> Mono.empty())
+                .then();
     }
 }

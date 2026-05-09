@@ -86,10 +86,10 @@ export default function MessageArea({ messages, streamContent, streaming, conver
     },
     refetchInterval: (query) => {
       const data = query.state.data as string[] | undefined;
-      if (!data || data.length === 0) return 2000;
+      if (!data || data.length === 0) return 5000;
       const isDefaults = data.length === fallbackQuestions.length &&
         data.every((q, i) => q === fallbackQuestions[i]);
-      return isDefaults ? 2000 : false;
+      return isDefaults ? 10000 : false;
     },
   });
 

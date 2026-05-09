@@ -27,17 +27,8 @@ spring:
     codecs:
       max-in-memory-size: 100MB
 
-  # 禁用 Spring AI 自动配置的默认模型（我们通过工厂动态创建）
+  # Spring AI 模型自动配置已在 AiRagApplication 中排除，所有 AI 厂商通过页面配置动态管理
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY:placeholder}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-    ollama:
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-    anthropic:
-      api-key: ${ANTHROPIC_API_KEY:placeholder}
-    zhipuai:
-      api-key: ${ZHIPUAI_API_KEY:placeholder}
     vectorstore:
       pgvector:
         dimensions: 1024

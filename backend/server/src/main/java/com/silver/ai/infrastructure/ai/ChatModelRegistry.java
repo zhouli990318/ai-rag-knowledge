@@ -1,12 +1,14 @@
 package com.silver.ai.infrastructure.ai;
 
 import com.silver.ai.domain.provider.model.ModelProvider;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * ChatModel 注册表 — 缓存已创建的 ChatModel 实例，支持热更新
@@ -17,13 +19,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ChatModelRegistry {
 
     private final ChatModelFactory chatModelFactory;
-    private final ConcurrentHashMap<Long, ChatModel> modelCache = new ConcurrentHashMap<>();
+    private final Cache<Long, ChatModel> modelCache = Caffeine.newBuilder()
+            .maximumSize(50)
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .build();
 
     /**
      * 获取或创建 ChatModel
      */
     public ChatModel getOrCreate(ModelProvider provider) {
-        return modelCache.computeIfAbsent(provider.getId(), id -> {
+        return modelCache.get(provider.getId(), id -> {
             log.info("Creating ChatModel for provider: {} ({})", provider.getName(), provider.getProviderType());
             return chatModelFactory.createChatModel(provider);
         });
@@ -53,7 +58,7 @@ public class ChatModelRegistry {
      * 热更新：移除缓存，下次获取时重新创建
      */
     public void refresh(Long providerId) {
-        modelCache.remove(providerId);
+        modelCache.invalidate(providerId);
         log.info("ChatModel cache refreshed for provider: {}", providerId);
     }
 
@@ -61,6 +66,6 @@ public class ChatModelRegistry {
      * 清除所有缓存
      */
     public void clearAll() {
-        modelCache.clear();
+        modelCache.invalidateAll();
     }
 }

@@ -2,6 +2,8 @@ package com.silver.ai.application.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 推荐问题进程内缓存。
@@ -24,8 +26,14 @@ public class SuggestionCache {
     private static final String KEY_PREFIX = "chat:suggestions:";
     private static final Duration TTL = Duration.ofHours(24);
 
-    private final ConcurrentHashMap<Long, Entry> store = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Boolean> computing = new ConcurrentHashMap<>();
+    private final Cache<Long, Entry> store = Caffeine.newBuilder()
+            .maximumSize(5000)
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build();
+    private final Cache<String, Boolean> computing = Caffeine.newBuilder()
+            .maximumSize(2000)
+            .expireAfterWrite(2, TimeUnit.MINUTES)
+            .build();
     private final RedissonClient redissonClient;
     private final ObjectMapper objectMapper;
 
@@ -43,7 +51,7 @@ public class SuggestionCache {
             return redisValue;
         }
 
-        Entry e = store.get(conversationId);
+        Entry e = store.getIfPresent(conversationId);
         if (e == null || e.version != version) {
             return Optional.empty();
         }
@@ -57,8 +65,8 @@ public class SuggestionCache {
     }
 
     public void evict(Long conversationId) {
-        store.remove(conversationId);
-        computing.keySet().removeIf(k -> k.startsWith(conversationId + ":"));
+        store.invalidate(conversationId);
+        computing.asMap().keySet().removeIf(k -> k.startsWith(conversationId + ":"));
         if (redissonClient != null) {
             try {
                 redissonClient.getKeys().deleteByPattern(redisPattern(conversationId));
@@ -72,14 +80,14 @@ public class SuggestionCache {
      * 尝试获取指定会话+版本的计算权。返回 true 表示获得计算权，false 表示已有计算进行中。
      */
     public boolean tryStartComputing(Long conversationId, int version) {
-        return computing.putIfAbsent(conversationId + ":" + version, Boolean.TRUE) == null;
+        return computing.asMap().putIfAbsent(conversationId + ":" + version, Boolean.TRUE) == null;
     }
 
     /**
      * 释放指定会话+版本的计算权。
      */
     public void finishComputing(Long conversationId, int version) {
-        computing.remove(conversationId + ":" + version);
+        computing.invalidate(conversationId + ":" + version);
     }
 
     private Optional<List<String>> getFromRedis(Long conversationId, int version) {

@@ -1,0 +1,12 @@
+**/target/
+**/.idea/
+**/*.iml
+**/.settings/
+**/.project
+**/.classpath
+**/.factorypath
+**/logs/
+**/*.log
+**/.git/
+**/.gitignore
+**/README.md

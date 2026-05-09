@@ -18,6 +18,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
@@ -54,6 +55,8 @@ class ChatModelAdapterTest {
         adapter = new ChatModelAdapter(providerRepository, chatModelRegistry, modelRouting, config);
 
         when(modelRouting.selectProvider(1L)).thenReturn(provider);
+        when(modelRouting.recordSuccess(anyLong(), anyLong())).thenReturn(Mono.empty());
+        when(modelRouting.recordFailure(anyLong())).thenReturn(Mono.empty());
     }
 
     private List<DomainMessage> messages() {

@@ -7,6 +7,7 @@ export function useSourcesHealth() {
     queryKey: ['mcp-health'],
     queryFn: mcpGatewayApi.listSourcesHealth,
     refetchInterval: 30000,
+    refetchIntervalInBackground: false,
   });
 }
 

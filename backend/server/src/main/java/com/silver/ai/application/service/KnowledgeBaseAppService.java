@@ -25,7 +25,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -94,48 +93,65 @@ public class KnowledgeBaseAppService {
 
     // ===== Document Management =====
 
+    private static final long MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
+
     public Mono<Document> uploadDocument(Long knowledgeBaseId, FilePart file) {
         return getKnowledgeBase(knowledgeBaseId)
                 .flatMap(kb -> {
                     String fileName = sanitizeFileName(file.filename());
                     validateFileType(fileName);
-                    return DataBufferUtils.join(file.content())
-                            .map(dataBuffer -> {
-                                byte[] bytes = new byte[dataBuffer.readableByteCount()];
-                                dataBuffer.read(bytes);
-                                DataBufferUtils.release(dataBuffer);
-                                return bytes;
-                            })
-                            .flatMap(fileBytes -> {
-                                Document document = Document.builder()
-                                        .knowledgeBaseId(knowledgeBaseId)
-                                        .fileName(fileName)
-                                        .fileType(getFileExtension(fileName))
-                                        .fileSize(fileBytes.length)
-                                        .build();
-                                return documentRepository.save(document)
-                                        .flatMap(saved -> {
-                                            // Fire-and-forget async processing
-                                            processDocumentAsync(saved, kb.getChunkStrategy(), fileBytes)
-                                                    .subscribe(
-                                                            v -> {},
-                                                            e -> log.error("Async doc processing failed: {}", saved.getFileName(), e)
-                                                    );
-                                            kb.incrementDocumentCount();
-                                            return knowledgeBaseRepository.save(kb).thenReturn(saved);
-                                        });
-                            });
+
+                    // Stream file to a temp file instead of loading entirely into memory
+                    return Mono.fromCallable(() -> Files.createTempFile("upload-", "-" + fileName))
+                            .flatMap(tempPath ->
+                                    DataBufferUtils.write(file.content(), tempPath)
+                                            .then(Mono.fromCallable(() -> {
+                                                long fileSize = Files.size(tempPath);
+                                                if (fileSize > MAX_UPLOAD_SIZE) {
+                                                    Files.deleteIfExists(tempPath);
+                                                    throw new BusinessException(ErrorCode.INVALID_PARAMETER,
+                                                            "文件大小超过限制: " + (fileSize / 1024 / 1024) + "MB > 50MB");
+                                                }
+                                                return fileSize;
+                                            }))
+                                            .flatMap(fileSize -> {
+                                                Document document = Document.builder()
+                                                        .knowledgeBaseId(knowledgeBaseId)
+                                                        .fileName(fileName)
+                                                        .fileType(getFileExtension(fileName))
+                                                        .fileSize(fileSize)
+                                                        .build();
+                                                return documentRepository.save(document)
+                                                        .flatMap(saved -> {
+                                                            processDocumentFromFile(saved, kb.getChunkStrategy(), tempPath)
+                                                                    .subscribe(
+                                                                            v -> {},
+                                                                            e -> log.error("Async doc processing failed: {}", saved.getFileName(), e)
+                                                                    );
+                                                            kb.incrementDocumentCount();
+                                                            return knowledgeBaseRepository.save(kb).thenReturn(saved);
+                                                        });
+                                            })
+                                            .onErrorResume(e -> {
+                                                // Clean up temp file on error
+                                                try { Files.deleteIfExists(tempPath); } catch (Exception ignored) {}
+                                                return Mono.error(e);
+                                            })
+                            );
                 });
     }
 
-    private Mono<Void> processDocumentAsync(Document document, ChunkStrategy chunkStrategy, byte[] fileBytes) {
+    private Mono<Void> processDocumentFromFile(Document document, ChunkStrategy chunkStrategy, Path tempPath) {
         return documentRepository.findById(document.getId())
                 .flatMap(currentDocument ->
                         knowledgeBaseRepository.findById(currentDocument.getKnowledgeBaseId())
                                 .flatMap(kb -> Mono.using(
-                                        () -> new ByteArrayInputStream(fileBytes),
+                                        () -> Files.newInputStream(tempPath),
                                         is -> documentProcessingService.processDocument(currentDocument, is, chunkStrategy),
-                                        is -> { /* ByteArrayInputStream.close() is a no-op */ }
+                                        is -> {
+                                            try { is.close(); } catch (Exception ignored) {}
+                                            try { Files.deleteIfExists(tempPath); } catch (Exception ignored) {}
+                                        }
                                 ))
                 )
                 .onErrorResume(e -> {
@@ -222,24 +238,23 @@ public class KnowledgeBaseAppService {
     // ===== Private methods =====
 
     private void processGitFilesBlocking(File dir, Long knowledgeBaseId, ChunkStrategy chunkStrategy) {
-        File[] files = dir.listFiles();
-        if (files == null) return;
-        for (File file : files) {
-            if (file.isDirectory()) {
-                if (!file.getName().startsWith(".")) {
-                    processGitFilesBlocking(file, knowledgeBaseId, chunkStrategy);
-                }
-                continue;
-            }
-            String ext = getFileExtension(file.getName());
-            if (!SUPPORTED_EXTENSIONS.contains(ext) && !isCodeFile(ext)) continue;
+        // Collect all eligible files first (no DB calls during traversal)
+        List<File> eligibleFiles = new java.util.ArrayList<>();
+        collectEligibleFiles(dir, eligibleFiles);
 
-            KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId).block();
-            if (kb == null) {
-                log.info("Stop git import because knowledge base {} was deleted", knowledgeBaseId);
-                return;
-            }
+        if (eligibleFiles.isEmpty()) return;
+
+        // Single KB lookup outside the loop
+        KnowledgeBase kb = knowledgeBaseRepository.findById(knowledgeBaseId).block();
+        if (kb == null) {
+            log.info("Stop git import because knowledge base {} was deleted", knowledgeBaseId);
+            return;
+        }
+
+        int processedCount = 0;
+        for (File file : eligibleFiles) {
             try {
+                String ext = getFileExtension(file.getName());
                 Document document = Document.builder()
                         .knowledgeBaseId(knowledgeBaseId)
                         .fileName(file.getName())
@@ -247,13 +262,40 @@ public class KnowledgeBaseAppService {
                         .fileSize(file.length())
                         .build();
                 document = documentRepository.save(document).block();
-                kb.incrementDocumentCount();
-                knowledgeBaseRepository.save(kb).block();
                 try (InputStream is = Files.newInputStream(file.toPath())) {
                     documentProcessingService.processDocument(document, is, chunkStrategy).block();
                 }
+                processedCount++;
             } catch (Exception e) {
                 log.warn("Failed to process git file: {}", file.getName(), e);
+            }
+        }
+
+        // Batch update KB document count once
+        if (processedCount > 0) {
+            kb = knowledgeBaseRepository.findById(knowledgeBaseId).block();
+            if (kb != null) {
+                for (int i = 0; i < processedCount; i++) {
+                    kb.incrementDocumentCount();
+                }
+                knowledgeBaseRepository.save(kb).block();
+            }
+        }
+    }
+
+    private void collectEligibleFiles(File dir, List<File> result) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isDirectory()) {
+                if (!file.getName().startsWith(".")) {
+                    collectEligibleFiles(file, result);
+                }
+            } else {
+                String ext = getFileExtension(file.getName());
+                if (SUPPORTED_EXTENSIONS.contains(ext) || isCodeFile(ext)) {
+                    result.add(file);
+                }
             }
         }
     }

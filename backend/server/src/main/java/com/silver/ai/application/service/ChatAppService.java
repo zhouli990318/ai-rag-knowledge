@@ -27,6 +27,8 @@ public class ChatAppService {
     private final SuggestionCache suggestionCache;
     private final ChatOrchestratorConfig orchestratorConfig;
 
+    private static final int MAX_RESPONSE_LENGTH = 512 * 1024; // 512KB
+
     public Flux<String> streamChat(Long conversationId, Long providerId, String model,
                                     String userMessage, Long knowledgeBaseId, String systemPrompt,
                                     List<Long> mcpServerIds, String toolMode) {
@@ -50,7 +52,11 @@ public class ChatAppService {
                                         TraceSpan genSpan = trace.startSpan(OrchestrationStage.GENERATION);
                                         return chatModelPort.streamChat(providerId, model,
                                                         result.messages(), result.toolCallbacks())
-                                                .doOnNext(fullResponse::append)
+                                                .doOnNext(chunk -> {
+                                                    if (fullResponse.length() < MAX_RESPONSE_LENGTH) {
+                                                        fullResponse.append(chunk);
+                                                    }
+                                                })
                                                 .doOnComplete(genSpan::finish)
                                                 .doOnError(e -> genSpan.fail(e.getMessage()))
                                                 .doFinally(_ -> persistTrace(trace));
@@ -60,8 +66,15 @@ public class ChatAppService {
                 .onErrorResume(error -> {
                     log.error("Stream chat error", error);
                     String errorMessage = resolveStreamErrorMessage(error);
-                    fullResponse.append(errorMessage);
+                    if (fullResponse.length() < MAX_RESPONSE_LENGTH) {
+                        fullResponse.append(errorMessage);
+                    }
                     return Flux.just(errorMessage);
+                })
+                .doOnCancel(() -> {
+                    // Clean up references on client disconnect
+                    persistedConversation.set(null);
+                    fullResponse.setLength(0);
                 })
                 .doOnComplete(() -> {
                     if (persistedConversation.get() != null && fullResponse.length() > 0) {
@@ -69,7 +82,11 @@ public class ChatAppService {
                         persistAssistantMessage(cid, persistedConversation.get(),
                                 fullResponse.toString())
                                 .doOnSuccess(v -> prefetchSuggestions(cid))
-                                .subscribe();
+                                .subscribe(
+                                        null,
+                                        e -> log.error("Persist assistant message failed for conversation {}: {}",
+                                                cid, e.getMessage())
+                                );
                     }
                 });
     }
@@ -122,13 +139,20 @@ public class ChatAppService {
         }).flatMap(conversationRepository::save)
                 .doOnSuccess(c -> log.info("Summary compressed for conversation {}", c.getId()))
                 .doOnError(e -> log.warn("Summary compression failed: {}", e.getMessage()))
-                .subscribe();
+                .subscribe(
+                        null,
+                        e -> log.error("Summary compression subscribe error for conversation {}: {}",
+                                conversation.getId(), e.getMessage())
+                );
     }
 
     private void persistTrace(ChatTraceContext trace) {
         chatTraceRepository.save(trace)
                 .doOnError(e -> log.warn("Failed to persist trace {}: {}", trace.getTraceId(), e.getMessage()))
-                .subscribe();
+                .subscribe(
+                        null,
+                        e -> log.error("Trace persist subscribe error {}: {}", trace.getTraceId(), e.getMessage())
+                );
     }
 
     /**

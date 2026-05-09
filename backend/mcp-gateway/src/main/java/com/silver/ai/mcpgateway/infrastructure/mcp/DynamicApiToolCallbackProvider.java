@@ -18,6 +18,7 @@ import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitializat
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,8 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
             new ParameterizedTypeReference<>() {
             };
 
+    private static final Duration BLOCK_TIMEOUT = Duration.ofSeconds(10);
+
         private final ApiSourceRepository apiSourceRepository;
         private final ToolMappingRepository toolMappingRepository;
         private final ToolInvocationDomainService toolInvocationDomainService;
@@ -42,7 +45,8 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
     public ToolCallback[] getToolCallbacks() {
         Set<String> usedNames = new java.util.HashSet<>();
 
-        List<ToolCallback> callbacks = apiSourceRepository.findByActive(true).collectList().blockOptional().orElse(java.util.List.of()).stream()
+        List<ToolCallback> callbacks = apiSourceRepository.findByActive(true).collectList()
+            .timeout(BLOCK_TIMEOUT).blockOptional().orElse(java.util.List.of()).stream()
             .flatMap(source -> getEnabledToolMappings(source.getId()).stream()
                 .map(mapping -> createCallback(source, mapping, usedNames, true)))
                 .collect(Collectors.toList());
@@ -53,6 +57,7 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
         public ToolCallback[] getToolCallbacksForSource(Long sourceId) {
         ApiSource source = apiSourceRepository.findById(sourceId)
             .filter(ApiSource::isActive)
+            .timeout(BLOCK_TIMEOUT)
             .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
 
@@ -77,9 +82,11 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
 
     private String invokeTool(Long toolId, Map<String, Object> arguments, ToolContext toolContext) {
         ToolMapping mapping = toolMappingRepository.findById(toolId)
+            .timeout(BLOCK_TIMEOUT)
             .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_TOOL_NOT_FOUND));
         ApiSource source = apiSourceRepository.findById(mapping.getApiSourceId())
+            .timeout(BLOCK_TIMEOUT)
             .blockOptional()
             .orElseThrow(() -> new BusinessException(ErrorCode.MCP_SOURCE_NOT_FOUND));
 
@@ -102,6 +109,7 @@ public class DynamicApiToolCallbackProvider implements ToolCallbackProvider {
         return toolMappingRepository.findByApiSourceId(sourceId)
                 .filter(ToolMapping::isEnabled)
                 .collectList()
+                .timeout(BLOCK_TIMEOUT)
                 .blockOptional()
                 .orElse(java.util.List.of());
     }

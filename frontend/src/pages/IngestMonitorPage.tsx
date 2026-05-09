@@ -39,12 +39,12 @@ export default function IngestMonitorPage() {
 
   useEffect(() => { if (kbId) loadTasks(); }, [kbId, loadTasks]);
 
+  const hasActiveTasks = tasks.some(t => !['COMPLETED', 'FAILED'].includes(t.currentStage));
   useEffect(() => {
-    const hasActive = tasks.some(t => !['COMPLETED', 'FAILED'].includes(t.currentStage));
-    if (!hasActive) return;
+    if (!hasActiveTasks) return;
     const interval = setInterval(loadTasks, 3000);
     return () => clearInterval(interval);
-  }, [tasks, loadTasks]);
+  }, [hasActiveTasks, loadTasks]);
 
   return (
     <Box sx={{ p: { xs: 2, md: 2.5 } }}>
