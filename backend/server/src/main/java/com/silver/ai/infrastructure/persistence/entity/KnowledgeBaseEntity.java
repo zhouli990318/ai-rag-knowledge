@@ -1,6 +1,7 @@
 package com.silver.ai.infrastructure.persistence.entity;
 
 import com.silver.ai.domain.knowledge.model.ChunkStrategy;
+import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
@@ -51,10 +52,22 @@ public class KnowledgeBaseEntity {
 
     @Column("retrieval_threshold")
     @Builder.Default
-    private double retrievalThreshold = 0.7;
+    private double retrievalThreshold = 0.6;
 
     @Column("retrieval_filter")
     private String retrievalFilter;
+
+    @Column("retrieval_mode")
+    @Builder.Default
+    private RetrievalConfig.RetrievalMode retrievalMode = RetrievalConfig.RetrievalMode.HYBRID;
+
+    @Column("keyword_weight")
+    @Builder.Default
+    private double keywordWeight = 0.3;
+
+    @Column("vector_weight")
+    @Builder.Default
+    private double vectorWeight = 0.7;
 
     @Column("document_count")
     @Builder.Default

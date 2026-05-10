@@ -1,5 +1,6 @@
 package com.silver.ai.interfaces.dto;
 
+import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
@@ -19,4 +20,11 @@ public class RetrievalConfigRequest {
     private Double similarityThreshold;
     @Size(max = 500, message = "filterExpression 长度不能超过 500")
     private String filterExpression;
+    private RetrievalConfig.RetrievalMode retrievalMode;
+    @Min(value = 0, message = "keywordWeight 最小为 0")
+    @Max(value = 1, message = "keywordWeight 最大为 1")
+    private Double keywordWeight;
+    @Min(value = 0, message = "vectorWeight 最小为 0")
+    @Max(value = 1, message = "vectorWeight 最大为 1")
+    private Double vectorWeight;
 }

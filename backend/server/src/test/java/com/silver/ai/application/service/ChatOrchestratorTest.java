@@ -26,11 +26,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ChatOrchestratorTest {
@@ -103,5 +106,67 @@ class ChatOrchestratorTest {
 
         assertTrue(retrievalThread.get() != null && retrievalThread.get().contains("boundedElastic"));
         assertTrue(toolThread.get() != null && toolThread.get().contains("boundedElastic"));
+    }
+
+    @Test
+        void orchestrateShouldReturnDirectKnowledgeBaseMissResponseWhenRagReturnsEmptyAndNoTools() {
+        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        MultiPathRetrievalDomainService multiPathRetrieval = mock(MultiPathRetrievalDomainService.class);
+        PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
+        ChatMemoryPort chatMemory = mock(ChatMemoryPort.class);
+        IntentDecisionDomainService intentDecision = mock(IntentDecisionDomainService.class);
+        QueryPlanningDomainService queryPlanning = mock(QueryPlanningDomainService.class);
+        ToolRoutingDomainService toolRouting = mock(ToolRoutingDomainService.class);
+        ChatOrchestratorConfig config = ChatOrchestratorConfig.builder().build();
+
+        ChatOrchestrator orchestrator = new ChatOrchestrator(
+                knowledgeBaseRepository,
+                multiPathRetrieval,
+                promptRenderer,
+                chatMemory,
+                intentDecision,
+                queryPlanning,
+                toolRouting,
+                config);
+
+        Conversation conversation = Conversation.builder()
+                .id(1L)
+                .knowledgeBaseId(9L)
+                .toolMode(ToolMode.AUTO)
+                .build();
+        ChatTraceContext trace = ChatTraceContext.create(1L);
+        IntentResult intentResult = IntentResult.builder()
+                .domain("general")
+                .category("qa")
+                .topic("rag")
+                .confidence(0.95)
+                .routingAdvice(IntentResult.RoutingAdvice.RETRIEVAL)
+                .build();
+        QueryPlanningDomainService.QueryPlan queryPlan =
+                new QueryPlanningDomainService.QueryPlan("hello", "hello", List.of("hello"));
+
+        when(chatMemory.extractRecentContext(eq(conversation), eq(config.getRewriteContextRounds())))
+                .thenReturn(List.of());
+        when(intentDecision.detect(eq("hello"), anyList())).thenReturn(Mono.just(intentResult));
+        when(queryPlanning.plan(eq("hello"), anyList())).thenReturn(Mono.just(queryPlan));
+        when(knowledgeBaseRepository.findById(9L)).thenReturn(Mono.just(KnowledgeBase.builder()
+                .id(9L)
+                .name("kb")
+                .retrievalConfig(RetrievalConfig.builder().topK(1).similarityThreshold(0.3).build())
+                .build()));
+        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), eq(intentResult))).thenReturn("");
+        when(toolRouting.decide(eq(intentResult), eq(ToolMode.AUTO), anyList(), eq("hello")))
+                .thenReturn(ToolRoutingDomainService.ToolDecision.noTool());
+
+        StepVerifier.create(orchestrator.orchestrate(conversation, "hello", null, trace))
+                .assertNext(result -> {
+                    assertTrue(result.hasDirectResponse());
+                    assertEquals("知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。", result.directResponse());
+                    assertTrue(result.messages().isEmpty());
+                    assertTrue(result.toolCallbacks().isEmpty());
+                })
+                .verifyComplete();
+
+        verify(chatMemory, never()).buildMessages(eq(conversation), anyString(), eq(config.getMemoryFullRounds()));
     }
 }

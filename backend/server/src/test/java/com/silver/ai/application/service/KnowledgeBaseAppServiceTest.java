@@ -4,6 +4,7 @@ import com.silver.ai.domain.knowledge.model.ChunkStrategy;
 import com.silver.ai.domain.knowledge.model.Document;
 import com.silver.ai.domain.knowledge.model.DocumentChunk;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
+import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.DocumentRepository;
 import com.silver.ai.domain.knowledge.port.KnowledgeBaseRepository;
@@ -54,6 +55,52 @@ class KnowledgeBaseAppServiceTest {
         assertEquals("kb", knowledgeBase.getName());
         assertEquals("desc", knowledgeBase.getDescription());
     }
+
+        @Test
+        void createKnowledgeBaseShouldPersistChunkAndRetrievalConfig() {
+                KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+                KnowledgeBaseAppService service = createService(knowledgeBaseRepository,
+                                mock(DocumentRepository.class), mock(DocumentChunkRepository.class),
+                                mock(DocumentProcessingDomainService.class), mock(RetrievalDomainService.class), mock(VectorStorePort.class));
+                ChunkStrategy chunkStrategy = ChunkStrategy.builder()
+                                .type(ChunkStrategy.ChunkType.PARAGRAPH)
+                                .chunkSize(600)
+                                .chunkOverlap(120)
+                                .build();
+                RetrievalConfig retrievalConfig = RetrievalConfig.builder()
+                                .topK(8)
+                                .similarityThreshold(0.6)
+                                .retrievalMode(RetrievalConfig.RetrievalMode.HYBRID)
+                                .build();
+
+                when(knowledgeBaseRepository.save(any(KnowledgeBase.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                KnowledgeBase knowledgeBase = service.createKnowledgeBase("kb", "desc", chunkStrategy, retrievalConfig).block();
+
+                assertNotNull(knowledgeBase);
+                assertEquals(ChunkStrategy.ChunkType.PARAGRAPH, knowledgeBase.getChunkStrategy().getType());
+                assertEquals(600, knowledgeBase.getChunkStrategy().getChunkSize());
+                assertEquals(120, knowledgeBase.getChunkStrategy().getChunkOverlap());
+                assertEquals(8, knowledgeBase.getRetrievalConfig().getTopK());
+                assertEquals(0.6, knowledgeBase.getRetrievalConfig().getSimilarityThreshold());
+                assertEquals(RetrievalConfig.RetrievalMode.HYBRID, knowledgeBase.getRetrievalConfig().getRetrievalMode());
+        }
+
+        @Test
+        void createKnowledgeBaseShouldUseUpdatedDefaultRetrievalConfig() {
+                KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+                KnowledgeBaseAppService service = createService(knowledgeBaseRepository,
+                                mock(DocumentRepository.class), mock(DocumentChunkRepository.class),
+                                mock(DocumentProcessingDomainService.class), mock(RetrievalDomainService.class), mock(VectorStorePort.class));
+
+                when(knowledgeBaseRepository.save(any(KnowledgeBase.class))).thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+
+                KnowledgeBase knowledgeBase = service.createKnowledgeBase("kb", "desc").block();
+
+                assertNotNull(knowledgeBase);
+                assertEquals(0.6, knowledgeBase.getRetrievalConfig().getSimilarityThreshold());
+                assertEquals(RetrievalConfig.RetrievalMode.HYBRID, knowledgeBase.getRetrievalConfig().getRetrievalMode());
+        }
 
     @Test
     void createKnowledgeBaseShouldRejectDuplicateName() {

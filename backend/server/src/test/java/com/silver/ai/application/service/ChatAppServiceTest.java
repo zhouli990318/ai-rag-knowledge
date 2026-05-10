@@ -81,6 +81,47 @@ class ChatAppServiceTest {
     }
 
     @Test
+    void chatShouldBypassModelWhenOrchestratorReturnsDirectResponse() {
+        ChatModelPort chatModelPort = mock(ChatModelPort.class);
+        ConversationRepository conversationRepository = mock(ConversationRepository.class);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
+
+        when(conversationRepository.save(any(Conversation.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(conversationRepository.findById(any()))
+                .thenAnswer(inv -> Mono.empty());
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(new ChatOrchestrator.OrchestrationResult(
+                        List.of(), List.of(), "知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。")));
+
+        String response = service.chat(null, 1L, "model-x", "hello", null, null, null, null).block();
+
+        assertEquals("知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。", response);
+        verify(chatModelPort, never()).chat(anyLong(), any(), any(), any());
+    }
+
+    @Test
+    void streamChatShouldBypassModelWhenOrchestratorReturnsDirectResponse() {
+        ChatModelPort chatModelPort = mock(ChatModelPort.class);
+        ConversationRepository conversationRepository = mock(ConversationRepository.class);
+        ChatOrchestrator orchestrator = mock(ChatOrchestrator.class);
+        ChatAppService service = createService(chatModelPort, conversationRepository, orchestrator);
+
+        when(conversationRepository.save(any(Conversation.class)))
+                .thenAnswer(inv -> Mono.just(inv.getArgument(0)));
+        when(orchestrator.orchestrate(any(), anyString(), any(), any()))
+                .thenReturn(Mono.just(new ChatOrchestrator.OrchestrationResult(
+                        List.of(), List.of(), "知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。")));
+
+        List<String> chunks = service.streamChat(null, 1L, "model-x", "hello", 8L, null, List.of(), null)
+                .collectList().block();
+
+        assertEquals(List.of("知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。"), chunks);
+        verify(chatModelPort, never()).streamChat(anyLong(), any(), any(), any());
+    }
+
+    @Test
     void getConversationShouldThrowWhenMissing() {
         ConversationRepository conversationRepository = mock(ConversationRepository.class);
         ChatAppService service = createService(mock(ChatModelPort.class), conversationRepository,

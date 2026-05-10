@@ -56,7 +56,10 @@ public class PgVectorStoreAdapter implements VectorStorePort {
                 }
             }
 
-            return vectorStore.similaritySearch(requestBuilder.build()).stream()
+            List<Document> results = vectorStore.similaritySearch(requestBuilder.build());
+            logSimilarityResults(query, topK, threshold, filterMetadata, results);
+
+            return results.stream()
                     .map(this::toVectorDocument).toList();
         } catch (Exception e) {
             log.error("Similarity search failed", e);
@@ -98,6 +101,32 @@ public class PgVectorStoreAdapter implements VectorStorePort {
         var aiDoc = new Document(doc.content());
         aiDoc.getMetadata().putAll(doc.metadata());
         return aiDoc;
+    }
+
+    private void logSimilarityResults(String query, int topK, double threshold,
+                                      Map<String, Object> filterMetadata, List<Document> results) {
+        if (!log.isDebugEnabled()) {
+            return;
+        }
+
+        log.debug("Vector similarity search: query='{}', topK={}, threshold={}, filter={}, hitCount={}",
+                query, topK, threshold, filterMetadata, results.size());
+
+        for (int index = 0; index < results.size(); index++) {
+            Document result = results.get(index);
+            log.debug("Vector hit[{}]: rawSimilarity={}, metadata={}, preview={}",
+                    index,
+                    result.getScore(),
+                    result.getMetadata(),
+                    previewText(result.getText()));
+        }
+    }
+
+    private String previewText(String text) {
+        if (text == null || text.length() <= 80) {
+            return text;
+        }
+        return text.substring(0, 80) + "...";
     }
 
     private VectorDocument toVectorDocument(Document doc) {

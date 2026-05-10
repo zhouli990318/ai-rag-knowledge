@@ -10,16 +10,23 @@ export interface KnowledgeBase {
   active: boolean;
 }
 
+export type ChunkType = 'FIXED_SIZE' | 'SENTENCE' | 'PARAGRAPH' | 'RECURSIVE';
+
 export interface ChunkStrategy {
-  type: string;
+  type: ChunkType;
   chunkSize: number;
   chunkOverlap: number;
 }
+
+export type RetrievalMode = 'VECTOR' | 'KEYWORD' | 'HYBRID';
 
 export interface RetrievalConfig {
   topK: number;
   similarityThreshold: number;
   filterExpression: string | null;
+  retrievalMode: RetrievalMode;
+  keywordWeight: number;
+  vectorWeight: number;
 }
 
 export interface KbDocument {

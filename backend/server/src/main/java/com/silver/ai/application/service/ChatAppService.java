@@ -48,6 +48,14 @@ public class ChatAppService {
                             return orchestrator.orchestrate(conversation, userMessage, systemPrompt, trace)
                                     .doOnNext(_ -> checkSummaryCompression(conversation))
                                     .flatMapMany(result -> {
+                                        if (result.hasDirectResponse()) {
+                                            persistTrace(trace);
+                                            if (fullResponse.length() < MAX_RESPONSE_LENGTH) {
+                                                fullResponse.append(result.directResponse());
+                                            }
+                                            return Flux.just(result.directResponse());
+                                        }
+
                                         // ── GENERATION 阶段 ──
                                         TraceSpan genSpan = trace.startSpan(OrchestrationStage.GENERATION);
                                         return chatModelPort.streamChat(providerId, model,
@@ -77,7 +85,7 @@ public class ChatAppService {
                     fullResponse.setLength(0);
                 })
                 .doOnComplete(() -> {
-                    if (persistedConversation.get() != null && fullResponse.length() > 0) {
+                    if (persistedConversation.get() != null && !fullResponse.isEmpty()) {
                         Long cid = persistedConversationId.get();
                         persistAssistantMessage(cid, persistedConversation.get(),
                                 fullResponse.toString())
@@ -101,6 +109,11 @@ public class ChatAppService {
                     return orchestrator.orchestrate(conversation, userMessage, systemPrompt, trace)
                             .doOnNext(result -> checkSummaryCompression(conversation))
                             .flatMap(result -> {
+                                if (result.hasDirectResponse()) {
+                                    persistTrace(trace);
+                                    return Mono.just(result.directResponse());
+                                }
+
                                 TraceSpan genSpan = trace.startSpan(OrchestrationStage.GENERATION);
                                 return chatModelPort.chat(providerId, model, result.messages(), result.toolCallbacks())
                                         .doOnSuccess(r -> genSpan.finish())

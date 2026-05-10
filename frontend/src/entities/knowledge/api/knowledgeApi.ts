@@ -1,22 +1,21 @@
 import api from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/api/types';
-import type { KnowledgeBase, KbDocument, SearchResult } from '../model/types';
+import type { ChunkStrategy, KnowledgeBase, KbDocument, RetrievalConfig, SearchResult } from '../model/types';
 
 const BASE = '/api/v1/knowledge-bases';
 
 export interface CreateKnowledgeBaseRequest {
   name: string;
   description?: string;
-  embeddingProviderId?: number;
-  chunkSize?: number;
-  chunkOverlap?: number;
+  chunkStrategy?: ChunkStrategy;
+  retrievalConfig?: RetrievalConfig;
 }
 
 export interface UpdateKnowledgeBaseRequest {
-  name?: string;
+  name: string;
   description?: string;
-  embeddingProviderId?: number;
-  active?: boolean;
+  chunkStrategy?: ChunkStrategy;
+  retrievalConfig?: RetrievalConfig;
 }
 
 export const knowledgeApi = {

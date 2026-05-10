@@ -61,16 +61,18 @@ public class DomainServiceConfig {
     @Bean
     public RetrievalDomainService retrievalDomainService(
             VectorStorePort vectorStore,
+            KeywordSearchPort keywordSearch,
             PromptRendererPort promptRenderer) {
-        return new RetrievalDomainService(vectorStore, promptRenderer);
+        return new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
     }
 
     @Bean
     public MultiPathRetrievalDomainService multiPathRetrievalDomainService(
             VectorStorePort vectorStore,
+            KeywordSearchPort keywordSearch,
             PromptRendererPort promptRenderer,
             ChatOrchestratorConfig config) {
-        return new MultiPathRetrievalDomainService(vectorStore, promptRenderer, config);
+        return new MultiPathRetrievalDomainService(vectorStore, keywordSearch, promptRenderer, config);
     }
 
     @Bean

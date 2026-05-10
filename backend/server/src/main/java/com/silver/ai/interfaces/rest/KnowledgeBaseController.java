@@ -34,7 +34,10 @@ public class KnowledgeBaseController {
 
     @PostMapping
     public Mono<ApiResponse<KnowledgeBase>> create(@Valid @RequestBody KnowledgeBaseRequest req) {
-        return knowledgeBaseAppService.createKnowledgeBase(req.getName(), req.getDescription())
+        return knowledgeBaseAppService.createKnowledgeBase(
+                req.getName(), req.getDescription(),
+                toChunkStrategy(req.getChunkStrategy()),
+                toRetrievalConfig(req.getRetrievalConfig()))
                 .map(ApiResponse::ok);
     }
 
@@ -108,6 +111,9 @@ public class KnowledgeBaseController {
         if (dto.getTopK() != null) builder.topK(dto.getTopK());
         if (dto.getSimilarityThreshold() != null) builder.similarityThreshold(dto.getSimilarityThreshold());
         if (dto.getFilterExpression() != null) builder.filterExpression(dto.getFilterExpression());
+        if (dto.getRetrievalMode() != null) builder.retrievalMode(dto.getRetrievalMode());
+        if (dto.getKeywordWeight() != null) builder.keywordWeight(dto.getKeywordWeight());
+        if (dto.getVectorWeight() != null) builder.vectorWeight(dto.getVectorWeight());
         return builder.build();
     }
 }

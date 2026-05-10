@@ -26,6 +26,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ChatOrchestrator {
 
+    private static final String KNOWLEDGE_BASE_MISS_RESPONSE = "知识库中没有该问题对应的内容。请确认相关文档是否已导入，或尝试换一种问法。";
+
     private final KnowledgeBaseRepository knowledgeBaseRepository;
     private final MultiPathRetrievalDomainService multiPathRetrieval;
     private final PromptRendererPort promptRenderer;
@@ -35,7 +37,18 @@ public class ChatOrchestrator {
     private final ToolRoutingDomainService toolRouting;
     private final ChatOrchestratorConfig orchestratorConfig;
 
-    public record OrchestrationResult(List<DomainMessage> messages, List<ToolCallbackHandle> toolCallbacks) {}
+    public record OrchestrationResult(List<DomainMessage> messages,
+                                      List<ToolCallbackHandle> toolCallbacks,
+                                      String directResponse) {
+
+        public OrchestrationResult(List<DomainMessage> messages, List<ToolCallbackHandle> toolCallbacks) {
+            this(messages, toolCallbacks, null);
+        }
+
+        public boolean hasDirectResponse() {
+            return directResponse != null && !directResponse.isBlank();
+        }
+    }
 
     public Mono<OrchestrationResult> orchestrate(
             Conversation conversation, String userMessage, String customSystemPrompt,
@@ -61,6 +74,11 @@ public class ChatOrchestrator {
                     .map(resultTuple -> {
                     String ragContext = resultTuple.getT1();
                     ToolRoutingDomainService.ToolDecision toolDecision = resultTuple.getT2();
+
+                    if (shouldReturnKnowledgeBaseMissResponse(conversation, intentResult, ragContext, toolDecision)) {
+                        log.debug("RAG miss with no tool fallback, returning direct knowledge-base-miss response");
+                        return new OrchestrationResult(List.of(), List.of(), KNOWLEDGE_BASE_MISS_RESPONSE);
+                    }
 
                     String effectiveSystemPrompt = buildSystemPrompt(
                         customSystemPrompt, ragContext, intentResult);
@@ -170,7 +188,20 @@ public class ChatOrchestrator {
         return decision;
     }
 
-    private String buildSystemPrompt(String customSystemPrompt, String ragContext, IntentResult intentResult) {
+    private boolean shouldReturnKnowledgeBaseMissResponse(Conversation conversation,
+                                                          IntentResult intentResult,
+                                                          String ragContext,
+                                                          ToolRoutingDomainService.ToolDecision toolDecision) {
+        return conversation.isRagEnabled()
+                && conversation.getKnowledgeBaseId() != null
+                && (intentResult.getRoutingAdvice() == IntentResult.RoutingAdvice.RETRIEVAL
+                || intentResult.getRoutingAdvice() == IntentResult.RoutingAdvice.HYBRID)
+                && (ragContext == null || ragContext.isBlank())
+                && (toolDecision == null || !toolDecision.hasTools());
+    }
+
+    private String buildSystemPrompt(String customSystemPrompt, String ragContext,
+                                     IntentResult intentResult) {
         String prompt = promptRenderer.render(PromptTemplates.GENERAL_SYSTEM);
         if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
             prompt = customSystemPrompt;

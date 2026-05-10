@@ -1,8 +1,10 @@
 package com.silver.ai.domain.knowledge.service;
 
+import com.silver.ai.domain.chat.model.PromptTemplates;
 import com.silver.ai.domain.knowledge.model.KnowledgeBase;
 import com.silver.ai.domain.knowledge.model.RetrievalConfig;
 import com.silver.ai.domain.knowledge.model.VectorDocument;
+import com.silver.ai.domain.knowledge.port.KeywordSearchPort;
 import com.silver.ai.domain.knowledge.port.PromptRendererPort;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
 import org.junit.jupiter.api.Test;
@@ -12,9 +14,9 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,16 +25,22 @@ class RetrievalDomainServiceTest {
     @Test
     void retrieveContextShouldReturnRenderedPromptWhenResultsExist() {
         VectorStorePort vectorStore = mock(VectorStorePort.class);
+        KeywordSearchPort keywordSearch = mock(KeywordSearchPort.class);
         PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
-        RetrievalDomainService service = new RetrievalDomainService(vectorStore, promptRenderer);
+        RetrievalDomainService service = new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
         KnowledgeBase knowledgeBase = KnowledgeBase.builder()
                 .id(7L)
                 .name("kb")
-                .retrievalConfig(RetrievalConfig.builder().topK(3).similarityThreshold(0.6).build())
+                .retrievalConfig(RetrievalConfig.builder()
+                        .topK(3)
+                        .similarityThreshold(0.6)
+                        .retrievalMode(RetrievalConfig.RetrievalMode.VECTOR)
+                        .build())
                 .build();
         when(vectorStore.similaritySearch("query", 3, 0.6, Map.of("knowledge_base_id", "7")))
                 .thenReturn(List.of(new VectorDocument("ctx1", Map.of()), new VectorDocument("ctx2", Map.of())));
-        when(promptRenderer.render(any(), anyMap())).thenReturn("参考资料:\nctx1\nctx2");
+        when(promptRenderer.render(PromptTemplates.RAG_SYSTEM, Map.of("context", "ctx1\n\n---\n\nctx2")))
+            .thenReturn("参考资料:\nctx1\nctx2");
 
         String result = service.retrieveContext(knowledgeBase, "query");
 
@@ -44,9 +52,15 @@ class RetrievalDomainServiceTest {
     @Test
     void searchShouldDelegateToVectorStore() {
         VectorStorePort vectorStore = mock(VectorStorePort.class);
+        KeywordSearchPort keywordSearch = mock(KeywordSearchPort.class);
         PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
-        RetrievalDomainService service = new RetrievalDomainService(vectorStore, promptRenderer);
-        KnowledgeBase knowledgeBase = KnowledgeBase.builder().id(9L).build();
+        RetrievalDomainService service = new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
+        KnowledgeBase knowledgeBase = KnowledgeBase.builder()
+                .id(9L)
+                .retrievalConfig(RetrievalConfig.builder()
+                        .retrievalMode(RetrievalConfig.RetrievalMode.VECTOR)
+                        .build())
+                .build();
         List<VectorDocument> documents = List.of(new VectorDocument("result", Map.of()));
         when(vectorStore.similaritySearch("q", 5, 0.7, Map.of("knowledge_base_id", "9"))).thenReturn(documents);
 
@@ -54,5 +68,53 @@ class RetrievalDomainServiceTest {
 
         assertEquals(documents, result);
         verify(vectorStore).similaritySearch("q", 5, 0.7, Map.of("knowledge_base_id", "9"));
+    }
+
+    @Test
+    void retrieveContextShouldReturnEmptyWhenVectorModeHasNoHits() {
+        VectorStorePort vectorStore = mock(VectorStorePort.class);
+        KeywordSearchPort keywordSearch = mock(KeywordSearchPort.class);
+        PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
+        RetrievalDomainService service = new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
+        KnowledgeBase knowledgeBase = KnowledgeBase.builder()
+                .id(7L)
+                .name("kb")
+                .retrievalConfig(RetrievalConfig.builder()
+                        .topK(3)
+                        .similarityThreshold(0.3)
+                        .retrievalMode(RetrievalConfig.RetrievalMode.VECTOR)
+                        .build())
+                .build();
+        when(vectorStore.similaritySearch("query", 3, 0.3, Map.of("knowledge_base_id", "7")))
+                .thenReturn(List.of());
+
+        String result = service.retrieveContext(knowledgeBase, "query");
+
+        assertTrue(result.isEmpty());
+        verify(vectorStore).similaritySearch("query", 3, 0.3, Map.of("knowledge_base_id", "7"));
+        verify(keywordSearch, never()).keywordSearch("query", 3, Map.of("knowledge_base_id", "7"));
+    }
+
+    @Test
+    void searchShouldUseKeywordModeWhenConfigured() {
+        VectorStorePort vectorStore = mock(VectorStorePort.class);
+        KeywordSearchPort keywordSearch = mock(KeywordSearchPort.class);
+        PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
+        RetrievalDomainService service = new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
+        KnowledgeBase knowledgeBase = KnowledgeBase.builder()
+                .id(7L)
+                .retrievalConfig(RetrievalConfig.builder()
+                        .topK(3)
+                        .similarityThreshold(0.3)
+                        .retrievalMode(RetrievalConfig.RetrievalMode.KEYWORD)
+                        .build())
+                .build();
+        when(keywordSearch.keywordSearch("query", 3, Map.of("knowledge_base_id", "7")))
+                .thenReturn(List.of(new com.silver.ai.domain.knowledge.model.KeywordSearchResult("ctx-keyword", Map.of(), 0.9)));
+
+        List<VectorDocument> result = service.search(knowledgeBase, "query", 3);
+
+        assertEquals(List.of(new VectorDocument("ctx-keyword", Map.of())), result);
+        verify(keywordSearch).keywordSearch("query", 3, Map.of("knowledge_base_id", "7"));
     }
 }

@@ -7,10 +7,12 @@ import {
   AddOutlined as Add, DeleteOutlined as Delete, UploadOutlined as Upload,
   GitHub, AutorenewOutlined as Autorenew, SearchOutlined as Search,
   FolderOpenOutlined as FolderOpen, DescriptionOutlined as Description,
+  EditOutlined as Edit,
   ChevronRightOutlined as ChevronRight,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { knowledgeApi } from '@/entities/knowledge/api/knowledgeApi';
+import type { CreateKnowledgeBaseRequest, UpdateKnowledgeBaseRequest } from '@/entities/knowledge/api/knowledgeApi';
 import type { KnowledgeBase, KbDocument, SearchResult } from '@/entities/knowledge/model/types';
 import { useSnackbar } from 'notistack';
 import { useDropzone } from 'react-dropzone';
@@ -18,7 +20,7 @@ import { InkBadge, InkSearchBar, InkActionSheet, InkEmptyState } from '@/shared/
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInk } from '@/shared/theme/ThemeProvider';
 import { kbGradients, ui } from '@/shared/theme/semanticColors';
-import { CreateKnowledgeBaseDialog, GitImportDialog } from '@/widgets/knowledge';
+import { CreateKnowledgeBaseDialog, defaultKnowledgeFormState, GitImportDialog } from '@/widgets/knowledge';
 import type { KnowledgeFormState } from '@/widgets/knowledge';
 
 // Generate a gradient from KB name
@@ -32,11 +34,48 @@ function statusType(s: string) {
   switch (s) { case 'INDEXED': return 'success' as const; case 'PROCESSING': return 'warning' as const; case 'FAILED': return 'error' as const; default: return 'default' as const; }
 }
 
+function toKnowledgeRequest(payload: KnowledgeFormState): CreateKnowledgeBaseRequest {
+  return {
+    name: payload.name.trim(),
+    description: payload.description.trim(),
+    chunkStrategy: {
+      type: payload.chunkType,
+      chunkSize: payload.chunkSize,
+      chunkOverlap: payload.chunkOverlap,
+    },
+    retrievalConfig: {
+      topK: payload.retrievalTopK,
+      similarityThreshold: payload.similarityThreshold,
+      filterExpression: payload.filterExpression.trim() || null,
+      retrievalMode: payload.retrievalMode,
+      keywordWeight: payload.keywordWeight,
+      vectorWeight: payload.vectorWeight,
+    },
+  };
+}
+
+function toKnowledgeFormState(knowledgeBase: KnowledgeBase): KnowledgeFormState {
+  return {
+    name: knowledgeBase.name,
+    description: knowledgeBase.description ?? '',
+    chunkType: knowledgeBase.chunkStrategy.type,
+    chunkSize: knowledgeBase.chunkStrategy.chunkSize,
+    chunkOverlap: knowledgeBase.chunkStrategy.chunkOverlap,
+    retrievalTopK: knowledgeBase.retrievalConfig.topK,
+    similarityThreshold: knowledgeBase.retrievalConfig.similarityThreshold,
+    retrievalMode: knowledgeBase.retrievalConfig.retrievalMode,
+    filterExpression: knowledgeBase.retrievalConfig.filterExpression ?? '',
+    keywordWeight: knowledgeBase.retrievalConfig.keywordWeight,
+    vectorWeight: knowledgeBase.retrievalConfig.vectorWeight,
+  };
+}
+
 export default function KnowledgePage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [selectedKb, setSelectedKb] = useState<KnowledgeBase | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -55,6 +94,16 @@ export default function KnowledgePage() {
     mutationFn: knowledgeApi.create,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] }); setCreateOpen(false); enqueueSnackbar('创建成功', { variant: 'success' }); },
     onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '创建失败', { variant: 'error' }),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdateKnowledgeBaseRequest }) => knowledgeApi.update(id, data),
+    onSuccess: (saved) => {
+      queryClient.invalidateQueries({ queryKey: ['knowledgeBases'] });
+      setSelectedKb(saved);
+      setEditOpen(false);
+      enqueueSnackbar('保存成功', { variant: 'success' });
+    },
+    onError: (e: any) => enqueueSnackbar(e?.response?.data?.message || '保存失败', { variant: 'error' }),
   });
   const deleteMutation = useMutation({
     mutationFn: knowledgeApi.delete,
@@ -103,12 +152,13 @@ export default function KnowledgePage() {
 
   const handleCreate = (payload: KnowledgeFormState) => {
     if (!payload.name.trim()) { enqueueSnackbar('请输入名称', { variant: 'warning' }); return; }
-    createMutation.mutate({
-      name: payload.name.trim(),
-      description: payload.description.trim(),
-      chunkSize: payload.chunkSize,
-      chunkOverlap: payload.chunkOverlap,
-    });
+    createMutation.mutate(toKnowledgeRequest(payload));
+  };
+
+  const handleUpdate = (payload: KnowledgeFormState) => {
+    if (!selectedKb) return;
+    if (!payload.name.trim()) { enqueueSnackbar('请输入名称', { variant: 'warning' }); return; }
+    updateMutation.mutate({ id: selectedKb.id, data: toKnowledgeRequest(payload) });
   };
 
   const openCreateDialog = () => setCreateOpen(true);
@@ -211,8 +261,19 @@ export default function KnowledgePage() {
                 <Box>
                   <Typography variant="h6">{selectedKb.name}</Typography>
                   <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{selectedKb.description}</Typography>
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <InkBadge label={`模式 ${selectedKb.retrievalConfig.retrievalMode}`} status="info" />
+                    <InkBadge label={`阈值 ${selectedKb.retrievalConfig.similarityThreshold}`} status="warning" />
+                    {selectedKb.retrievalConfig.retrievalMode === 'HYBRID' && (
+                      <>
+                        <InkBadge label={`关键词 ${selectedKb.retrievalConfig.keywordWeight}`} status="default" />
+                        <InkBadge label={`向量 ${selectedKb.retrievalConfig.vectorWeight}`} status="default" />
+                      </>
+                    )}
+                  </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditOpen(true)} sx={{ borderRadius: 4 }}>编辑配置</Button>
                   <Button size="small" variant="outlined" startIcon={<GitHub />} onClick={() => setGitOpen(true)} sx={{ borderRadius: 4 }}>Git 导入</Button>
                   <Button size="small" variant="outlined" color="secondary" startIcon={<Autorenew />} onClick={() => setRebuildOpen(true)} disabled={rebuildMutation.isPending} sx={{ borderRadius: 4 }}>重建向量</Button>
                   <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(selectedKb.id)}><Delete /></IconButton>
@@ -306,12 +367,31 @@ export default function KnowledgePage() {
         onClose={() => setActionSheetKb(null)}
         title={actionSheetKb?.name}
         actions={[
+          { label: '编辑配置', onClick: () => { if (actionSheetKb) { setSelectedKb(actionSheetKb); setEditOpen(true); } }, color: 'primary' },
           { label: '重建向量库', onClick: () => actionSheetKb && rebuildMutation.mutate(actionSheetKb.id), color: 'primary' },
           { label: '删除', onClick: () => actionSheetKb && deleteMutation.mutate(actionSheetKb.id), color: 'error' },
         ]}
       />
 
-      <CreateKnowledgeBaseDialog open={createOpen} loading={createMutation.isPending} onClose={() => setCreateOpen(false)} onSubmit={handleCreate} />
+      <CreateKnowledgeBaseDialog
+        open={createOpen}
+        loading={createMutation.isPending}
+        title="新建知识库"
+        submitLabel="创建"
+        initialValue={defaultKnowledgeFormState}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={handleCreate}
+      />
+
+      <CreateKnowledgeBaseDialog
+        open={editOpen}
+        loading={updateMutation.isPending}
+        title="编辑知识库配置"
+        submitLabel="保存"
+        initialValue={selectedKb ? toKnowledgeFormState(selectedKb) : defaultKnowledgeFormState}
+        onClose={() => setEditOpen(false)}
+        onSubmit={handleUpdate}
+      />
 
       <GitImportDialog
         open={gitOpen}

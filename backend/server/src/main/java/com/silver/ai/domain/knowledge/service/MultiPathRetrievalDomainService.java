@@ -3,9 +3,8 @@ package com.silver.ai.domain.knowledge.service;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.IntentResult;
 import com.silver.ai.domain.chat.model.PromptTemplates;
-import com.silver.ai.domain.knowledge.model.KnowledgeBase;
-import com.silver.ai.domain.knowledge.model.VectorDocument;
-import com.silver.ai.domain.knowledge.model.VectorMetadataKeys;
+import com.silver.ai.domain.knowledge.model.*;
+import com.silver.ai.domain.knowledge.port.KeywordSearchPort;
 import com.silver.ai.domain.knowledge.port.PromptRendererPort;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
 import lombok.RequiredArgsConstructor;
@@ -17,17 +16,22 @@ import java.util.stream.Collectors;
 
 /**
  * 多路检索领域服务 — 支持多子问题并行检索、去重、重排序融合。
+ * 支持三种检索模式：VECTOR（纯向量）、KEYWORD（纯关键词 BM25）、HYBRID（混合 RRF 融合）。
  */
 @Slf4j
 @RequiredArgsConstructor
 public class MultiPathRetrievalDomainService {
 
     private final VectorStorePort vectorStore;
+    private final KeywordSearchPort keywordSearch;
     private final PromptRendererPort promptRenderer;
     private final ChatOrchestratorConfig config;
 
+    /** RRF 融合常数 k，业界标准值 */
+    private static final int RRF_K = 60;
+
     /**
-     * 多路检索入口：对每个子查询并行执行向量搜索，然后去重排序融合。
+     * 多路检索入口：根据检索模式分发到不同检索路径。
      *
      * @param kb           知识库
      * @param subQueries   子查询列表（可能是原始查询或拆分后的子问题）
@@ -42,7 +46,38 @@ public class MultiPathRetrievalDomainService {
         var retrievalConfig = kb.getRetrievalConfig();
         Map<String, Object> filter = Map.of(VectorMetadataKeys.KNOWLEDGE_BASE_ID, String.valueOf(kb.getId()));
 
-        // 多路并行检索
+        log.debug("Multi-path retrieval start: kbId={}, mode={}, topK={}, threshold={}, subQueries={}",
+                kb.getId(), retrievalConfig.getRetrievalMode(), retrievalConfig.getTopK(),
+                retrievalConfig.getSimilarityThreshold(), subQueries);
+
+        List<VectorDocument> rankedDocs;
+
+        switch (retrievalConfig.getRetrievalMode()) {
+            case KEYWORD -> rankedDocs = keywordOnlySearch(subQueries, retrievalConfig, filter);
+            case HYBRID -> rankedDocs = hybridSearch(subQueries, retrievalConfig, filter);
+            default -> rankedDocs = vectorOnlySearch(subQueries, retrievalConfig, filter);
+        }
+
+        if (rankedDocs.isEmpty()) {
+            log.debug("No relevant documents found for queries in knowledge base: {}", kb.getName());
+            return "";
+        }
+
+        log.debug("Multi-path retrieval resolved {} documents for kbId={} using mode={}",
+            rankedDocs.size(), kb.getId(), retrievalConfig.getRetrievalMode());
+
+        String context = rankedDocs.stream()
+                .map(VectorDocument::content)
+                .collect(Collectors.joining("\n\n---\n\n"));
+
+        return buildRagSystemPrompt(context);
+    }
+
+    /**
+     * 纯向量语义检索（原有逻辑）。
+     */
+    private List<VectorDocument> vectorOnlySearch(List<String> subQueries, RetrievalConfig retrievalConfig,
+                                                   Map<String, Object> filter) {
         List<VectorDocument> allDocs;
         if (subQueries.size() == 1) {
             allDocs = vectorStore.similaritySearch(
@@ -53,22 +88,137 @@ public class MultiPathRetrievalDomainService {
                     retrievalConfig.getSimilarityThreshold(), filter);
         }
 
-        if (allDocs.isEmpty()) {
-            log.debug("No relevant documents found for queries in knowledge base: {}", kb.getName());
-            return "";
+        List<VectorDocument> uniqueDocs = deduplicateByContent(allDocs);
+        return rerankAndTruncate(uniqueDocs, subQueries, retrievalConfig.getTopK());
+    }
+
+    /**
+     * 纯关键词 BM25 检索。
+     */
+    private List<VectorDocument> keywordOnlySearch(List<String> subQueries, RetrievalConfig retrievalConfig,
+                                                    Map<String, Object> filter) {
+        List<VectorDocument> allDocs = new ArrayList<>();
+        for (String query : subQueries) {
+            List<KeywordSearchResult> results = keywordSearch.keywordSearch(query, retrievalConfig.getTopK(), filter);
+            results.forEach(r -> allDocs.add(new VectorDocument(r.content(), r.metadata())));
         }
 
-        // 去重
         List<VectorDocument> uniqueDocs = deduplicateByContent(allDocs);
+        log.debug("Keyword-only multi-path search resolved {} raw documents, {} after deduplication",
+            allDocs.size(), uniqueDocs.size());
+        return uniqueDocs.size() > retrievalConfig.getTopK()
+                ? uniqueDocs.subList(0, retrievalConfig.getTopK())
+                : uniqueDocs;
+    }
 
-        // 重排序 + 截断到 topK
-        List<VectorDocument> rankedDocs = rerankAndTruncate(uniqueDocs, subQueries, retrievalConfig.getTopK());
+    /**
+     * 混合检索：并行执行向量搜索和关键词搜索，使用 RRF（Reciprocal Rank Fusion）融合结果。
+     * RRF 公式：score(d) = Σ 1/(k + rank_i(d))，k=60
+     */
+    private List<VectorDocument> hybridSearch(List<String> subQueries, RetrievalConfig retrievalConfig,
+                                              Map<String, Object> filter) {
+        int topK = retrievalConfig.getTopK();
+        // 每路多取一些以提高融合质量
+        int fetchSize = topK * 2;
 
-        String context = rankedDocs.stream()
-                .map(VectorDocument::content)
-                .collect(Collectors.joining("\n\n---\n\n"));
+        // 并行执行两路检索
+        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        try {
+            Future<List<VectorDocument>> vectorFuture = executor.submit(() -> {
+                List<VectorDocument> docs;
+                if (subQueries.size() == 1) {
+                    docs = vectorStore.similaritySearch(
+                            subQueries.getFirst(), fetchSize,
+                            retrievalConfig.getSimilarityThreshold(), filter);
+                } else {
+                    docs = parallelSearch(subQueries, fetchSize,
+                            retrievalConfig.getSimilarityThreshold(), filter);
+                }
+                return deduplicateByContent(docs);
+            });
 
-        return buildRagSystemPrompt(context);
+            Future<List<KeywordSearchResult>> keywordFuture = executor.submit(() -> {
+                List<KeywordSearchResult> allKw = new ArrayList<>();
+                for (String query : subQueries) {
+                    allKw.addAll(keywordSearch.keywordSearch(query, fetchSize, filter));
+                }
+                return allKw;
+            });
+
+            List<VectorDocument> vectorResults = vectorFuture.get(
+                    config.getRetrievalTimeoutSeconds(), TimeUnit.SECONDS);
+            List<KeywordSearchResult> keywordResults = keywordFuture.get(
+                    config.getRetrievalTimeoutSeconds(), TimeUnit.SECONDS);
+
+            log.debug("Hybrid retrieval raw results: vector={}, keyword={}",
+                    vectorResults.size(), keywordResults.size());
+
+            return rrfFuse(vectorResults, keywordResults, topK);
+        } catch (TimeoutException e) {
+            log.warn("Hybrid search timed out after {}s, falling back to vector only",
+                    config.getRetrievalTimeoutSeconds());
+            return vectorOnlySearch(subQueries, retrievalConfig, filter);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Hybrid search interrupted");
+            return List.of();
+        } catch (ExecutionException e) {
+            log.warn("Hybrid search failed: {}, falling back to vector only", e.getCause().getMessage());
+            return vectorOnlySearch(subQueries, retrievalConfig, filter);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * RRF（Reciprocal Rank Fusion）分数融合。
+     * 将向量检索和关键词检索的排名结果按 RRF 公式融合后排序。
+     */
+    private List<VectorDocument> rrfFuse(List<VectorDocument> vectorResults,
+                                          List<KeywordSearchResult> keywordResults,
+                                          int topK) {
+        // contentKey -> RRF score
+        Map<String, Double> rrfScores = new LinkedHashMap<>();
+        // contentKey -> VectorDocument (保留原始内容)
+        Map<String, VectorDocument> docMap = new LinkedHashMap<>();
+
+        // 向量检索结果按排名计算 RRF 分数
+        for (int rank = 0; rank < vectorResults.size(); rank++) {
+            VectorDocument doc = vectorResults.get(rank);
+            String key = contentKey(doc.content());
+            if (key == null) continue;
+            docMap.putIfAbsent(key, doc);
+            rrfScores.merge(key, 1.0 / (RRF_K + rank + 1), Double::sum);
+        }
+
+        // 关键词检索结果按排名计算 RRF 分数
+        for (int rank = 0; rank < keywordResults.size(); rank++) {
+            KeywordSearchResult kw = keywordResults.get(rank);
+            String key = contentKey(kw.content());
+            if (key == null) continue;
+            docMap.putIfAbsent(key, new VectorDocument(kw.content(), kw.metadata()));
+            rrfScores.merge(key, 1.0 / (RRF_K + rank + 1), Double::sum);
+        }
+
+        // 按 RRF 分数降序排列，截断到 topK
+        return rrfScores.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(topK)
+                .map(e -> docMap.get(e.getKey()))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * 生成用于去重和融合的内容键。
+     */
+    private String contentKey(String content) {
+        if (content == null) return null;
+        String trimmed = content.trim();
+        if (trimmed.length() > config.getDeduplicatePrefixLength()) {
+            return trimmed.substring(0, config.getDeduplicatePrefixLength());
+        }
+        return trimmed;
     }
 
     /**
