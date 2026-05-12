@@ -85,7 +85,7 @@ public class KnowledgeBaseController {
 
     @PostMapping("/{id}/search")
     public Mono<ApiResponse<List<Map<String, Object>>>> search(@PathVariable Long id, @RequestBody SearchRequest req) {
-        return knowledgeBaseAppService.searchKnowledge(id, req.getQuery(), req.getTopK())
+        return knowledgeBaseAppService.searchKnowledge(id, req.getQuery(), req.getTopK(), req.getFilterExpression())
                 .map(results -> {
                     var mapped = results.stream()
                             .map(doc -> Map.<String, Object>of(
@@ -102,6 +102,10 @@ public class KnowledgeBaseController {
         if (dto.getType() != null) builder.type(ChunkStrategy.ChunkType.valueOf(dto.getType()));
         if (dto.getChunkSize() != null) builder.chunkSize(dto.getChunkSize());
         if (dto.getChunkOverlap() != null) builder.chunkOverlap(dto.getChunkOverlap());
+        if (dto.getSemanticThreshold() != null) builder.semanticThreshold(dto.getSemanticThreshold());
+        if (dto.getChildChunkSize() != null) builder.childChunkSize(dto.getChildChunkSize());
+        if (dto.getWindowSize() != null) builder.windowSize(dto.getWindowSize());
+        if (dto.getEnableParentChild() != null) builder.enableParentChild(dto.getEnableParentChild());
         return builder.build();
     }
 
@@ -114,6 +118,9 @@ public class KnowledgeBaseController {
         if (dto.getRetrievalMode() != null) builder.retrievalMode(dto.getRetrievalMode());
         if (dto.getKeywordWeight() != null) builder.keywordWeight(dto.getKeywordWeight());
         if (dto.getVectorWeight() != null) builder.vectorWeight(dto.getVectorWeight());
+        if (dto.getRerankerEnabled() != null) builder.rerankerEnabled(dto.getRerankerEnabled());
+        if (dto.getRerankerTopK() != null) builder.rerankerTopK(dto.getRerankerTopK());
+        if (dto.getWindowSize() != null) builder.windowSize(dto.getWindowSize());
         return builder.build();
     }
 }

@@ -16,6 +16,7 @@ import com.silver.ai.interfaces.dto.KnowledgeBaseRequest;
 import com.silver.ai.interfaces.dto.RetrievalConfigRequest;
 import com.silver.ai.shared.exception.BusinessException;
 import com.silver.ai.shared.result.ErrorCode;
+import com.silver.ai.shared.result.ApiResponse;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -70,7 +71,9 @@ class KnowledgeBaseControllerTest {
         when(service.createKnowledgeBase(eq("kb"), eq("desc"), any(), any()))
                 .thenReturn(Mono.just(created));
 
-        StepVerifier.create(controller.create(request))
+        Mono<ApiResponse<KnowledgeBase>> responseMono = controller.create(request);
+
+        StepVerifier.create(responseMono)
                 .assertNext(response -> {
                     assertEquals("kb", response.getData().getName());
                     assertEquals(0.6, response.getData().getRetrievalConfig().getSimilarityThreshold());

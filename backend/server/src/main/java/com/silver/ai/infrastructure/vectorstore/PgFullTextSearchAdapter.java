@@ -64,6 +64,10 @@ public class PgFullTextSearchAdapter implements KeywordSearchPort {
                 params.add(tsQuery);
             }
 
+            appendFilterCondition(sql, params, "dc.document_id::text", filterMetadata == null ? null : filterMetadata.get(VectorMetadataKeys.DOCUMENT_ID));
+            appendFilterCondition(sql, params, "dc.metadata_json::jsonb ->> 'file_name'", filterMetadata == null ? null : filterMetadata.get(VectorMetadataKeys.FILE_NAME));
+            appendFilterCondition(sql, params, "dc.metadata_json::jsonb ->> 'file_type'", filterMetadata == null ? null : filterMetadata.get(VectorMetadataKeys.FILE_TYPE));
+
             sql.append("ORDER BY score DESC ")
                .append("LIMIT ?");
             params.add(topK);
@@ -79,6 +83,25 @@ public class PgFullTextSearchAdapter implements KeywordSearchPort {
             throw new BusinessException(ErrorCode.VECTOR_STORE_ERROR,
                     "关键词搜索失败: " + e.getMessage(), e);
         }
+    }
+
+    private void appendFilterCondition(StringBuilder sql, List<Object> params, String column, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof List<?> list) {
+            if (list.isEmpty()) {
+                sql.append("AND 1 = 0 ");
+                return;
+            }
+            sql.append("AND ").append(column).append(" IN (");
+            sql.append(String.join(", ", java.util.Collections.nCopies(list.size(), "?")));
+            sql.append(") ");
+            params.addAll(list.stream().map(String::valueOf).toList());
+            return;
+        }
+        sql.append("AND ").append(column).append(" = ? ");
+        params.add(String.valueOf(value));
     }
 
     /**

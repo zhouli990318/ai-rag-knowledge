@@ -46,6 +46,22 @@ public class KnowledgeBaseEntity {
     @Builder.Default
     private int chunkOverlap = 200;
 
+    @Column("semantic_threshold")
+    @Builder.Default
+    private double semanticThreshold = 0.5;
+
+    @Column("child_chunk_size")
+    @Builder.Default
+    private int childChunkSize = 200;
+
+    @Column("window_size")
+    @Builder.Default
+    private int windowSize = 2;
+
+    @Column("enable_parent_child")
+    @Builder.Default
+    private boolean enableParentChild = false;
+
     @Column("retrieval_top_k")
     @Builder.Default
     private int retrievalTopK = 5;
@@ -68,6 +84,14 @@ public class KnowledgeBaseEntity {
     @Column("vector_weight")
     @Builder.Default
     private double vectorWeight = 0.7;
+
+    @Column("reranker_enabled")
+    @Builder.Default
+    private boolean rerankerEnabled = false;
+
+    @Column("reranker_top_k")
+    @Builder.Default
+    private int rerankerTopK = 5;
 
     @Column("document_count")
     @Builder.Default

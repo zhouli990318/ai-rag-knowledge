@@ -22,6 +22,12 @@ public interface ChatMemoryPort {
     List<String> extractRecentContext(Conversation conversation, int rounds);
 
     /**
+     * 构建用于意图识别和查询规划的上下文。
+     * 该上下文应包含摘要与最近历史轮次，但排除当前最后一条用户消息，避免重复改写。
+     */
+    List<String> buildPlanningContext(Conversation conversation, int rounds);
+
+    /**
      * 生成会话摘要请求文本。
      */
     String buildSummaryPrompt(Conversation conversation);

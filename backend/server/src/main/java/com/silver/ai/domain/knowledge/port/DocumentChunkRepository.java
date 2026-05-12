@@ -8,9 +8,13 @@ import java.util.List;
 
 public interface DocumentChunkRepository {
 
-    Mono<Void> saveAll(List<DocumentChunk> chunks);
+    Mono<List<DocumentChunk>> saveAll(List<DocumentChunk> chunks);
 
     Flux<DocumentChunk> findByDocumentId(Long documentId);
+
+    Flux<DocumentChunk> findByParentId(Long parentId);
+
+    Flux<DocumentChunk> findChildrenWindow(Long parentId, int startChunkIndex, int endChunkIndex);
 
     Mono<Void> deleteByDocumentId(Long documentId);
 }

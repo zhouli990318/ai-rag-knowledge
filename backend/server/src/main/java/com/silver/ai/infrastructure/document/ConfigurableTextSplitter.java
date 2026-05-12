@@ -25,6 +25,7 @@ public class ConfigurableTextSplitter implements TextSplitterPort {
             case SENTENCE -> splitBySentence(text, strategy.getChunkSize(), strategy.getChunkOverlap());
             case PARAGRAPH -> splitByParagraph(text, strategy.getChunkSize(), strategy.getChunkOverlap());
             case RECURSIVE -> splitRecursive(text, strategy.getChunkSize(), strategy.getChunkOverlap());
+            case SEMANTIC -> splitRecursive(text, strategy.getChunkSize(), strategy.getChunkOverlap());
         };
     }
 

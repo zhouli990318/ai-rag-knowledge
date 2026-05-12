@@ -10,12 +10,16 @@ export interface KnowledgeBase {
   active: boolean;
 }
 
-export type ChunkType = 'FIXED_SIZE' | 'SENTENCE' | 'PARAGRAPH' | 'RECURSIVE';
+export type ChunkType = 'FIXED_SIZE' | 'SENTENCE' | 'PARAGRAPH' | 'RECURSIVE' | 'SEMANTIC';
 
 export interface ChunkStrategy {
   type: ChunkType;
   chunkSize: number;
   chunkOverlap: number;
+  semanticThreshold: number;
+  childChunkSize: number;
+  windowSize: number;
+  enableParentChild: boolean;
 }
 
 export type RetrievalMode = 'VECTOR' | 'KEYWORD' | 'HYBRID';
@@ -27,6 +31,9 @@ export interface RetrievalConfig {
   retrievalMode: RetrievalMode;
   keywordWeight: number;
   vectorWeight: number;
+  rerankerEnabled: boolean;
+  rerankerTopK: number;
+  windowSize: number;
 }
 
 export interface KbDocument {

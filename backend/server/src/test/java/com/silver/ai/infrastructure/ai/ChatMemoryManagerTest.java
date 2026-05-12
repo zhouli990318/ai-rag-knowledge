@@ -45,4 +45,27 @@ class ChatMemoryManagerTest {
         assertEquals(MessageRole.ASSISTANT, messages.get(0).role());
         assertEquals(MessageRole.USER, messages.get(1).role());
     }
+
+    @Test
+    void buildPlanningContextShouldIncludeSummaryAndExcludeLatestUserMessage() {
+        Conversation conversation = Conversation.builder()
+                .id(1L)
+                .summary("之前讨论过 Spring AI 与 LangChain4j 的差异")
+                .build();
+        conversation.addMessage(MessageRole.USER, "第一轮问题");
+        conversation.addMessage(MessageRole.ASSISTANT, "第一轮回答");
+        conversation.addMessage(MessageRole.USER, "第二轮问题");
+        conversation.addMessage(MessageRole.ASSISTANT, "第二轮回答");
+        conversation.addMessage(MessageRole.USER, "它的部署步骤是什么？");
+
+        List<String> planningContext = manager.buildPlanningContext(conversation, 2);
+
+        assertEquals(List.of(
+                "SUMMARY: 之前讨论过 Spring AI 与 LangChain4j 的差异",
+                "USER: 第一轮问题",
+                "ASSISTANT: 第一轮回答",
+                "USER: 第二轮问题",
+                "ASSISTANT: 第二轮回答"
+        ), planningContext);
+    }
 }

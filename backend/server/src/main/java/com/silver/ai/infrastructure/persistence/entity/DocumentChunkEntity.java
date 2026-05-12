@@ -21,8 +21,14 @@ public class DocumentChunkEntity {
     @Column("document_id")
     private Long documentId;
 
+    @Column("parent_id")
+    private Long parentId;
+
     @Column("chunk_index")
     private int chunkIndex;
+
+    @Column("chunk_level")
+    private String chunkLevel;
 
     private String content;
 

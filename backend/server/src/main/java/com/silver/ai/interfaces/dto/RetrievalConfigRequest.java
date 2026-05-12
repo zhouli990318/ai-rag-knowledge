@@ -27,4 +27,11 @@ public class RetrievalConfigRequest {
     @Min(value = 0, message = "vectorWeight 最小为 0")
     @Max(value = 1, message = "vectorWeight 最大为 1")
     private Double vectorWeight;
+    private Boolean rerankerEnabled;
+    @Min(value = 1, message = "rerankerTopK 最小为 1")
+    @Max(value = 100, message = "rerankerTopK 最大为 100")
+    private Integer rerankerTopK;
+    @Min(value = 0, message = "windowSize 最小为 0")
+    @Max(value = 20, message = "windowSize 最大为 20")
+    private Integer windowSize;
 }

@@ -20,12 +20,21 @@ public class ChunkStrategy {
     private int chunkSize = 800;
     @Builder.Default
     private int chunkOverlap = 200;
+    @Builder.Default
+    private double semanticThreshold = 0.5;
+    @Builder.Default
+    private int childChunkSize = 200;
+    @Builder.Default
+    private int windowSize = 2;
+    @Builder.Default
+    private boolean enableParentChild = false;
 
     public enum ChunkType {
         FIXED_SIZE,
         SENTENCE,
         PARAGRAPH,
-        RECURSIVE
+        RECURSIVE,
+        SEMANTIC
     }
 
     public static ChunkStrategy defaultStrategy() {

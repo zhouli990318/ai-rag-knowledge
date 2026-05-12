@@ -37,6 +37,10 @@ public class ChatOrchestratorConfig {
     @Builder.Default
     private int rewriteContextRounds = 5;
 
+    /** 是否启用 HyDE 假设文档生成 */
+    @Builder.Default
+    private boolean hydeEnabled = false;
+
     // ── 检索 ──
     /** 是否启用多路检索（false 则退化为单路向量检索） */
     @Builder.Default
@@ -53,6 +57,21 @@ public class ChatOrchestratorConfig {
     /** 去重指纹截取长度 */
     @Builder.Default
     private int deduplicatePrefixLength = 200;
+
+    /** 是否启用运行时 Reranker 服务 */
+    @Builder.Default
+    private boolean rerankerServiceEnabled = false;
+
+    /** Reranker 服务地址 */
+    @Builder.Default
+    private String rerankerBaseUrl = "http://localhost:8080";
+
+    /** Reranker 模型名 */
+    @Builder.Default
+    private String rerankerModel = "bge-reranker-v2-m3";
+
+    /** Reranker API Key 的加密存储值，仅用于服务端持久化与运行时调用 */
+    private String rerankerApiKeyEncrypted;
 
     // ── 记忆管理 ──
     /** 保留近 N 轮完整对话 */
@@ -142,6 +161,9 @@ public class ChatOrchestratorConfig {
         }
         if (retrievalTimeoutSeconds <= 0) {
             throw new IllegalArgumentException("retrievalTimeoutSeconds must be positive, got: " + retrievalTimeoutSeconds);
+        }
+        if (rerankerServiceEnabled && (rerankerBaseUrl == null || rerankerBaseUrl.isBlank())) {
+            throw new IllegalArgumentException("rerankerBaseUrl must not be blank when rerankerServiceEnabled is true");
         }
     }
 }

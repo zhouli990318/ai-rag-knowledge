@@ -25,6 +25,12 @@ public class RetrievalConfig {
     private double keywordWeight = 0.3;
     @Builder.Default
     private double vectorWeight = 0.7;
+    @Builder.Default
+    private boolean rerankerEnabled = false;
+    @Builder.Default
+    private int rerankerTopK = 5;
+    @Builder.Default
+    private int windowSize = 2;
 
     public enum RetrievalMode {
         /** 纯向量语义检索 */

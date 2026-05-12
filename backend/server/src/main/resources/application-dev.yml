@@ -49,6 +49,11 @@ app:
     secret-key: ${APP_CRYPTO_KEY:SpringAiRagPlatform2024SecretKey}
   mcp-gateway:
     base-url: ${APP_MCP_GATEWAY_BASE_URL:http://localhost:8092/api/v1/mcp}
+  reranker:
+    enabled: ${APP_RERANKER_ENABLED:false}
+    base-url: ${APP_RERANKER_BASE_URL:http://localhost:8080}
+    model: ${APP_RERANKER_MODEL:bge-reranker-v2-m3}
+    api-key: ${APP_RERANKER_API_KEY:}
   default-embedding:
     base-url: ${APP_DEFAULT_EMBEDDING_BASE_URL:${OLLAMA_BASE_URL:http://localhost:11434}}
     model: ${APP_DEFAULT_EMBEDDING_MODEL:bge-m3}

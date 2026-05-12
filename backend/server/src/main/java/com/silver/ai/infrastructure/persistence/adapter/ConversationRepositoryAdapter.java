@@ -131,6 +131,7 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .suggestionVersion(d.getSuggestionVersion())
                 .suggestionUpdatedAt(d.getSuggestionUpdatedAt())
                 .toolMode(d.getToolMode() == null ? ToolMode.AUTO.name() : d.getToolMode().name())
+                .filterExpression(d.getFilterExpression())
                 .createdAt(d.getCreatedAt())
                 .updatedAt(d.getUpdatedAt())
                 .build();
@@ -175,6 +176,7 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .suggestionVersion(e.getSuggestionVersion())
                 .suggestionUpdatedAt(e.getSuggestionUpdatedAt())
                 .toolMode(ToolMode.fromString(e.getToolMode()))
+                .filterExpression(e.getFilterExpression())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();
@@ -197,6 +199,7 @@ public class ConversationRepositoryAdapter implements ConversationRepository {
                 .suggestionVersion(e.getSuggestionVersion())
                 .suggestionUpdatedAt(e.getSuggestionUpdatedAt())
                 .toolMode(ToolMode.fromString(e.getToolMode()))
+                .filterExpression(e.getFilterExpression())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

@@ -24,4 +24,6 @@ public class ChatRequest {
     private List<Long> mcpServerIds;
     /** 工具模式：OFF | AUTO | SPECIFIC（默认 AUTO） */
     private String toolMode;
+    @Size(max = 500, message = "filterExpression 长度不能超过 500")
+    private String filterExpression;
 }

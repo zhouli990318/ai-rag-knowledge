@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Box, Typography, Button, IconButton, Grid, LinearProgress,
   Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField,
 } from '@mui/material';
 import {
   AddOutlined as Add, DeleteOutlined as Delete, UploadOutlined as Upload,
@@ -42,6 +43,10 @@ function toKnowledgeRequest(payload: KnowledgeFormState): CreateKnowledgeBaseReq
       type: payload.chunkType,
       chunkSize: payload.chunkSize,
       chunkOverlap: payload.chunkOverlap,
+      semanticThreshold: payload.semanticThreshold,
+      childChunkSize: payload.childChunkSize,
+      windowSize: payload.windowSize,
+      enableParentChild: payload.enableParentChild,
     },
     retrievalConfig: {
       topK: payload.retrievalTopK,
@@ -50,6 +55,9 @@ function toKnowledgeRequest(payload: KnowledgeFormState): CreateKnowledgeBaseReq
       retrievalMode: payload.retrievalMode,
       keywordWeight: payload.keywordWeight,
       vectorWeight: payload.vectorWeight,
+      rerankerEnabled: payload.rerankerEnabled,
+      rerankerTopK: payload.rerankerTopK,
+      windowSize: payload.windowSize,
     },
   };
 }
@@ -61,12 +69,18 @@ function toKnowledgeFormState(knowledgeBase: KnowledgeBase): KnowledgeFormState 
     chunkType: knowledgeBase.chunkStrategy.type,
     chunkSize: knowledgeBase.chunkStrategy.chunkSize,
     chunkOverlap: knowledgeBase.chunkStrategy.chunkOverlap,
+    semanticThreshold: knowledgeBase.chunkStrategy.semanticThreshold,
+    childChunkSize: knowledgeBase.chunkStrategy.childChunkSize,
+    windowSize: knowledgeBase.chunkStrategy.windowSize,
+    enableParentChild: knowledgeBase.chunkStrategy.enableParentChild,
     retrievalTopK: knowledgeBase.retrievalConfig.topK,
     similarityThreshold: knowledgeBase.retrievalConfig.similarityThreshold,
     retrievalMode: knowledgeBase.retrievalConfig.retrievalMode,
     filterExpression: knowledgeBase.retrievalConfig.filterExpression ?? '',
     keywordWeight: knowledgeBase.retrievalConfig.keywordWeight,
     vectorWeight: knowledgeBase.retrievalConfig.vectorWeight,
+    rerankerEnabled: knowledgeBase.retrievalConfig.rerankerEnabled,
+    rerankerTopK: knowledgeBase.retrievalConfig.rerankerTopK,
   };
 }
 
@@ -78,6 +92,7 @@ export default function KnowledgePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedKb, setSelectedKb] = useState<KnowledgeBase | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilterExpression, setSearchFilterExpression] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [gitOpen, setGitOpen] = useState(false);
   const [rebuildOpen, setRebuildOpen] = useState(false);
@@ -143,7 +158,12 @@ export default function KnowledgePage() {
   const handleSearch = async () => {
     if (!selectedKb || !searchQuery.trim()) return;
     try {
-      const results = await knowledgeApi.search(selectedKb.id, searchQuery);
+      const results = await knowledgeApi.search(
+        selectedKb.id,
+        searchQuery,
+        undefined,
+        searchFilterExpression.trim() || undefined,
+      );
       setSearchResults(results);
     } catch (e: any) {
       enqueueSnackbar(e?.response?.data?.message || '搜索失败', { variant: 'error' });
@@ -262,8 +282,18 @@ export default function KnowledgePage() {
                   <Typography variant="h6">{selectedKb.name}</Typography>
                   <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{selectedKb.description}</Typography>
                   <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <InkBadge label={`分块 ${selectedKb.chunkStrategy.type}`} status="default" />
                     <InkBadge label={`模式 ${selectedKb.retrievalConfig.retrievalMode}`} status="info" />
                     <InkBadge label={`阈值 ${selectedKb.retrievalConfig.similarityThreshold}`} status="warning" />
+                    {selectedKb.chunkStrategy.enableParentChild && (
+                      <InkBadge label={`父子块 ${selectedKb.chunkStrategy.childChunkSize}/${selectedKb.chunkStrategy.windowSize}`} status="success" />
+                    )}
+                    {selectedKb.chunkStrategy.type === 'SEMANTIC' && (
+                      <InkBadge label={`语义阈值 ${selectedKb.chunkStrategy.semanticThreshold}`} status="warning" />
+                    )}
+                    {selectedKb.retrievalConfig.rerankerEnabled && (
+                      <InkBadge label={`Reranker ${selectedKb.retrievalConfig.rerankerTopK}`} status="success" />
+                    )}
                     {selectedKb.retrievalConfig.retrievalMode === 'HYBRID' && (
                       <>
                         <InkBadge label={`关键词 ${selectedKb.retrievalConfig.keywordWeight}`} status="default" />
@@ -300,6 +330,16 @@ export default function KnowledgePage() {
               {/* Search */}
               <Box sx={{ mb: 2.5 }}>
                 <InkSearchBar value={searchQuery} onChange={setSearchQuery} onSearch={handleSearch} placeholder="搜索知识库内容..." />
+                <TextField
+                  fullWidth
+                  size="small"
+                  sx={{ mt: 1 }}
+                  label="动态过滤（可选）"
+                  value={searchFilterExpression}
+                  onChange={(event) => setSearchFilterExpression(event.target.value)}
+                  placeholder="file_type IN (md,pdf)"
+                  helperText="支持 file_name = README.md、file_type IN (md,pdf)、document_id = 12；多个条件用 AND"
+                />
               </Box>
               {searchResults.length > 0 && (
                 <Box sx={{

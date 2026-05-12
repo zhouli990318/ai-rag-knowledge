@@ -16,6 +16,20 @@ const TAB_KEY = 'system-settings-tab';
 export default function SystemSettingsPage() {
   const queryClient = useQueryClient();
   const di = useInk();
+  const normalizeSettings = (settings: SystemSettings): SystemSettings => ({
+    ...settings,
+    rerankerApiKeyMasked: settings.rerankerApiKeyMasked ?? '',
+    rerankerApiKey: settings.rerankerApiKeyMasked ?? '',
+    clearRerankerApiKey: false,
+  });
+  const toSubmitSettings = (settings: SystemSettings): SystemSettings => ({
+    ...settings,
+    rerankerApiKey: settings.clearRerankerApiKey
+      ? ''
+      : settings.rerankerApiKey === settings.rerankerApiKeyMasked
+        ? ''
+        : settings.rerankerApiKey ?? '',
+  });
   const cardSx = {
     p: 2.5,
     borderRadius: `${radius.md + 2}px`,
@@ -50,14 +64,14 @@ export default function SystemSettingsPage() {
   });
 
   useEffect(() => {
-    if (settings && !form) setForm({ ...settings });
+    if (settings && !form) setForm(normalizeSettings(settings));
   }, [settings, form]);
 
   const mutation = useMutation({
     mutationFn: settingsApi.update,
     onSuccess: (saved) => {
       queryClient.setQueryData(['systemSettings'], saved);
-      setForm({ ...saved });
+      setForm(normalizeSettings(saved));
       setToast({ open: true, message: '保存成功', severity: 'success' });
     },
     onError: () => {
@@ -93,6 +107,18 @@ export default function SystemSettingsPage() {
     />
   );
 
+  const textField = (label: string, key: keyof SystemSettings, props?: Record<string, unknown>) => (
+    <Box>
+      <Typography sx={{ fontSize: 13, color: di.lightGray, mb: 0.5 }}>{label}</Typography>
+      <TextField
+        size="small" fullWidth
+        value={form[key] as string}
+        onChange={(e) => set(key, e.target.value as never)}
+        {...props}
+      />
+    </Box>
+  );
+
   const sectionTitle = (text: string) => (
     <Typography sx={{ fontFamily: serifFont, fontWeight: 600, fontSize: 15, letterSpacing: 1, mb: 1.5, color: di.black }}>
       {text}
@@ -107,7 +133,7 @@ export default function SystemSettingsPage() {
         </Typography>
         <Button
           variant="contained" disabled={mutation.isPending}
-          onClick={() => mutation.mutate(form)}
+          onClick={() => mutation.mutate(toSubmitSettings(form))}
           sx={{ fontFamily: serifFont, letterSpacing: 1 }}
         >
           {mutation.isPending ? '保存中...' : '保存'}
@@ -157,6 +183,7 @@ export default function SystemSettingsPage() {
                 {sectionTitle('查询重写')}
                 <Stack spacing={1.5}>
                   {switchField('启用查询重写', 'rewriteEnabled')}
+                  {switchField('启用 HyDE 假设文档', 'hydeEnabled')}
                   {numField('上下文轮数', 'rewriteContextRounds', { inputProps: { min: 1 } })}
                 </Stack>
               </Box>
@@ -199,6 +226,31 @@ export default function SystemSettingsPage() {
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Stack spacing={2}>
+              <Box sx={cardSx}>
+                {sectionTitle('Reranker 服务')}
+                <Stack spacing={1.5}>
+                  {switchField('启用 Cross-Encoder Reranker', 'rerankerServiceEnabled')}
+                  {textField('服务地址', 'rerankerBaseUrl', {
+                    placeholder: 'http://localhost:8080',
+                    helperText: '运行时调用的 reranker HTTP 服务地址',
+                  })}
+                  {textField('模型名称', 'rerankerModel', {
+                    placeholder: 'bge-reranker-v2-m3',
+                    helperText: '发送给 reranker 服务的模型标识',
+                  })}
+                  {textField('API Key', 'rerankerApiKey', {
+                    type: form.rerankerApiKeyMasked && form.rerankerApiKey === form.rerankerApiKeyMasked ? 'text' : 'password',
+                    autoComplete: 'off',
+                    disabled: !!form.clearRerankerApiKey,
+                    onFocus: () => {
+                      if (form.rerankerApiKeyMasked && form.rerankerApiKey === form.rerankerApiKeyMasked) {
+                        set('rerankerApiKey', '');
+                      }
+                    },
+                  })}
+                  {form.rerankerApiKeyConfigured && switchField('保存时清除当前 API Key', 'clearRerankerApiKey')}
+                </Stack>
+              </Box>
               <Box sx={cardSx}>
                 {sectionTitle('检索')}
                 <Stack spacing={1.5}>

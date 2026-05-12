@@ -8,7 +8,7 @@ import reactor.core.publisher.Mono;
  */
 public interface SystemSettingsRepository {
 
-    Mono<ChatOrchestratorConfig> load();
+    Mono<ChatOrchestratorConfig> load(ChatOrchestratorConfig defaults);
 
     Mono<ChatOrchestratorConfig> save(ChatOrchestratorConfig config);
 }

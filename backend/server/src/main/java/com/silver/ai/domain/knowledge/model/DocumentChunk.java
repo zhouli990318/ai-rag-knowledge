@@ -14,10 +14,18 @@ import java.util.Map;
 @AllArgsConstructor
 public class DocumentChunk {
 
+    public enum ChunkLevel {
+        PARENT,
+        CHILD
+    }
+
     private Long id;
     private Long documentId;
+    private Long parentId;
     private int chunkIndex;
     private String content;
+    @Builder.Default
+    private ChunkLevel chunkLevel = ChunkLevel.CHILD;
     @Builder.Default
     private Map<String, Object> metadata = Map.of();
     private LocalDateTime createdAt;

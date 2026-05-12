@@ -22,9 +22,9 @@ public class SystemSettingsRepositoryAdapter implements SystemSettingsRepository
     private final ObjectMapper objectMapper;
 
     @Override
-    public Mono<ChatOrchestratorConfig> load() {
+    public Mono<ChatOrchestratorConfig> load(ChatOrchestratorConfig defaults) {
         return r2dbc.findById(SINGLETON_ID)
-                .map(this::toDomain)
+                .map(entity -> toDomain(entity, defaults))
                 .onErrorResume(e -> {
                     log.warn("Failed to load system settings from DB: {}", e.getMessage());
                     return Mono.empty();
@@ -47,15 +47,18 @@ public class SystemSettingsRepositoryAdapter implements SystemSettingsRepository
                     entity.markNew();
                     return r2dbc.save(entity);
                 }))
-                .map(this::toDomain);
+                .map(entity -> toDomain(entity, config));
     }
 
-    private ChatOrchestratorConfig toDomain(SystemSettingsEntity entity) {
+    private ChatOrchestratorConfig toDomain(SystemSettingsEntity entity, ChatOrchestratorConfig defaults) {
         try {
-            return objectMapper.readValue(entity.getConfig(), ChatOrchestratorConfig.class);
+            ChatOrchestratorConfig baseConfig = defaults != null
+                    ? objectMapper.convertValue(defaults, ChatOrchestratorConfig.class)
+                    : new ChatOrchestratorConfig();
+            return objectMapper.readerForUpdating(baseConfig).readValue(entity.getConfig());
         } catch (Exception e) {
             log.error("Failed to deserialize system settings JSON, using defaults", e);
-            return new ChatOrchestratorConfig();
+            return defaults != null ? defaults : new ChatOrchestratorConfig();
         }
     }
 

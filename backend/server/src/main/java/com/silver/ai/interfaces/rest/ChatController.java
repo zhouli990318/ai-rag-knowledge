@@ -31,7 +31,8 @@ public class ChatController {
                         request.getKnowledgeBaseId(),
                         request.getSystemPrompt(),
                         request.getMcpServerIds(),
-                        request.getToolMode()
+                        request.getToolMode(),
+                        request.getFilterExpression()
                 )
                 .map(text -> ServerSentEvent.<String>builder().data(text).build())
                 .concatWith(Flux.just(ServerSentEvent.<String>builder()
@@ -48,7 +49,8 @@ public class ChatController {
                         request.getKnowledgeBaseId(),
                         request.getSystemPrompt(),
                         request.getMcpServerIds(),
-                        request.getToolMode()
+                        request.getToolMode(),
+                        request.getFilterExpression()
                 )
                 .map(text -> text + "\n");
     }
@@ -63,7 +65,8 @@ public class ChatController {
                 request.getKnowledgeBaseId(),
                 request.getSystemPrompt(),
                 request.getMcpServerIds(),
-                request.getToolMode()
+                request.getToolMode(),
+                request.getFilterExpression()
         ).map(ApiResponse::ok);
     }
 

@@ -23,7 +23,19 @@ export default function ChatPage() {
     preStreamMessageCount,
     startStream, stopStream, clearStream,
   } = useStreamStore();
-  const { selectedProvider, selectedKb, setSelectedProvider, setSelectedKb, resetConfig, toolMode, selectedMcpServers } = useChatConfigStore();
+  const {
+    selectedProvider,
+    selectedKb,
+    setSelectedProvider,
+    setSelectedKb,
+    resetConfig,
+    toolMode,
+    selectedMcpServers,
+    setToolMode,
+    setSelectedMcpServers,
+    filterExpression,
+    setFilterExpression,
+  } = useChatConfigStore();
 
   const [input, setInput] = useState('');
 
@@ -55,7 +67,10 @@ export default function ChatPage() {
     if (!activeConv) return;
     if (activeConv.providerId) setSelectedProvider(activeConv.providerId);
     setSelectedKb(activeConv.knowledgeBaseId ?? 0);
-  }, [activeConv?.id, setSelectedProvider, setSelectedKb]);
+    setToolMode(activeConv.toolMode ?? 'AUTO');
+    setSelectedMcpServers(activeConv.mcpServerIds ?? []);
+    setFilterExpression(activeConv.filterExpression ?? '');
+  }, [activeConv?.id, setSelectedProvider, setSelectedKb, setToolMode, setSelectedMcpServers, setFilterExpression]);
 
   // Clear optimistic state once real messages arrive from API
   // Only clear when the refetched messages actually include new data (length increased),
@@ -102,6 +117,7 @@ export default function ChatPage() {
         systemPrompt: selectedKb > 0 ? '请优先根据知识库内容回答。' : undefined,
         toolMode,
         mcpServerIds: toolMode === 'SPECIFIC' ? selectedMcpServers : undefined,
+        filterExpression: filterExpression.trim() || undefined,
       },
       queryClient,
       (id: number) => setActiveConversation(id),

@@ -27,19 +27,32 @@ public class DocumentChunkRepositoryAdapter implements DocumentChunkRepository {
     private final ObjectMapper objectMapper;
 
     @Override
-    public Mono<Void> saveAll(List<DocumentChunk> chunks) {
+    public Mono<List<DocumentChunk>> saveAll(List<DocumentChunk> chunks) {
         if (chunks.isEmpty()) {
-            return Mono.empty();
+            return Mono.just(List.of());
         }
         return Flux.fromIterable(chunks)
                 .map(this::toEntity)
                 .flatMap(r2dbc::save)
-                .then();
+                .map(this::toDomain)
+                .collectList();
     }
 
     @Override
     public Flux<DocumentChunk> findByDocumentId(Long documentId) {
         return r2dbc.findByDocumentIdOrderByChunkIndexAsc(documentId)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Flux<DocumentChunk> findByParentId(Long parentId) {
+        return r2dbc.findByParentIdOrderByChunkIndexAsc(parentId)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Flux<DocumentChunk> findChildrenWindow(Long parentId, int startChunkIndex, int endChunkIndex) {
+        return r2dbc.findByParentIdAndChunkIndexBetweenOrderByChunkIndexAsc(parentId, startChunkIndex, endChunkIndex)
                 .map(this::toDomain);
     }
 
@@ -52,7 +65,9 @@ public class DocumentChunkRepositoryAdapter implements DocumentChunkRepository {
         DocumentChunkEntity entity = DocumentChunkEntity.builder()
                 .id(chunk.getId())
                 .documentId(chunk.getDocumentId())
+            .parentId(chunk.getParentId())
                 .chunkIndex(chunk.getChunkIndex())
+            .chunkLevel(chunk.getChunkLevel().name())
                 .content(chunk.getContent())
                 .metadataJson(writeMetadata(chunk.getMetadata()))
                 .build();
@@ -66,11 +81,20 @@ public class DocumentChunkRepositoryAdapter implements DocumentChunkRepository {
         return DocumentChunk.builder()
                 .id(entity.getId())
                 .documentId(entity.getDocumentId())
+                .parentId(entity.getParentId())
                 .chunkIndex(entity.getChunkIndex())
+                .chunkLevel(readChunkLevel(entity.getChunkLevel()))
                 .content(entity.getContent())
                 .metadata(readMetadata(entity.getMetadataJson()))
                 .createdAt(entity.getCreatedAt())
                 .build();
+    }
+
+    private DocumentChunk.ChunkLevel readChunkLevel(String chunkLevel) {
+        if (chunkLevel == null || chunkLevel.isBlank()) {
+            return DocumentChunk.ChunkLevel.CHILD;
+        }
+        return DocumentChunk.ChunkLevel.valueOf(chunkLevel);
     }
 
     private String writeMetadata(Map<String, Object> metadata) {

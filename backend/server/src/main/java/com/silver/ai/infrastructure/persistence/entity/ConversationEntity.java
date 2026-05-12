@@ -54,6 +54,9 @@ public class ConversationEntity {
     @Column("tool_mode")
     private String toolMode;
 
+    @Column("filter_expression")
+    private String filterExpression;
+
     @Column("created_at")
     private LocalDateTime createdAt;
 

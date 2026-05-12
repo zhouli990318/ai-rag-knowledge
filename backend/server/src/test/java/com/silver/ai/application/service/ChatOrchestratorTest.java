@@ -77,7 +77,7 @@ class ChatOrchestratorTest {
         AtomicReference<String> retrievalThread = new AtomicReference<>();
         AtomicReference<String> toolThread = new AtomicReference<>();
 
-        when(chatMemory.extractRecentContext(eq(conversation), eq(config.getRewriteContextRounds())))
+        when(chatMemory.buildPlanningContext(eq(conversation), eq(config.getRewriteContextRounds())))
                 .thenReturn(List.of());
         when(intentDecision.detect(eq("hello"), anyList())).thenReturn(Mono.just(intentResult));
         when(queryPlanning.plan(eq("hello"), anyList())).thenReturn(Mono.just(queryPlan));
@@ -89,7 +89,7 @@ class ChatOrchestratorTest {
                     .retrievalConfig(RetrievalConfig.builder().topK(1).similarityThreshold(0.3).build())
                     .build());
         });
-        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), eq(intentResult))).thenReturn("rag-context");
+        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), eq((String) null), eq(intentResult))).thenReturn("rag-context");
         when(toolRouting.decide(eq(intentResult), eq(ToolMode.AUTO), anyList(), eq("hello")))
                 .thenAnswer(invocation -> {
                     toolThread.set(Thread.currentThread().getName());
@@ -145,7 +145,7 @@ class ChatOrchestratorTest {
         QueryPlanningDomainService.QueryPlan queryPlan =
                 new QueryPlanningDomainService.QueryPlan("hello", "hello", List.of("hello"));
 
-        when(chatMemory.extractRecentContext(eq(conversation), eq(config.getRewriteContextRounds())))
+        when(chatMemory.buildPlanningContext(eq(conversation), eq(config.getRewriteContextRounds())))
                 .thenReturn(List.of());
         when(intentDecision.detect(eq("hello"), anyList())).thenReturn(Mono.just(intentResult));
         when(queryPlanning.plan(eq("hello"), anyList())).thenReturn(Mono.just(queryPlan));
@@ -154,7 +154,7 @@ class ChatOrchestratorTest {
                 .name("kb")
                 .retrievalConfig(RetrievalConfig.builder().topK(1).similarityThreshold(0.3).build())
                 .build()));
-        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), eq(intentResult))).thenReturn("");
+        when(multiPathRetrieval.retrieveAndFuse(any(), anyList(), eq((String) null), eq(intentResult))).thenReturn("");
         when(toolRouting.decide(eq(intentResult), eq(ToolMode.AUTO), anyList(), eq("hello")))
                 .thenReturn(ToolRoutingDomainService.ToolDecision.noTool());
 
@@ -168,5 +168,76 @@ class ChatOrchestratorTest {
                 .verifyComplete();
 
         verify(chatMemory, never()).buildMessages(eq(conversation), anyString(), eq(config.getMemoryFullRounds()));
+    }
+
+    @Test
+    void orchestrateShouldPassConversationFilterExpressionToRetrieval() {
+        KnowledgeBaseRepository knowledgeBaseRepository = mock(KnowledgeBaseRepository.class);
+        MultiPathRetrievalDomainService multiPathRetrieval = mock(MultiPathRetrievalDomainService.class);
+        PromptRendererPort promptRenderer = mock(PromptRendererPort.class);
+        ChatMemoryPort chatMemory = mock(ChatMemoryPort.class);
+        IntentDecisionDomainService intentDecision = mock(IntentDecisionDomainService.class);
+        QueryPlanningDomainService queryPlanning = mock(QueryPlanningDomainService.class);
+        ToolRoutingDomainService toolRouting = mock(ToolRoutingDomainService.class);
+        ChatOrchestratorConfig config = ChatOrchestratorConfig.builder().build();
+
+        ChatOrchestrator orchestrator = new ChatOrchestrator(
+                knowledgeBaseRepository,
+                multiPathRetrieval,
+                promptRenderer,
+                chatMemory,
+                intentDecision,
+                queryPlanning,
+                toolRouting,
+                config);
+
+        Conversation conversation = Conversation.builder()
+                .id(1L)
+                .knowledgeBaseId(9L)
+                .toolMode(ToolMode.AUTO)
+                .filterExpression("file_name = README.md")
+                .build();
+        ChatTraceContext trace = ChatTraceContext.create(1L);
+        IntentResult intentResult = IntentResult.builder()
+                .domain("general")
+                .category("qa")
+                .topic("rag")
+                .confidence(0.95)
+                .routingAdvice(IntentResult.RoutingAdvice.RETRIEVAL)
+                .build();
+        QueryPlanningDomainService.QueryPlan queryPlan = QueryPlanningDomainService.QueryPlan.singleRewritten(
+                "README 里说了什么？",
+                "README.md 里说了什么？");
+
+        when(chatMemory.buildPlanningContext(eq(conversation), eq(config.getRewriteContextRounds())))
+                .thenReturn(List.of());
+        when(intentDecision.detect(eq("README 里说了什么？"), anyList())).thenReturn(Mono.just(intentResult));
+        when(queryPlanning.plan(eq("README 里说了什么？"), anyList())).thenReturn(Mono.just(queryPlan));
+        when(knowledgeBaseRepository.findById(9L)).thenReturn(Mono.just(KnowledgeBase.builder()
+                .id(9L)
+                .name("kb")
+                .retrievalConfig(RetrievalConfig.builder().topK(1).similarityThreshold(0.3).build())
+                .build()));
+        when(multiPathRetrieval.retrieveAndFuse(
+                any(),
+                anyList(),
+                eq("file_name = README.md"),
+                eq(intentResult)))
+                .thenReturn("rag-context");
+        when(toolRouting.decide(eq(intentResult), eq(ToolMode.AUTO), anyList(), eq("README 里说了什么？")))
+                .thenReturn(ToolRoutingDomainService.ToolDecision.noTool());
+        when(promptRenderer.render(PromptTemplates.GENERAL_SYSTEM)).thenReturn("system");
+        when(chatMemory.buildMessages(eq(conversation), anyString(), eq(config.getMemoryFullRounds())))
+                .thenReturn(List.of(new DomainMessage(MessageRole.USER, "README 里说了什么？")));
+
+        StepVerifier.create(orchestrator.orchestrate(conversation, "README 里说了什么？", null, trace))
+                .expectNextMatches(result -> result.messages().size() == 1 && result.toolCallbacks().isEmpty())
+                .verifyComplete();
+
+        verify(multiPathRetrieval).retrieveAndFuse(
+                any(),
+                eq(queryPlan.retrievalVariants()),
+                eq("file_name = README.md"),
+                eq(intentResult));
     }
 }

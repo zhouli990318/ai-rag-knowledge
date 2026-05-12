@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import {
   Box, Typography, ButtonBase,
   Accordion, AccordionSummary, AccordionDetails,
+  TextField,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +33,7 @@ export default memo(function ChatConfig() {
     selectedKb, setSelectedKb,
     toolMode, setToolMode,
     selectedMcpServers, setSelectedMcpServers,
+    filterExpression, setFilterExpression,
   } = useChatConfigStore();
 
   const [mcpExpanded, setMcpExpanded] = useState(false);
@@ -397,6 +399,16 @@ export default memo(function ChatConfig() {
           {kbs.length === 0 && (
             <Typography sx={{ fontSize: 11.5, color: di.muted, textAlign: 'center', py: 0.75 }}>暂无知识库</Typography>
           )}
+          <TextField
+            label="检索过滤（可选）"
+            size="small"
+            fullWidth
+            value={filterExpression}
+            onChange={(event) => setFilterExpression(event.target.value)}
+            placeholder="file_name = README.md"
+            helperText="支持 file_name = README.md、file_type IN (md,pdf)、document_id = 12；多个条件用 AND"
+            sx={{ mt: 1.25 }}
+          />
         </AccordionDetails>
       </Accordion>
     </Box>

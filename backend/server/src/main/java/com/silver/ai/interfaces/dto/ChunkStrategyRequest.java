@@ -11,4 +11,8 @@ public class ChunkStrategyRequest {
     private String type;
     private Integer chunkSize;
     private Integer chunkOverlap;
+    private Double semanticThreshold;
+    private Integer childChunkSize;
+    private Integer windowSize;
+    private Boolean enableParentChild;
 }

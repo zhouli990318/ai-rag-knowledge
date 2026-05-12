@@ -5,8 +5,10 @@ import com.silver.ai.domain.chat.port.*;
 import com.silver.ai.domain.chat.service.*;
 import com.silver.ai.domain.knowledge.port.*;
 import com.silver.ai.domain.knowledge.service.*;
+import com.silver.ai.domain.provider.port.EmbeddingPort;
 import com.silver.ai.domain.provider.port.ModelProviderRepository;
 import com.silver.ai.domain.provider.service.ModelRoutingDomainService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -36,8 +38,9 @@ public class DomainServiceConfig {
     @Bean
     public QueryPlanningDomainService queryPlanningDomainService(
             QueryRewriterPort queryRewriter,
+            HypothesisGeneratorPort hypothesisGenerator,
             ChatOrchestratorConfig config) {
-        return new QueryPlanningDomainService(queryRewriter, config);
+        return new QueryPlanningDomainService(queryRewriter, hypothesisGenerator, config);
     }
 
     @Bean
@@ -51,10 +54,11 @@ public class DomainServiceConfig {
     public DocumentProcessingDomainService documentProcessingDomainService(
             DocumentParserPort documentParser,
             TextSplitterPort textSplitter,
+            SemanticTextSplitterPort semanticTextSplitter,
             VectorStorePort vectorStore,
             DocumentRepository documentRepository,
             DocumentChunkRepository documentChunkRepository) {
-        return new DocumentProcessingDomainService(documentParser, textSplitter, vectorStore,
+        return new DocumentProcessingDomainService(documentParser, textSplitter, semanticTextSplitter, vectorStore,
                 documentRepository, documentChunkRepository);
     }
 
@@ -62,8 +66,11 @@ public class DomainServiceConfig {
     public RetrievalDomainService retrievalDomainService(
             VectorStorePort vectorStore,
             KeywordSearchPort keywordSearch,
-            PromptRendererPort promptRenderer) {
-        return new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer);
+            PromptRendererPort promptRenderer,
+            DocumentChunkRepository documentChunkRepository,
+            ObjectProvider<RerankerPort> rerankerPortProvider) {
+        return new RetrievalDomainService(vectorStore, keywordSearch, promptRenderer,
+                documentChunkRepository, rerankerPortProvider.getIfAvailable());
     }
 
     @Bean
@@ -71,8 +78,11 @@ public class DomainServiceConfig {
             VectorStorePort vectorStore,
             KeywordSearchPort keywordSearch,
             PromptRendererPort promptRenderer,
-            ChatOrchestratorConfig config) {
-        return new MultiPathRetrievalDomainService(vectorStore, keywordSearch, promptRenderer, config);
+            ChatOrchestratorConfig config,
+            DocumentChunkRepository documentChunkRepository,
+            ObjectProvider<RerankerPort> rerankerPortProvider) {
+        return new MultiPathRetrievalDomainService(vectorStore, keywordSearch, promptRenderer, config,
+                documentChunkRepository, rerankerPortProvider.getIfAvailable());
     }
 
     @Bean

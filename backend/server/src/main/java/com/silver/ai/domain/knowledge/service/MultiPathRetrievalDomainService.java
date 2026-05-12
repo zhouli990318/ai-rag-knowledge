@@ -3,9 +3,12 @@ package com.silver.ai.domain.knowledge.service;
 import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.model.IntentResult;
 import com.silver.ai.domain.chat.model.PromptTemplates;
+import com.silver.ai.domain.chat.service.QueryPlanningDomainService;
 import com.silver.ai.domain.knowledge.model.*;
+import com.silver.ai.domain.knowledge.port.DocumentChunkRepository;
 import com.silver.ai.domain.knowledge.port.KeywordSearchPort;
 import com.silver.ai.domain.knowledge.port.PromptRendererPort;
+import com.silver.ai.domain.knowledge.port.RerankerPort;
 import com.silver.ai.domain.knowledge.port.VectorStorePort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,9 @@ public class MultiPathRetrievalDomainService {
     private final KeywordSearchPort keywordSearch;
     private final PromptRendererPort promptRenderer;
     private final ChatOrchestratorConfig config;
+    private final DocumentChunkRepository documentChunkRepository;
+    private final RerankerPort rerankerPort;
+    private final MetadataFilterParser metadataFilterParser = new MetadataFilterParser();
 
     /** RRF 融合常数 k，业界标准值 */
     private static final int RRF_K = 60;
@@ -34,28 +40,40 @@ public class MultiPathRetrievalDomainService {
      * 多路检索入口：根据检索模式分发到不同检索路径。
      *
      * @param kb           知识库
-     * @param subQueries   子查询列表（可能是原始查询或拆分后的子问题）
+     * @param queryVariants   查询变体列表（可区分改写、多路子问题与 HyDE）
      * @param intentResult 意图结果（用于路由决策和检索增强）
      * @return 融合后的 RAG 系统提示
      */
-    public String retrieveAndFuse(KnowledgeBase kb, List<String> subQueries, IntentResult intentResult) {
-        if (subQueries == null || subQueries.isEmpty()) {
+    public String retrieveAndFuse(KnowledgeBase kb,
+                                  List<QueryPlanningDomainService.RetrievalQueryVariant> queryVariants,
+                                  String dynamicFilterExpression,
+                                  IntentResult intentResult) {
+        if (queryVariants == null || queryVariants.isEmpty()) {
+            return "";
+        }
+
+        List<String> vectorQueries = selectVectorQueries(queryVariants);
+        List<String> keywordQueries = selectKeywordQueries(queryVariants);
+        if (vectorQueries.isEmpty()) {
             return "";
         }
 
         var retrievalConfig = kb.getRetrievalConfig();
-        Map<String, Object> filter = Map.of(VectorMetadataKeys.KNOWLEDGE_BASE_ID, String.valueOf(kb.getId()));
+        Map<String, Object> filter = buildFilter(kb, dynamicFilterExpression);
+        if (metadataFilterParser.isContradictory(filter)) {
+            return "";
+        }
 
-        log.debug("Multi-path retrieval start: kbId={}, mode={}, topK={}, threshold={}, subQueries={}",
+        log.debug("Multi-path retrieval start: kbId={}, mode={}, topK={}, threshold={}, vectorQueries={}, keywordQueries={}",
                 kb.getId(), retrievalConfig.getRetrievalMode(), retrievalConfig.getTopK(),
-                retrievalConfig.getSimilarityThreshold(), subQueries);
+                retrievalConfig.getSimilarityThreshold(), vectorQueries, keywordQueries);
 
         List<VectorDocument> rankedDocs;
 
         switch (retrievalConfig.getRetrievalMode()) {
-            case KEYWORD -> rankedDocs = keywordOnlySearch(subQueries, retrievalConfig, filter);
-            case HYBRID -> rankedDocs = hybridSearch(subQueries, retrievalConfig, filter);
-            default -> rankedDocs = vectorOnlySearch(subQueries, retrievalConfig, filter);
+            case KEYWORD -> rankedDocs = keywordOnlySearch(keywordQueries, retrievalConfig, filter);
+            case HYBRID -> rankedDocs = hybridSearch(vectorQueries, keywordQueries, retrievalConfig, filter);
+            default -> rankedDocs = vectorOnlySearch(vectorQueries, retrievalConfig, filter);
         }
 
         if (rankedDocs.isEmpty()) {
@@ -66,11 +84,22 @@ public class MultiPathRetrievalDomainService {
         log.debug("Multi-path retrieval resolved {} documents for kbId={} using mode={}",
             rankedDocs.size(), kb.getId(), retrievalConfig.getRetrievalMode());
 
-        String context = rankedDocs.stream()
+        List<String> rankingQueries = keywordQueries.isEmpty() ? vectorQueries : keywordQueries;
+        List<VectorDocument> finalDocs = postProcess(rankedDocs, rankingQueries, retrievalConfig,
+            retrievalConfig.isRerankerEnabled() ? retrievalConfig.getRerankerTopK() : retrievalConfig.getTopK());
+
+        String context = finalDocs.stream()
                 .map(VectorDocument::content)
                 .collect(Collectors.joining("\n\n---\n\n"));
 
         return buildRagSystemPrompt(context);
+    }
+
+    private Map<String, Object> buildFilter(KnowledgeBase kb, String dynamicFilterExpression) {
+        Map<String, Object> filter = new LinkedHashMap<>();
+        filter.put(VectorMetadataKeys.KNOWLEDGE_BASE_ID, String.valueOf(kb.getId()));
+        filter = metadataFilterParser.merge(filter, kb.getRetrievalConfig().getFilterExpression());
+        return metadataFilterParser.merge(filter, dynamicFilterExpression);
     }
 
     /**
@@ -78,6 +107,9 @@ public class MultiPathRetrievalDomainService {
      */
     private List<VectorDocument> vectorOnlySearch(List<String> subQueries, RetrievalConfig retrievalConfig,
                                                    Map<String, Object> filter) {
+        if (subQueries == null || subQueries.isEmpty()) {
+            return List.of();
+        }
         List<VectorDocument> allDocs;
         if (subQueries.size() == 1) {
             allDocs = vectorStore.similaritySearch(
@@ -89,7 +121,7 @@ public class MultiPathRetrievalDomainService {
         }
 
         List<VectorDocument> uniqueDocs = deduplicateByContent(allDocs);
-        return rerankAndTruncate(uniqueDocs, subQueries, retrievalConfig.getTopK());
+        return uniqueDocs;
     }
 
     /**
@@ -97,6 +129,9 @@ public class MultiPathRetrievalDomainService {
      */
     private List<VectorDocument> keywordOnlySearch(List<String> subQueries, RetrievalConfig retrievalConfig,
                                                     Map<String, Object> filter) {
+        if (subQueries == null || subQueries.isEmpty()) {
+            return List.of();
+        }
         List<VectorDocument> allDocs = new ArrayList<>();
         for (String query : subQueries) {
             List<KeywordSearchResult> results = keywordSearch.keywordSearch(query, retrievalConfig.getTopK(), filter);
@@ -106,17 +141,19 @@ public class MultiPathRetrievalDomainService {
         List<VectorDocument> uniqueDocs = deduplicateByContent(allDocs);
         log.debug("Keyword-only multi-path search resolved {} raw documents, {} after deduplication",
             allDocs.size(), uniqueDocs.size());
-        return uniqueDocs.size() > retrievalConfig.getTopK()
-                ? uniqueDocs.subList(0, retrievalConfig.getTopK())
-                : uniqueDocs;
+        return uniqueDocs;
     }
 
     /**
      * 混合检索：并行执行向量搜索和关键词搜索，使用 RRF（Reciprocal Rank Fusion）融合结果。
      * RRF 公式：score(d) = Σ 1/(k + rank_i(d))，k=60
      */
-    private List<VectorDocument> hybridSearch(List<String> subQueries, RetrievalConfig retrievalConfig,
+    private List<VectorDocument> hybridSearch(List<String> vectorQueries, List<String> keywordQueries,
+                                              RetrievalConfig retrievalConfig,
                                               Map<String, Object> filter) {
+        if (vectorQueries == null || vectorQueries.isEmpty()) {
+            return List.of();
+        }
         int topK = retrievalConfig.getTopK();
         // 每路多取一些以提高融合质量
         int fetchSize = topK * 2;
@@ -126,12 +163,12 @@ public class MultiPathRetrievalDomainService {
         try {
             Future<List<VectorDocument>> vectorFuture = executor.submit(() -> {
                 List<VectorDocument> docs;
-                if (subQueries.size() == 1) {
+                if (vectorQueries.size() == 1) {
                     docs = vectorStore.similaritySearch(
-                            subQueries.getFirst(), fetchSize,
+                            vectorQueries.getFirst(), fetchSize,
                             retrievalConfig.getSimilarityThreshold(), filter);
                 } else {
-                    docs = parallelSearch(subQueries, fetchSize,
+                    docs = parallelSearch(vectorQueries, fetchSize,
                             retrievalConfig.getSimilarityThreshold(), filter);
                 }
                 return deduplicateByContent(docs);
@@ -139,7 +176,7 @@ public class MultiPathRetrievalDomainService {
 
             Future<List<KeywordSearchResult>> keywordFuture = executor.submit(() -> {
                 List<KeywordSearchResult> allKw = new ArrayList<>();
-                for (String query : subQueries) {
+                for (String query : keywordQueries) {
                     allKw.addAll(keywordSearch.keywordSearch(query, fetchSize, filter));
                 }
                 return allKw;
@@ -157,17 +194,38 @@ public class MultiPathRetrievalDomainService {
         } catch (TimeoutException e) {
             log.warn("Hybrid search timed out after {}s, falling back to vector only",
                     config.getRetrievalTimeoutSeconds());
-            return vectorOnlySearch(subQueries, retrievalConfig, filter);
+            return vectorOnlySearch(vectorQueries, retrievalConfig, filter);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Hybrid search interrupted");
             return List.of();
         } catch (ExecutionException e) {
             log.warn("Hybrid search failed: {}, falling back to vector only", e.getCause().getMessage());
-            return vectorOnlySearch(subQueries, retrievalConfig, filter);
+            return vectorOnlySearch(vectorQueries, retrievalConfig, filter);
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private List<String> selectVectorQueries(List<QueryPlanningDomainService.RetrievalQueryVariant> queryVariants) {
+        return queryVariants.stream()
+                .map(QueryPlanningDomainService.RetrievalQueryVariant::query)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(query -> !query.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private List<String> selectKeywordQueries(List<QueryPlanningDomainService.RetrievalQueryVariant> queryVariants) {
+        return queryVariants.stream()
+                .filter(QueryPlanningDomainService.RetrievalQueryVariant::supportsKeywordSearch)
+                .map(QueryPlanningDomainService.RetrievalQueryVariant::query)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(query -> !query.isBlank())
+                .distinct()
+                .toList();
     }
 
     /**
@@ -281,9 +339,36 @@ public class MultiPathRetrievalDomainService {
      * 简易重排序：按与查询的关键词重叠度打分，截断到 topK。
      * 后续可替换为 Cross-Encoder 模型。
      */
-    private List<VectorDocument> rerankAndTruncate(List<VectorDocument> docs, List<String> queries, int topK) {
+    private List<VectorDocument> postProcess(List<VectorDocument> docs, List<String> queries,
+                                             RetrievalConfig retrievalConfig, int topK) {
+        List<VectorDocument> expandedDocs = expandWithWindow(docs, retrievalConfig.getWindowSize());
+        return rerankAndTruncate(expandedDocs, queries, topK, retrievalConfig);
+    }
+
+    private List<VectorDocument> rerankAndTruncate(List<VectorDocument> docs, List<String> queries, int topK,
+                                                   RetrievalConfig retrievalConfig) {
         if (docs.size() <= topK) {
             return docs;
+        }
+
+        if (retrievalConfig.isRerankerEnabled() && rerankerPort != null) {
+            try {
+                String combinedQuery = String.join(" ", queries);
+                List<RankedResult> ranked = rerankerPort.rerank(combinedQuery,
+                        docs.stream().map(VectorDocument::content).toList(), Math.min(topK, docs.size()));
+                if (!ranked.isEmpty()) {
+                    return ranked.stream()
+                            .sorted(Comparator.comparingDouble(RankedResult::relevanceScore).reversed())
+                            .map(RankedResult::originalIndex)
+                            .filter(index -> index >= 0 && index < docs.size())
+                            .map(docs::get)
+                            .distinct()
+                            .limit(topK)
+                            .toList();
+                }
+            } catch (Exception ex) {
+                log.warn("Reranker failed, falling back to overlap scoring: {}", ex.getMessage());
+            }
         }
 
         Set<String> queryTerms = queries.stream()
@@ -307,6 +392,79 @@ public class MultiPathRetrievalDomainService {
         String lowerText = text.toLowerCase();
         long matchCount = queryTerms.stream().filter(lowerText::contains).count();
         return (double) matchCount / queryTerms.size();
+    }
+
+    private List<VectorDocument> expandWithWindow(List<VectorDocument> docs, int windowSize) {
+        if (docs.isEmpty() || windowSize <= 0) {
+            return docs;
+        }
+
+        List<VectorDocument> expanded = new ArrayList<>();
+        Map<Long, ParentWindow> parentWindows = new LinkedHashMap<>();
+        for (VectorDocument doc : docs) {
+            Long parentId = readLong(doc.metadata(), VectorMetadataKeys.PARENT_CHUNK_ID);
+            Integer chunkIndex = readInteger(doc.metadata(), VectorMetadataKeys.CHUNK_INDEX);
+            if (parentId == null || chunkIndex == null) {
+                expanded.add(doc);
+                continue;
+            }
+            parentWindows.compute(parentId, (key, existing) -> mergeWindow(existing, doc, chunkIndex, windowSize));
+        }
+
+        for (ParentWindow window : parentWindows.values()) {
+            List<DocumentChunk> chunks = documentChunkRepository
+                    .findChildrenWindow(window.parentId(), window.startChunkIndex(), window.endChunkIndex())
+                    .collectList()
+                    .block();
+            if (chunks == null || chunks.isEmpty()) {
+                expanded.add(window.anchor());
+                continue;
+            }
+            String content = chunks.stream().map(DocumentChunk::getContent).collect(Collectors.joining("\n"));
+            expanded.add(new VectorDocument(content, window.anchor().metadata()));
+        }
+        return expanded;
+    }
+
+    private ParentWindow mergeWindow(ParentWindow existing, VectorDocument anchor, int chunkIndex, int windowSize) {
+        int start = Math.max(0, chunkIndex - windowSize);
+        int end = chunkIndex + windowSize;
+        if (existing == null) {
+            return new ParentWindow(readLong(anchor.metadata(), VectorMetadataKeys.PARENT_CHUNK_ID), start, end, anchor);
+        }
+        return new ParentWindow(existing.parentId(), Math.min(existing.startChunkIndex(), start),
+                Math.max(existing.endChunkIndex(), end), existing.anchor());
+    }
+
+    private Long readLong(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(String.valueOf(value));
+    }
+
+    private Integer readInteger(Map<String, Object> metadata, String key) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.parseInt(String.valueOf(value));
+    }
+
+    private record ParentWindow(Long parentId, int startChunkIndex, int endChunkIndex, VectorDocument anchor) {
     }
 
     private String buildRagSystemPrompt(String context) {

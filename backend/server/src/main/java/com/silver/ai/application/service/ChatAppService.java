@@ -30,14 +30,21 @@ public class ChatAppService {
     private static final int MAX_RESPONSE_LENGTH = 512 * 1024; // 512KB
 
     public Flux<String> streamChat(Long conversationId, Long providerId, String model,
+                                   String userMessage, Long knowledgeBaseId, String systemPrompt,
+                                   List<Long> mcpServerIds, String toolMode) {
+        return streamChat(conversationId, providerId, model, userMessage, knowledgeBaseId,
+                systemPrompt, mcpServerIds, toolMode, null);
+    }
+
+    public Flux<String> streamChat(Long conversationId, Long providerId, String model,
                                     String userMessage, Long knowledgeBaseId, String systemPrompt,
-                                    List<Long> mcpServerIds, String toolMode) {
+                        List<Long> mcpServerIds, String toolMode, String filterExpression) {
         AtomicReference<Long> persistedConversationId = new AtomicReference<>();
         AtomicReference<Conversation> persistedConversation = new AtomicReference<>();
         StringBuilder fullResponse = new StringBuilder();
 
         return Flux.defer(() ->
-                prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, toolMode, userMessage)
+            prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, toolMode, filterExpression, userMessage)
                         .flatMapMany(conversation -> {
                             persistedConversationId.set(conversation.getId());
                             persistedConversation.set(conversation);
@@ -100,9 +107,16 @@ public class ChatAppService {
     }
 
     public Mono<String> chat(Long conversationId, Long providerId, String model,
+                             String userMessage, Long knowledgeBaseId, String systemPrompt,
+                             List<Long> mcpServerIds, String toolMode) {
+        return chat(conversationId, providerId, model, userMessage, knowledgeBaseId,
+                systemPrompt, mcpServerIds, toolMode, null);
+    }
+
+    public Mono<String> chat(Long conversationId, Long providerId, String model,
                               String userMessage, Long knowledgeBaseId, String systemPrompt,
-                              List<Long> mcpServerIds, String toolMode) {
-        return prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, toolMode, userMessage)
+                              List<Long> mcpServerIds, String toolMode, String filterExpression) {
+        return prepareConversation(conversationId, providerId, model, knowledgeBaseId, mcpServerIds, toolMode, filterExpression, userMessage)
                 .flatMap(conversation -> {
                     ChatTraceContext trace = ChatTraceContext.create(conversation.getId());
 
@@ -348,13 +362,14 @@ public class ChatAppService {
 
     private Mono<Conversation> prepareConversation(Long conversationId, Long providerId, String model,
                                                     Long knowledgeBaseId, List<Long> mcpServerIds,
-                                                    String toolMode, String userMessage) {
+                                                    String toolMode, String filterExpression, String userMessage) {
         ToolMode parsedMode = ToolMode.fromString(toolMode);
         if (conversationId == null) {
             Conversation conversation = Conversation.builder()
                     .providerId(providerId)
                     .model(model)
                     .knowledgeBaseId(knowledgeBaseId)
+                    .filterExpression(filterExpression)
                     .toolMode(parsedMode)
                     .build();
             if (mcpServerIds != null) {
@@ -367,14 +382,15 @@ public class ChatAppService {
         return conversationRepository.findById(conversationId)
                 .switchIfEmpty(Mono.error(new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND)))
                 .flatMap(conversation -> {
-                    applyConversationOptions(conversation, providerId, model, knowledgeBaseId, mcpServerIds, parsedMode);
+                    applyConversationOptions(conversation, providerId, model, knowledgeBaseId, mcpServerIds, parsedMode, filterExpression);
                     conversation.addMessage(MessageRole.USER, userMessage);
                     return conversationRepository.save(conversation);
                 });
     }
 
     private void applyConversationOptions(Conversation conversation, Long providerId, String model,
-                                          Long knowledgeBaseId, List<Long> mcpServerIds, ToolMode toolMode) {
+                                          Long knowledgeBaseId, List<Long> mcpServerIds, ToolMode toolMode,
+                                          String filterExpression) {
         if (knowledgeBaseId != null) {
             conversation.enableRag(knowledgeBaseId);
         }
@@ -383,6 +399,9 @@ public class ChatAppService {
         }
         if (toolMode != null) {
             conversation.updateToolMode(toolMode);
+        }
+        if (filterExpression != null) {
+            conversation.updateFilterExpression(filterExpression);
         }
         conversation.updateModel(providerId, model);
     }

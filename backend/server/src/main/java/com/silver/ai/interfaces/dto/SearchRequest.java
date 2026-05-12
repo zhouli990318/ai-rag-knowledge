@@ -14,4 +14,6 @@ public class SearchRequest {
     @Min(value = 1, message = "topK 最小为 1")
     @Max(value = 100, message = "topK 最大为 100")
     private int topK = 5;
+    @Size(max = 500, message = "filterExpression 长度不能超过 500")
+    private String filterExpression;
 }

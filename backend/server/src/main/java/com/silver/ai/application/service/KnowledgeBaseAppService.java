@@ -135,7 +135,7 @@ public class KnowledgeBaseAppService {
                                                         .build();
                                                 return documentRepository.save(document)
                                                         .flatMap(saved -> {
-                                                            processDocumentFromFile(saved, kb.getChunkStrategy(), tempPath)
+                                                            processDocumentFromFile(saved, kb, tempPath)
                                                                     .subscribe(
                                                                             v -> {},
                                                                             e -> log.error("Async doc processing failed: {}", saved.getFileName(), e)
@@ -153,16 +153,23 @@ public class KnowledgeBaseAppService {
                 });
     }
 
-    private Mono<Void> processDocumentFromFile(Document document, ChunkStrategy chunkStrategy, Path tempPath) {
+    private Mono<Void> processDocumentFromFile(Document document, KnowledgeBase knowledgeBase, Path tempPath) {
         return documentRepository.findById(document.getId())
                 .flatMap(currentDocument ->
-                        knowledgeBaseRepository.findById(currentDocument.getKnowledgeBaseId())
+                        resolveKnowledgeBase(currentDocument, knowledgeBase)
                                 .flatMap(kb -> Mono.using(
                                         () -> Files.newInputStream(tempPath),
-                                        is -> documentProcessingService.processDocument(currentDocument, is, chunkStrategy),
+                                        is -> documentProcessingService.processDocument(currentDocument, is,
+                                                kb.getChunkStrategy(), kb.getEmbeddingProviderId()),
                                         is -> {
-                                            try { is.close(); } catch (Exception ignored) {}
-                                            try { Files.deleteIfExists(tempPath); } catch (Exception ignored) {}
+                                            try {
+                                                is.close();
+                                            } catch (Exception ignored) {
+                                            }
+                                            try {
+                                                Files.deleteIfExists(tempPath);
+                                            } catch (Exception ignored) {
+                                            }
                                         }
                                 ))
                 )
@@ -242,8 +249,12 @@ public class KnowledgeBaseAppService {
     // ===== Search =====
 
     public Mono<List<VectorDocument>> searchKnowledge(Long knowledgeBaseId, String query, int topK) {
+        return searchKnowledge(knowledgeBaseId, query, topK, null);
+    }
+
+    public Mono<List<VectorDocument>> searchKnowledge(Long knowledgeBaseId, String query, int topK, String filterExpression) {
         return getKnowledgeBase(knowledgeBaseId)
-                .flatMap(kb -> Mono.fromCallable(() -> retrievalDomainService.search(kb, query, topK))
+                .flatMap(kb -> Mono.fromCallable(() -> retrievalDomainService.search(kb, query, topK, filterExpression))
                         .subscribeOn(Schedulers.boundedElastic()));
     }
 
@@ -275,7 +286,7 @@ public class KnowledgeBaseAppService {
                         .build();
                 document = documentRepository.save(document).block();
                 try (InputStream is = Files.newInputStream(file.toPath())) {
-                    documentProcessingService.processDocument(document, is, chunkStrategy).block();
+                    documentProcessingService.processDocument(document, is, chunkStrategy, kb.getEmbeddingProviderId()).block();
                 }
                 processedCount++;
             } catch (Exception e) {
@@ -315,16 +326,20 @@ public class KnowledgeBaseAppService {
     private Mono<Void> rebuildDocumentVectors(KnowledgeBase kb, Document document) {
         return documentChunkRepository.findByDocumentId(document.getId()).collectList()
                 .flatMap(chunks -> {
-                    if (chunks.isEmpty()) {
+                    List<DocumentChunk> childChunks = chunks.stream()
+                            .filter(chunk -> chunk.getChunkLevel() == DocumentChunk.ChunkLevel.CHILD)
+                            .toList();
+                    List<DocumentChunk> vectorizableChunks = childChunks.isEmpty() ? chunks : childChunks;
+                    if (vectorizableChunks.isEmpty()) {
                         document.markFailed("未找到可重建的文本分片");
                         return documentRepository.save(document).then();
                     }
                     return Mono.fromCallable(() -> {
                                 vectorStorePort.deleteByMetadata(VectorMetadataKeys.DOCUMENT_ID, String.valueOf(document.getId()));
-                                List<VectorDocument> vectorDocs = chunks.stream()
+                                List<VectorDocument> vectorDocs = vectorizableChunks.stream()
                                         .map(this::toVectorDocument).toList();
                                 vectorStorePort.addDocuments(vectorDocs);
-                                return chunks.size();
+                                return vectorizableChunks.size();
                             }).subscribeOn(Schedulers.boundedElastic())
                             .flatMap(chunkCount -> {
                                 document.markIndexed(chunkCount);
@@ -352,6 +367,13 @@ public class KnowledgeBaseAppService {
 
     private VectorDocument toVectorDocument(DocumentChunk chunk) {
         return new VectorDocument(chunk.getContent(), chunk.getMetadata());
+    }
+
+    private Mono<KnowledgeBase> resolveKnowledgeBase(Document document, KnowledgeBase knowledgeBase) {
+        if (knowledgeBase != null) {
+            return Mono.just(knowledgeBase);
+        }
+        return knowledgeBaseRepository.findById(document.getKnowledgeBaseId());
     }
 
     private boolean isCodeFile(String ext) {

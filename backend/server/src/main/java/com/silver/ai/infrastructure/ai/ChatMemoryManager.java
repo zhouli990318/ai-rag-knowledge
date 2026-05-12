@@ -76,10 +76,32 @@ public class ChatMemoryManager implements ChatMemoryPort {
      * 提取最近 N 条消息文本作为查询上下文（用于意图识别、重写等）。
      */
     public List<String> extractRecentContext(Conversation conversation, int rounds) {
-        List<ChatMessage> history = conversation.getContextMessages(rounds * 2);
-        return history.stream()
+        return buildPlanningContext(conversation, rounds);
+    }
+
+    /**
+     * 构建用于查询规划的上下文：摘要 + 最近历史轮次（排除当前最后一条用户消息）。
+     */
+    public List<String> buildPlanningContext(Conversation conversation, int rounds) {
+        List<String> context = new ArrayList<>();
+        if (conversation.getSummary() != null && !conversation.getSummary().isBlank()) {
+            context.add("SUMMARY: " + conversation.getSummary().trim());
+        }
+
+        List<ChatMessage> history = new ArrayList<>(conversation.getMessages());
+        if (!history.isEmpty() && history.getLast().getRole() == MessageRole.USER) {
+            history.removeLast();
+        }
+
+        int historyWindow = Math.max(rounds, 0) * 2;
+        if (historyWindow > 0 && history.size() > historyWindow) {
+            history = new ArrayList<>(history.subList(history.size() - historyWindow, history.size()));
+        }
+
+        context.addAll(history.stream()
                 .map(msg -> msg.getRole().name() + ": " + msg.getContent())
-                .toList();
+                .toList());
+        return context;
     }
 
     /**

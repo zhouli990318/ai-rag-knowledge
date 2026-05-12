@@ -4,8 +4,8 @@ import com.silver.ai.domain.chat.model.ChatOrchestratorConfig;
 import com.silver.ai.domain.chat.port.SystemSettingsRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.event.EventListener;
@@ -19,19 +19,31 @@ public class OrchestratorConfigProperties {
 
     private ChatOrchestratorConfig beanInstance;
 
+    @Value("${app.reranker.enabled:false}")
+    private boolean rerankerServiceEnabled;
+
+    @Value("${app.reranker.base-url:http://localhost:8080}")
+    private String rerankerBaseUrl;
+
+    @Value("${app.reranker.model:bge-reranker-v2-m3}")
+    private String rerankerModel;
+
     @Autowired
     private SystemSettingsRepository settingsRepository;
 
     @Bean
     public ChatOrchestratorConfig chatOrchestratorConfig() {
         beanInstance = new ChatOrchestratorConfig();
+        beanInstance.setRerankerServiceEnabled(rerankerServiceEnabled);
+        beanInstance.setRerankerBaseUrl(rerankerBaseUrl);
+        beanInstance.setRerankerModel(rerankerModel);
         return beanInstance;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void onReady() {
         try {
-            ChatOrchestratorConfig dbConfig = settingsRepository.load().block();
+            ChatOrchestratorConfig dbConfig = settingsRepository.load(beanInstance).block();
             if (dbConfig != null) {
                 copyFields(dbConfig, beanInstance);
                 log.info("Orchestrator config loaded from DB");
@@ -43,7 +55,7 @@ public class OrchestratorConfigProperties {
 
     public void reload() {
         try {
-            ChatOrchestratorConfig dbConfig = settingsRepository.load().block();
+            ChatOrchestratorConfig dbConfig = settingsRepository.load(beanInstance).block();
             if (dbConfig != null) {
                 copyFields(dbConfig, beanInstance);
                 log.info("Orchestrator config reloaded from DB");
@@ -68,10 +80,15 @@ public class OrchestratorConfigProperties {
         target.setIntentEnabled(source.isIntentEnabled());
         target.setRewriteEnabled(source.isRewriteEnabled());
         target.setRewriteContextRounds(source.getRewriteContextRounds());
+        target.setHydeEnabled(source.isHydeEnabled());
         target.setMultiPathRetrievalEnabled(source.isMultiPathRetrievalEnabled());
         target.setRerankTopK(source.getRerankTopK());
         target.setRetrievalTimeoutSeconds(source.getRetrievalTimeoutSeconds());
         target.setDeduplicatePrefixLength(source.getDeduplicatePrefixLength());
+        target.setRerankerServiceEnabled(source.isRerankerServiceEnabled());
+        target.setRerankerBaseUrl(source.getRerankerBaseUrl());
+        target.setRerankerModel(source.getRerankerModel());
+        target.setRerankerApiKeyEncrypted(source.getRerankerApiKeyEncrypted());
         target.setMemoryFullRounds(source.getMemoryFullRounds());
         target.setMemoryMaxChars(source.getMemoryMaxChars());
         target.setMemorySummaryThreshold(source.getMemorySummaryThreshold());

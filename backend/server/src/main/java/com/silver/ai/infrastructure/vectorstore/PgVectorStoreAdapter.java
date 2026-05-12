@@ -91,10 +91,27 @@ public class PgVectorStoreAdapter implements VectorStorePort {
         FilterExpressionBuilder builder = new FilterExpressionBuilder();
         FilterExpressionBuilder.Op combined = null;
         for (var entry : filterMetadata.entrySet()) {
-            FilterExpressionBuilder.Op next = builder.eq(entry.getKey(), String.valueOf(entry.getValue()));
+            FilterExpressionBuilder.Op next = buildFieldExpression(builder, entry.getKey(), entry.getValue());
+            if (next == null) {
+                continue;
+            }
             combined = combined == null ? next : builder.and(combined, next);
         }
         return combined != null ? combined.build() : null;
+    }
+
+    private FilterExpressionBuilder.Op buildFieldExpression(FilterExpressionBuilder builder,
+                                                            String field,
+                                                            Object value) {
+        if (value instanceof List<?> list) {
+            FilterExpressionBuilder.Op combined = null;
+            for (Object item : list) {
+                FilterExpressionBuilder.Op next = builder.eq(field, String.valueOf(item));
+                combined = combined == null ? next : builder.or(combined, next);
+            }
+            return combined;
+        }
+        return builder.eq(field, String.valueOf(value));
     }
 
     private Document toAiDocument(VectorDocument doc) {

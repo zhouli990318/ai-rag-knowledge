@@ -28,6 +28,7 @@ public class Conversation {
     private List<Long> mcpServerIds = new ArrayList<>();
     @Builder.Default
     private ToolMode toolMode = ToolMode.AUTO;
+    private String filterExpression;
     @Builder.Default
     private List<ChatMessage> messages = new ArrayList<>();
     @Builder.Default
@@ -106,6 +107,13 @@ public class Conversation {
 
     public void updateToolMode(ToolMode mode) {
         this.toolMode = mode == null ? ToolMode.AUTO : mode;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void updateFilterExpression(String filterExpression) {
+        this.filterExpression = (filterExpression == null || filterExpression.isBlank())
+                ? null
+                : filterExpression.trim();
         this.updatedAt = LocalDateTime.now();
     }
 

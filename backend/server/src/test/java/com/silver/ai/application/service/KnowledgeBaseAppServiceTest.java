@@ -208,13 +208,13 @@ class KnowledgeBaseAppServiceTest {
                         .chunkCount(document.getChunkCount()).errorMessage(document.getErrorMessage())
                         .build());
             });
-            when(documentProcessingService.processDocument(any(), any(), any())).thenReturn(Mono.empty());
+            when(documentProcessingService.processDocument(any(), any(), any(), any())).thenReturn(Mono.empty());
 
             invokeProcessGitFilesBlocking(service, tempDir.toFile(), 22L, ChunkStrategy.defaultStrategy());
 
             verify(documentRepository).save(argThat(document -> "demo.txt".equals(document.getFileName())));
             verify(knowledgeBaseRepository).save(argThat(kb -> kb.getId().equals(22L) && kb.getDocumentCount() == 1));
-            verify(documentProcessingService).processDocument(any(Document.class), any(), any(ChunkStrategy.class));
+            verify(documentProcessingService).processDocument(any(Document.class), any(), any(ChunkStrategy.class), any());
         } finally {
             Files.deleteIfExists(filePath);
             Files.deleteIfExists(tempDir);
@@ -239,7 +239,7 @@ class KnowledgeBaseAppServiceTest {
 
             verify(documentRepository, never()).save(any(Document.class));
             verify(knowledgeBaseRepository, never()).save(any(KnowledgeBase.class));
-            verify(documentProcessingService, never()).processDocument(any(), any(), any());
+                        verify(documentProcessingService, never()).processDocument(any(), any(), any(), any());
         } finally {
             Files.deleteIfExists(filePath);
             Files.deleteIfExists(tempDir);

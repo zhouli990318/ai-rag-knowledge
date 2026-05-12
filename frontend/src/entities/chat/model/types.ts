@@ -4,7 +4,9 @@ export interface Conversation {
   providerId: number;
   model: string;
   knowledgeBaseId: number | null;
+  toolMode: 'OFF' | 'AUTO' | 'SPECIFIC';
   mcpServerIds: number[];
+  filterExpression: string | null;
   createdAt: string;
   messages: ChatMessage[];
 }

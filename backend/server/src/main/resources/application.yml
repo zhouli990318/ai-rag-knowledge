@@ -7,6 +7,11 @@ spring:
 app:
   http:
     response-timeout-seconds: ${APP_HTTP_RESPONSE_TIMEOUT:120}
+  reranker:
+    enabled: ${APP_RERANKER_ENABLED:false}
+    base-url: ${APP_RERANKER_BASE_URL:http://localhost:8080}
+    model: ${APP_RERANKER_MODEL:bge-reranker-v2-m3}
+    api-key: ${APP_RERANKER_API_KEY:}
   mcp-gateway:
     base-url: ${APP_MCP_GATEWAY_BASE_URL:http://localhost:8092/api/v1/mcp}
     block-timeout-seconds: ${APP_MCP_GATEWAY_BLOCK_TIMEOUT:10}

@@ -13,6 +13,7 @@ export interface StreamChatRequest {
   systemPrompt?: string;
   mcpServerIds?: number[];
   toolMode?: 'OFF' | 'AUTO' | 'SPECIFIC';
+  filterExpression?: string;
 }
 
 export const chatApi = {

@@ -12,4 +12,6 @@ public final class VectorMetadataKeys {
     public static final String FILE_NAME = "file_name";
     public static final String FILE_TYPE = "file_type";
     public static final String CHUNK_INDEX = "chunk_index";
+    public static final String PARENT_CHUNK_ID = "parent_chunk_id";
+    public static final String CHUNK_LEVEL = "chunk_level";
 }

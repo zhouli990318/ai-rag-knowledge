@@ -54,7 +54,7 @@ public class ChatOrchestrator {
             Conversation conversation, String userMessage, String customSystemPrompt,
             ChatTraceContext trace) {
 
-        List<String> conversationContext = chatMemory.extractRecentContext(
+        List<String> conversationContext = chatMemory.buildPlanningContext(
                 conversation, orchestratorConfig.getRewriteContextRounds());
 
         Mono<IntentResult> intentMono = detectIntent(userMessage, conversationContext, trace);
@@ -155,7 +155,11 @@ public class ChatOrchestrator {
                 span.finish();
                 return "";
             }
-            String ragContext = multiPathRetrieval.retrieveAndFuse(kb, queryPlan.retrievalQueries(), intentResult);
+                String ragContext = multiPathRetrieval.retrieveAndFuse(
+                    kb,
+                    queryPlan.retrievalVariants(),
+                    conversation.getFilterExpression(),
+                    intentResult);
             span.attr("hasContext", String.valueOf(!ragContext.isEmpty()));
             span.finish();
             return ragContext;
